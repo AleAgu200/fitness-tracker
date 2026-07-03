@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\aless\\\\OneDrive - MSFT\\\\Desktop\\\\proyectos\\\\health tracker app\\\\pulso\\\\src\\\\db\\\\schema\")",
+      "PowerShell(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\aless\\\\OneDrive - MSFT\\\\Desktop\\\\proyectos\\\\health tracker app\\\\pulso\\\\src\\\\lib\")",
+      "PowerShell(cmd /c \"dir /s /b \"\"c:\\\\Users\\\\aless\\\\OneDrive - MSFT\\\\Desktop\\\\proyectos\\\\health tracker app\\\\pulso\\\\src\\\\db\"\" && dir /s /b \"\"c:\\\\Users\\\\aless\\\\OneDrive - MSFT\\\\Desktop\\\\proyectos\\\\health tracker app\\\\pulso\\\\src\\\\lib\"\" && dir /s /b \"\"c:\\\\Users\\\\aless\\\\OneDrive - MSFT\\\\Desktop\\\\proyectos\\\\health tracker app\\\\pulso\\\\drizzle\"\"\")",
+      "PowerShell(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\aless\\\\OneDrive - MSFT\\\\Desktop\\\\proyectos\\\\health tracker app\\\\server\\\\lib\")",
+      "PowerShell(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\aless\\\\OneDrive - MSFT\\\\Desktop\\\\proyectos\\\\health tracker app\\\\server\\\\data\")",
+      "PowerShell(netsh advfirewall firewall show rule name=\"Next.js Dev Server 3000\" 2>&1)",
+      "PowerShell(netsh advfirewall firewall add rule name=\"Next.js Dev Server 3000\" dir=in action=allow protocol=TCP localport=3000 2>&1)",
+      "PowerShell(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\aless\\\\OneDrive - MSFT\\\\Desktop\\\\proyectos\\\\health tracker app\\\\server\\\\scripts\")",
+      "mcp__rive__open_file_editor",
+      "mcp__rive__path_editor",
+      "mcp__rive__get_artboard_hierarchy"
+    ]
+  }
+}
