@@ -1,0 +1,756 @@
+---
+title: PULSO — Drizzle + SQLite Schema
+status: draft
+---
+
+<rich-text>
+## Objective
+
+Introduce a local-first data layer to PULSO using **Drizzle ORM** on top of **expo-sqlite**. The schema covers two concerns:
+
+1. **Auth** — users, sessions, and device registration. Designed so every future AI recommendation can be traced to a user, device, and context snapshot.
+2. **App data** — all entities the five current screens read and write: workout sessions, nutrition logs, body measurements, streaks, achievements, and coach messages.
+
+**Done when:** Drizzle types compile, `useLiveQuery` returns real rows from SQLite, and the five screens no longer depend on the in-memory `AppContext`. The AI tables ship empty and are populated by a future `generateRecommendation()` call.
+
+**Non-goals for this iteration:** server sync, coach-side write paths, push notification plumbing, and the AI generation call itself.
+</rich-text>
+
+<callout tone="decision">
+**SQLite over a remote DB.** PULSO is a local-first athlete app — all workout logging, meal marking, and weigh-ins must work offline. The device is the source of truth. Drizzle on expo-sqlite gives typed queries with zero network dependency. A future sync layer can stream deltas to a backend without changing the schema shape.
+</callout>
+
+<rich-text>
+## Package additions
+
+```
+expo-sqlite          ~15.x   (already bundled in Expo 56 SDK, works in Expo Go)
+expo-crypto          ~14.x   (already in Expo 56, works in Expo Go)
+drizzle-orm          ^0.44
+drizzle-kit          ^0.31   devDependency
+
+expo-secure-store    ~14.x   ⚠ requires custom build (see warning below)
+```
+</rich-text>
+
+<rich-text>
+## Entity overview
+
+22 tables across 6 schema files.
+</rich-text>
+
+<table>
+{
+  "columns": ["File", "Tables", "Used by screen"],
+  "rows": [
+    ["auth.ts", "users · sessions · devices", "All — gates the tab navigator"],
+    ["profiles.ts", "athlete_profiles · coach_profiles · body_measurements · progress_photos", "HOY · PROGRESO"],
+    ["workouts.ts", "programs · program_phases · exercises · personal_records · workout_templates · template_exercise_slots · workout_sessions · logged_exercises · logged_sets", "HOY · ENTRENO · PERFIL"],
+    ["nutrition.ts", "meal_plans · meal_slots · daily_nutrition_logs · meal_log_entries · water_logs", "DIETA"],
+    ["habits.ts", "daily_check_ins · achievement_definitions · athlete_achievements · coach_messages", "HOY · PERFIL"],
+    ["ai.ts", "ai_recommendations · ai_feedback · ai_context_snapshots", "HOY (future)"]
+  ]
+}
+</table>
+
+<rich-text>
+## Auth schema
+
+The auth layer is minimal for a mobile-only local database. Passwords are stored as **SHA-256 hashes** via `expo-crypto` (ships in Expo Go — no custom build). A future server-side upgrade can swap to Argon2/bcrypt on the API side while keeping the same `users` table shape.
+
+Sessions carry a `tokenHash` (SHA-256 of the raw bearer). The raw token is kept in `expo-secure-store` only — it never touches SQLite. A token stolen from the database file is useless without the raw value.
+
+The `devices` table stores the `expo-application` installation ID and the Expo push token. This is the foundation for per-device AI personalization ("this device trains at 7 am") without requiring a server.
+
+The `role` column (`athlete | coach | admin`) is present from day one so the coach bundle can be added later without a schema migration.
+</rich-text>
+
+<tabs>
+<tab label="auth.ts">
+
+```typescript
+// src/db/schema/auth.ts
+import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+
+export const users = sqliteTable('users', {
+  id:           text('id').primaryKey(),                       // nanoid() — 21-char URL-safe
+  email:        text('email').notNull().unique(),
+  passwordHash: text('password_hash').notNull(),               // SHA-256 hex via expo-crypto
+  role:         text('role', { enum: ['athlete','coach','admin'] })
+                  .notNull().default('athlete'),
+  verified:     integer('verified', { mode: 'boolean' }).notNull().default(false),
+  createdAt:    integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt:    integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+export const sessions = sqliteTable('sessions', {
+  id:        text('id').primaryKey(),
+  userId:    text('user_id').notNull()
+               .references(() => users.id, { onDelete: 'cascade' }),
+  deviceId:  text('device_id'),                               // FK to devices, nullable on first login
+  tokenHash: text('token_hash').notNull().unique(),           // SHA-256 of raw bearer; raw stays in SecureStore
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+export const devices = sqliteTable('devices', {
+  id:          text('id').primaryKey(),
+  userId:      text('user_id').notNull()
+                 .references(() => users.id, { onDelete: 'cascade' }),
+  fingerprint: text('fingerprint').notNull(),                 // expo-application installationId
+  platform:    text('platform', { enum: ['ios','android','web'] }).notNull(),
+  osVersion:   text('os_version'),
+  appVersion:  text('app_version'),
+  pushToken:   text('push_token'),                           // Expo push token — AI nudge delivery
+  lastSeenAt:  integer('last_seen_at', { mode: 'timestamp_ms' }).notNull(),
+  createdAt:   integer('created_at',  { mode: 'timestamp_ms' }).notNull(),
+}, t => ({
+  uniqueFingerprint: uniqueIndex('devices_fingerprint_user')
+    .on(t.fingerprint, t.userId),
+}));
+```
+
+</tab>
+<tab label="profiles.ts">
+
+```typescript
+// src/db/schema/profiles.ts
+import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { users } from './auth';
+
+export const athleteProfiles = sqliteTable('athlete_profiles', {
+  userId:       text('user_id').primaryKey()
+                  .references(() => users.id, { onDelete: 'cascade' }),
+  coachId:      text('coach_id')
+                  .references(() => users.id, { onDelete: 'set null' }),
+  fullName:     text('full_name').notNull(),
+  initials:     text('initials').notNull(),          // 'KL' — shown in avatars
+  dateOfBirth:  text('date_of_birth'),               // 'YYYY-MM-DD'
+  sex:          text('sex', { enum: ['M','F','X'] }),
+  heightCm:     real('height_cm'),
+  goalWeightKg: real('goal_weight_kg'),
+  notes:        text('notes'),
+  createdAt:    integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt:    integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+export const coachProfiles = sqliteTable('coach_profiles', {
+  userId:         text('user_id').primaryKey()
+                    .references(() => users.id, { onDelete: 'cascade' }),
+  fullName:       text('full_name').notNull(),
+  initials:       text('initials').notNull(),        // 'AM' — shown in coach message badge
+  bio:            text('bio'),
+  specialization: text('specialization'),
+  createdAt:      integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt:      integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+// One row per daily weigh-in from PROGRESO screen
+export const bodyMeasurements = sqliteTable('body_measurements', {
+  id:            text('id').primaryKey(),
+  athleteId:     text('athlete_id').notNull()
+                   .references(() => users.id, { onDelete: 'cascade' }),
+  measuredAt:    integer('measured_at', { mode: 'timestamp_ms' }).notNull(),
+  weightKg:      real('weight_kg').notNull(),
+  bodyFatPct:    real('body_fat_pct'),
+  muscleMassPct: real('muscle_mass_pct'),
+  notes:         text('notes'),
+});
+
+export const progressPhotos = sqliteTable('progress_photos', {
+  id:        text('id').primaryKey(),
+  athleteId: text('athlete_id').notNull()
+               .references(() => users.id, { onDelete: 'cascade' }),
+  takenAt:   integer('taken_at', { mode: 'timestamp_ms' }).notNull(),
+  localUri:  text('local_uri').notNull(),            // expo-file-system path, not a remote URL
+  angle:     text('angle', { enum: ['front','back','side'] }),
+  phaseId:   text('phase_id'),
+});
+```
+
+</tab>
+<tab label="workouts.ts">
+
+```typescript
+// src/db/schema/workouts.ts
+import { integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { users } from './auth';
+
+export const programs = sqliteTable('programs', {
+  id:        text('id').primaryKey(),
+  athleteId: text('athlete_id').notNull()
+               .references(() => users.id, { onDelete: 'cascade' }),
+  coachId:   text('coach_id').references(() => users.id, { onDelete: 'set null' }),
+  name:      text('name').notNull(),
+  startDate: text('start_date').notNull(),           // 'YYYY-MM-DD'
+  endDate:   text('end_date'),
+  active:    integer('active', { mode: 'boolean' }).notNull().default(true),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+export const programPhases = sqliteTable('program_phases', {
+  id:         text('id').primaryKey(),
+  programId:  text('program_id').notNull()
+                .references(() => programs.id, { onDelete: 'cascade' }),
+  name:       text('name').notNull(),
+  type:       text('type', {
+                enum: ['volumen','fuerza','deficit','recomposicion'],
+              }).notNull(),
+  phaseOrder: integer('phase_order').notNull(),      // display order in PERFIL phase bar
+  weekNumber: integer('week_number').notNull().default(1),
+  totalWeeks: integer('total_weeks').notNull(),
+  startDate:  text('start_date'),
+  endDate:    text('end_date'),
+});
+
+export const exercises = sqliteTable('exercises', {
+  id:              text('id').primaryKey(),
+  name:            text('name').notNull(),
+  muscleGroup:     text('muscle_group', {
+                     enum: ['chest','back','legs','shoulders','arms','core','full'],
+                   }),
+  equipment:       text('equipment', {
+                     enum: ['barbell','dumbbell','cable','machine','bodyweight','other'],
+                   }),
+  isCustom:        integer('is_custom', { mode: 'boolean' }).notNull().default(false),
+  createdByUserId: text('created_by_user_id')
+                     .references(() => users.id, { onDelete: 'set null' }),
+});
+
+// One row per athlete+exercise, updated (not re-inserted) when a new PR is hit
+export const personalRecords = sqliteTable('personal_records', {
+  id:         text('id').primaryKey(),
+  athleteId:  text('athlete_id').notNull()
+                .references(() => users.id, { onDelete: 'cascade' }),
+  exerciseId: text('exercise_id').notNull()
+                .references(() => exercises.id, { onDelete: 'cascade' }),
+  weightKg:   real('weight_kg').notNull(),
+  reps:       integer('reps').notNull(),
+  e1rm:       real('e1rm'),                          // Epley: weight * (1 + reps/30)
+  achievedAt: integer('achieved_at', { mode: 'timestamp_ms' }).notNull(),
+  sessionId:  text('session_id'),
+}, t => ({
+  uniquePR: uniqueIndex('pr_athlete_exercise').on(t.athleteId, t.exerciseId),
+}));
+
+export const workoutTemplates = sqliteTable('workout_templates', {
+  id:            text('id').primaryKey(),
+  programId:     text('program_id')
+                   .references(() => programs.id, { onDelete: 'cascade' }),
+  coachId:       text('coach_id').references(() => users.id, { onDelete: 'set null' }),
+  name:          text('name').notNull(),              // 'Sesión A · Full Body'
+  sessionLabel:  text('session_label'),               // 'A' | 'B' | 'C'
+  type:          text('type', {
+                   enum: ['full_body','upper','lower','push','pull','legs'],
+                 }),
+  templateOrder: integer('template_order'),
+  createdAt:     integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+export const templateExerciseSlots = sqliteTable('template_exercise_slots', {
+  id:             text('id').primaryKey(),
+  templateId:     text('template_id').notNull()
+                    .references(() => workoutTemplates.id, { onDelete: 'cascade' }),
+  exerciseId:     text('exercise_id').notNull()
+                    .references(() => exercises.id, { onDelete: 'restrict' }),
+  slotOrder:      integer('slot_order').notNull(),
+  targetSets:     integer('target_sets').notNull(),
+  targetReps:     integer('target_reps').notNull(),
+  targetRpeMin:   integer('target_rpe_min'),
+  targetRpeMax:   integer('target_rpe_max'),
+  targetWeightKg: real('target_weight_kg'),
+  restSeconds:    integer('rest_seconds').notNull().default(90),
+  coachNotes:     text('coach_notes'),
+});
+
+export const workoutSessions = sqliteTable('workout_sessions', {
+  id:             text('id').primaryKey(),
+  athleteId:      text('athlete_id').notNull()
+                    .references(() => users.id, { onDelete: 'cascade' }),
+  templateId:     text('template_id')
+                    .references(() => workoutTemplates.id, { onDelete: 'set null' }),
+  scheduledFor:   integer('scheduled_for',{ mode: 'timestamp_ms' }),
+  startedAt:      integer('started_at',   { mode: 'timestamp_ms' }),
+  finishedAt:     integer('finished_at',  { mode: 'timestamp_ms' }),
+  status:         text('status', {
+                    enum: ['in_progress','completed','skipped'],
+                  }).notNull().default('in_progress'),
+  totalTonnageKg: real('total_tonnage_kg').notNull().default(0),
+  coachNotes:     text('coach_notes'),
+  athleteNotes:   text('athlete_notes'),
+  createdAt:      integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+export const loggedExercises = sqliteTable('logged_exercises', {
+  id:            text('id').primaryKey(),
+  sessionId:     text('session_id').notNull()
+                   .references(() => workoutSessions.id, { onDelete: 'cascade' }),
+  exerciseId:    text('exercise_id').notNull()
+                   .references(() => exercises.id, { onDelete: 'restrict' }),
+  slotId:        text('slot_id')
+                   .references(() => templateExerciseSlots.id, { onDelete: 'set null' }),
+  exerciseOrder: integer('exercise_order').notNull(),
+});
+
+// Ad-hoc exercises added mid-session have slotId = null
+export const loggedSets = sqliteTable('logged_sets', {
+  id:               text('id').primaryKey(),
+  loggedExerciseId: text('logged_exercise_id').notNull()
+                      .references(() => loggedExercises.id, { onDelete: 'cascade' }),
+  setNumber:        integer('set_number').notNull(),
+  weightKg:         real('weight_kg').notNull(),
+  reps:             integer('reps').notNull(),
+  rpe:              integer('rpe'),                  // 6–10, enforced at app layer
+  isPR:             integer('is_pr', { mode: 'boolean' }).notNull().default(false),
+  completedAt:      integer('completed_at', { mode: 'timestamp_ms' }).notNull(),
+});
+```
+
+</tab>
+<tab label="nutrition.ts">
+
+```typescript
+// src/db/schema/nutrition.ts
+import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { users } from './auth';
+import { programPhases } from './workouts';
+
+export const mealPlans = sqliteTable('meal_plans', {
+  id:             text('id').primaryKey(),
+  athleteId:      text('athlete_id').notNull()
+                    .references(() => users.id, { onDelete: 'cascade' }),
+  coachId:        text('coach_id').references(() => users.id, { onDelete: 'set null' }),
+  name:           text('name').notNull(),             // 'Plan Déficit Sem 3'
+  targetKcal:     integer('target_kcal').notNull(),
+  targetProteinG: integer('target_protein_g').notNull(),
+  targetCarbsG:   integer('target_carbs_g').notNull(),
+  targetFatG:     integer('target_fat_g').notNull(),
+  phaseId:        text('phase_id')
+                    .references(() => programPhases.id, { onDelete: 'set null' }),
+  active:         integer('active', { mode: 'boolean' }).notNull().default(true),
+  createdAt:      integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+export const mealSlots = sqliteTable('meal_slots', {
+  id:             text('id').primaryKey(),
+  mealPlanId:     text('meal_plan_id').notNull()
+                    .references(() => mealPlans.id, { onDelete: 'cascade' }),
+  name:           text('name').notNull(),             // 'DESAYUNO' | 'ALMUERZO' | 'SNACK' | 'CENA'
+  scheduledTime:  text('scheduled_time'),             // '07:00' — display/ordering only
+  slotOrder:      integer('slot_order').notNull(),
+  defaultName:    text('default_name').notNull(),     // 'Avena con whey y banano'
+  targetKcal:     integer('target_kcal'),
+  targetProteinG: integer('target_protein_g'),
+  targetCarbsG:   integer('target_carbs_g'),
+  targetFatG:     integer('target_fat_g'),
+});
+
+// Unique per athlete+date — upsert-safe anchor for a day's nutrition
+export const dailyNutritionLogs = sqliteTable('daily_nutrition_logs', {
+  id:         text('id').primaryKey(),
+  athleteId:  text('athlete_id').notNull()
+                .references(() => users.id, { onDelete: 'cascade' }),
+  date:       text('date').notNull(),                // 'YYYY-MM-DD'
+  mealPlanId: text('meal_plan_id')
+                .references(() => mealPlans.id, { onDelete: 'set null' }),
+  createdAt:  integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+}, t => ({
+  uniqueLog: uniqueIndex('daily_nutrition_athlete_date').on(t.athleteId, t.date),
+}));
+
+export const mealLogEntries = sqliteTable('meal_log_entries', {
+  id:             text('id').primaryKey(),
+  dailyLogId:     text('daily_log_id').notNull()
+                    .references(() => dailyNutritionLogs.id, { onDelete: 'cascade' }),
+  slotId:         text('slot_id').notNull()
+                    .references(() => mealSlots.id, { onDelete: 'restrict' }),
+  status:         text('status', {
+                    enum: ['completed','substituted','pending'],
+                  }).notNull().default('pending'),
+  substituteNote: text('substitute_note'),           // coach-visible when status = substituted
+  loggedAt:       integer('logged_at', { mode: 'timestamp_ms' }),
+}, t => ({
+  uniqueEntry: uniqueIndex('meal_entry_log_slot').on(t.dailyLogId, t.slotId),
+}));
+
+// mlTotal = glasses * 350 stored denormalised for fast reads
+export const waterLogs = sqliteTable('water_logs', {
+  id:        text('id').primaryKey(),
+  athleteId: text('athlete_id').notNull()
+               .references(() => users.id, { onDelete: 'cascade' }),
+  date:      text('date').notNull(),
+  glasses:   integer('glasses').notNull().default(0),
+  mlTotal:   integer('ml_total').notNull().default(0),
+}, t => ({
+  uniqueWater: uniqueIndex('water_athlete_date').on(t.athleteId, t.date),
+}));
+```
+
+</tab>
+<tab label="habits.ts">
+
+```typescript
+// src/db/schema/habits.ts
+import { integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { users } from './auth';
+
+// streakDay stores the computed streak value at insert time — no recalc on every open
+export const dailyCheckIns = sqliteTable('daily_check_ins', {
+  id:                 text('id').primaryKey(),
+  athleteId:          text('athlete_id').notNull()
+                        .references(() => users.id, { onDelete: 'cascade' }),
+  date:               text('date').notNull(),
+  workoutCompleted:   integer('workout_completed',   { mode: 'boolean' }).notNull().default(false),
+  nutritionCompleted: integer('nutrition_completed', { mode: 'boolean' }).notNull().default(false),
+  hydrationCompleted: integer('hydration_completed', { mode: 'boolean' }).notNull().default(false),
+  streakDay:          integer('streak_day').notNull().default(0),
+}, t => ({
+  uniqueCheckin: uniqueIndex('checkin_athlete_date').on(t.athleteId, t.date),
+}));
+
+// key is the stable code identifier; name is the UI string in the Perfil badges grid
+export const achievementDefinitions = sqliteTable('achievement_definitions', {
+  id:             text('id').primaryKey(),
+  key:            text('key').notNull().unique(),    // 'first_pr' | 'streak_10' | 'minus_3kg'
+  name:           text('name').notNull(),
+  description:    text('description'),
+  icon:           text('icon'),                      // emoji or SF symbol name
+  conditionType:  text('condition_type', {
+                    enum: [
+                      'pr_count','streak_days','weight_lost_kg',
+                      'session_count','nutrition_adherence','custom',
+                    ],
+                  }).notNull(),
+  conditionValue: real('condition_value'),
+});
+
+export const athleteAchievements = sqliteTable('athlete_achievements', {
+  id:            text('id').primaryKey(),
+  athleteId:     text('athlete_id').notNull()
+                   .references(() => users.id, { onDelete: 'cascade' }),
+  achievementId: text('achievement_id').notNull()
+                   .references(() => achievementDefinitions.id, { onDelete: 'cascade' }),
+  earnedAt:      integer('earned_at', { mode: 'timestamp_ms' }).notNull(),
+}, t => ({
+  uniqueEarned: uniqueIndex('achievement_athlete_def').on(t.athleteId, t.achievementId),
+}));
+
+export const coachMessages = sqliteTable('coach_messages', {
+  id:         text('id').primaryKey(),
+  senderId:   text('sender_id').notNull()
+                .references(() => users.id, { onDelete: 'cascade' }),
+  receiverId: text('receiver_id').notNull()
+                .references(() => users.id, { onDelete: 'cascade' }),
+  content:    text('content').notNull(),
+  sentAt:     integer('sent_at', { mode: 'timestamp_ms' }).notNull(),
+  readAt:     integer('read_at', { mode: 'timestamp_ms' }),
+});
+```
+
+</tab>
+<tab label="ai.ts">
+
+```typescript
+// src/db/schema/ai.ts
+import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { users } from './auth';
+
+// Ships empty. Populated by a future generateRecommendation() action.
+export const aiRecommendations = sqliteTable('ai_recommendations', {
+  id:              text('id').primaryKey(),
+  athleteId:       text('athlete_id').notNull()
+                     .references(() => users.id, { onDelete: 'cascade' }),
+  type:            text('type', {
+                     enum: ['workout','nutrition','recovery','habit','progress'],
+                   }).notNull(),
+  title:           text('title').notNull(),
+  body:            text('body').notNull(),
+  // JSON blob of the athlete state that drove this rec — diff-able between generations
+  contextSnapshot: text('context_snapshot'),
+  priority:        integer('priority').notNull().default(1), // 1 low → 5 urgent
+  model:           text('model'),                            // 'claude-sonnet-4-6' etc.
+  generatedAt:     integer('generated_at',  { mode: 'timestamp_ms' }).notNull(),
+  readAt:          integer('read_at',       { mode: 'timestamp_ms' }),
+  dismissedAt:     integer('dismissed_at',  { mode: 'timestamp_ms' }),
+  appliedAt:       integer('applied_at',    { mode: 'timestamp_ms' }),
+});
+
+export const aiFeedback = sqliteTable('ai_feedback', {
+  id:               text('id').primaryKey(),
+  recommendationId: text('recommendation_id').notNull()
+                      .references(() => aiRecommendations.id, { onDelete: 'cascade' }),
+  athleteId:        text('athlete_id').notNull()
+                      .references(() => users.id, { onDelete: 'cascade' }),
+  rating:           integer('rating').notNull(), // 1–5
+  comment:          text('comment'),
+  givenAt:          integer('given_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+// Cached athlete state for prompt building — expires when source data changes
+export const aiContextSnapshots = sqliteTable('ai_context_snapshots', {
+  id:            text('id').primaryKey(),
+  athleteId:     text('athlete_id').notNull()
+                   .references(() => users.id, { onDelete: 'cascade' }),
+  snapshotType:  text('snapshot_type', {
+                   enum: ['weekly_summary','phase_progress','nutrition_week','pr_trend'],
+                 }).notNull(),
+  payload:       text('payload').notNull(),       // JSON: the serialised context sent to Claude
+  tokenEstimate: integer('token_estimate'),       // approx Claude input tokens for cost awareness
+  createdAt:     integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  expiresAt:     integer('expires_at', { mode: 'timestamp_ms' }),
+});
+```
+
+</tab>
+</tabs>
+
+<rich-text>
+## DB client and migration runner
+</rich-text>
+
+<tabs>
+<tab label="src/db/index.ts">
+
+```typescript
+import { drizzle } from 'drizzle-orm/expo-sqlite';
+import { openDatabaseSync } from 'expo-sqlite';
+import * as schema from './schema';
+
+// enableChangeListener powers useLiveQuery — screens re-render when rows change
+const client = openDatabaseSync('pulso.db', { enableChangeListener: true });
+
+export const db = drizzle(client, { schema });
+export type DB = typeof db;
+```
+
+</tab>
+<tab label="src/db/migrate.ts">
+
+```typescript
+import { migrate } from 'drizzle-orm/expo-sqlite/migrator';
+import migrations from '../../drizzle/migrations';
+import { db } from './index';
+
+// Called once in _layout.tsx before SplashScreen.hideAsync()
+// so screens never see a partially-migrated DB
+export async function runMigrations() {
+  await migrate(db, migrations);
+}
+```
+
+</tab>
+<tab label="drizzle.config.ts">
+
+```typescript
+import type { Config } from 'drizzle-kit';
+
+export default {
+  schema:  './src/db/schema/index.ts',
+  out:     './drizzle',
+  dialect: 'sqlite',
+  driver:  'expo',
+} satisfies Config;
+```
+
+</tab>
+<tab label="src/db/schema/index.ts">
+
+```typescript
+export * from './auth';
+export * from './profiles';
+export * from './workouts';
+export * from './nutrition';
+export * from './habits';
+export * from './ai';
+```
+
+</tab>
+</tabs>
+
+<rich-text>
+## Auth utilities — src/lib/auth.ts
+
+Raw token → `SecureStore`. Hash → `sessions` table. `getActiveSession()` is called on every app resume to gate the tab navigator.
+</rich-text>
+
+```typescript
+// src/lib/auth.ts
+import * as Crypto from 'expo-crypto';
+import * as SecureStore from 'expo-secure-store';
+import { eq } from 'drizzle-orm';
+import { nanoid } from './id';
+import { db } from '@/db';
+import { sessions, users } from '@/db/schema';
+
+const TOKEN_KEY = 'pulso_session_token';
+
+async function sha256(input: string) {
+  return Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256, input,
+  );
+}
+
+export async function signUp(email: string, password: string) {
+  const id = nanoid();
+  await db.insert(users).values({
+    id, email,
+    passwordHash: await sha256(password),
+    role: 'athlete', verified: false,
+    createdAt: new Date(), updatedAt: new Date(),
+  });
+  return id;
+}
+
+export async function signIn(email: string, password: string) {
+  const [user] = await db.select().from(users)
+    .where(eq(users.email, email)).limit(1);
+  if (!user || user.passwordHash !== await sha256(password))
+    throw new Error('invalid_credentials');
+
+  const rawToken  = nanoid(48);
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+
+  await db.insert(sessions).values({
+    id: nanoid(), userId: user.id,
+    tokenHash: await sha256(rawToken),
+    expiresAt, createdAt: new Date(),
+  });
+  await SecureStore.setItemAsync(TOKEN_KEY, rawToken);
+  return user;
+}
+
+export async function getActiveSession() {
+  const raw = await SecureStore.getItemAsync(TOKEN_KEY);
+  if (!raw) return null;
+  const [session] = await db.select().from(sessions)
+    .where(eq(sessions.tokenHash, await sha256(raw))).limit(1);
+  if (!session || session.expiresAt < new Date()) return null;
+  return session;
+}
+
+export async function signOut() {
+  const raw = await SecureStore.getItemAsync(TOKEN_KEY);
+  if (raw) await db.delete(sessions)
+    .where(eq(sessions.tokenHash, await sha256(raw)));
+  await SecureStore.deleteItemAsync(TOKEN_KEY);
+}
+```
+
+<rich-text>
+## Nano-id helper — src/lib/id.ts
+
+No external package — 21-char URL-safe alphabet, same as the nanoid npm package.
+</rich-text>
+
+```typescript
+// src/lib/id.ts
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
+
+export function nanoid(size = 21): string {
+  let id = '';
+  const bytes = new Uint8Array(size);
+  crypto.getRandomValues(bytes);
+  for (let i = 0; i < size; i++) {
+    id += ALPHABET[bytes[i] & 63];
+  }
+  return id;
+}
+```
+
+<callout tone="warning">
+**expo-secure-store requires a custom build.** `SecureStore.setItemAsync` is not available in Expo Go. For local development, swap it temporarily for `AsyncStorage` and add a TODO comment. Everything else — expo-sqlite, expo-crypto, drizzle — runs in Expo Go without a build.
+</callout>
+
+<rich-text>
+## Implementation checklist
+</rich-text>
+
+<checklist>
+{
+  "items": [
+    { "id": "pkg", "label": "Install: npm i drizzle-orm expo-sqlite expo-crypto expo-secure-store && npm i -D drizzle-kit" },
+    { "id": "schema-files", "label": "Create src/db/schema/{auth,profiles,workouts,nutrition,habits,ai,index}.ts" },
+    { "id": "db-client", "label": "Create src/db/index.ts with openDatabaseSync + drizzle client" },
+    { "id": "drizzle-cfg", "label": "Create drizzle.config.ts at project root (dialect: sqlite, driver: expo)" },
+    { "id": "gen", "label": "Run: npx drizzle-kit generate — produces /drizzle/migrations bundle" },
+    { "id": "migrate-layout", "label": "Call runMigrations() in _layout.tsx before SplashScreen.hideAsync()" },
+    { "id": "id-lib", "label": "Create src/lib/id.ts with nanoid() helper (no external package)" },
+    { "id": "auth-lib", "label": "Create src/lib/auth.ts (signUp / signIn / getActiveSession / signOut)" },
+    { "id": "seed-exercises", "label": "Seed default exercises in migration: Sentadilla, Press banca, Peso muerto" },
+    { "id": "seed-achievements", "label": "Seed achievement_definitions: first_pr, streak_10, minus_3kg, full_week, squat_140, recomp" },
+    { "id": "replace-ctx", "label": "Replace AppProvider in-memory state with db-backed hooks using useLiveQuery per screen" },
+    { "id": "tsc", "label": "npx tsc --noEmit passes with zero errors" }
+  ]
+}
+</checklist>
+
+<question-form title="Open Questions">
+{
+  "questions": [
+    {
+      "id": "auth-ui",
+      "title": "Where does the auth UI live?",
+      "mode": "single",
+      "options": [
+        {
+          "id": "stack",
+          "label": "Dedicated (auth) group before tabs",
+          "detail": "app/(auth)/login.tsx gated in _layout.tsx — tabs only mount after a valid session",
+          "recommended": true
+        },
+        {
+          "id": "modal",
+          "label": "Modal over the tabs on first launch",
+          "detail": "Simpler routing but tabs flash briefly before the modal blocks them"
+        }
+      ]
+    },
+    {
+      "id": "sync",
+      "title": "Should the local DB ever sync to a remote backend?",
+      "mode": "single",
+      "options": [
+        {
+          "id": "local",
+          "label": "Local-only for now",
+          "detail": "Coach and athlete share one device. Sync deferred. PKs are nanoid text — already sync-friendly when the time comes.",
+          "recommended": true
+        },
+        {
+          "id": "supabase",
+          "label": "Supabase realtime later",
+          "detail": "Adds a second migration path; the schema shape is already compatible"
+        },
+        {
+          "id": "api",
+          "label": "Custom REST API later",
+          "detail": "Most flexible — schema is already API-ready with stable text PKs"
+        }
+      ]
+    },
+    {
+      "id": "ai-trigger",
+      "title": "What triggers generating an AI recommendation?",
+      "mode": "single",
+      "options": [
+        {
+          "id": "on-demand",
+          "label": "On-demand: athlete taps Get insight on HOY",
+          "detail": "Explicit, no background jobs, works in Expo Go",
+          "recommended": true
+        },
+        {
+          "id": "post-session",
+          "label": "Automatically after each completed workout_session",
+          "detail": "More timely but needs expo-task-manager or a server webhook"
+        },
+        {
+          "id": "daily",
+          "label": "Daily background job via expo-background-fetch",
+          "detail": "Consistent cadence but requires a custom build for background modes"
+        }
+      ]
+    }
+  ]
+}
+</question-form>

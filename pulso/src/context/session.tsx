@@ -1,0 +1,48 @@
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+
+import { getActiveSession, signOut as authSignOut } from '@/lib/auth';
+
+interface SessionState {
+  userId: string | null;
+  sessionId: string | null;
+  loading: boolean;
+}
+
+interface SessionContextValue extends SessionState {
+  refresh: () => Promise<void>;
+  signOut: () => Promise<void>;
+}
+
+const SessionContext = createContext<SessionContextValue | null>(null);
+
+export function SessionProvider({ children }: { children: React.ReactNode }) {
+  const [state, setState] = useState<SessionState>({ userId: null, sessionId: null, loading: true });
+
+  const refresh = useCallback(async () => {
+    const session = await getActiveSession();
+    setState({
+      userId: session?.userId ?? null,
+      sessionId: session?.sessionId ?? null,
+      loading: false,
+    });
+  }, []);
+
+  const signOut = useCallback(async () => {
+    await authSignOut();
+    setState({ userId: null, sessionId: null, loading: false });
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  return (
+    <SessionContext.Provider value={{ ...state, refresh, signOut }}>
+      {children}
+    </SessionContext.Provider>
+  );
+}
+
+export function useSession() {
+  const ctx = useContext(SessionContext);
+  if (!ctx) throw new Error('useSession must be used within SessionProvider');
+  return ctx;
+}
