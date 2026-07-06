@@ -1,13 +1,32 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
+import { useEffect } from 'react';
+import { ColorValue } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { C, F } from '@/constants/colors';
 import { AppProvider } from '@/context/app-state';
 
-type TabIconProps = { color: string; name: string };
+type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
-function TabIcon({ color, name }: TabIconProps) {
-  return <SymbolView name={name as any} tintColor={color} type="hierarchical" style={{ width: 22, height: 22 }} />;
+function TabIcon({ color, name, focused }: { color: ColorValue; name: IconName; focused: boolean }) {
+  const lit = useSharedValue(0);
+
+  useEffect(() => {
+    lit.value = withTiming(focused ? 1 : 0, { duration: 220, easing: Easing.out(Easing.cubic) });
+  }, [focused, lit]);
+
+  // "Light up" on focus: slight grow + brightness, no bounce
+  const style = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + lit.value * 0.1 }],
+    opacity: 0.7 + lit.value * 0.3,
+  }));
+
+  return (
+    <Animated.View style={style}>
+      <MaterialCommunityIcons name={name} size={22} color={color} />
+    </Animated.View>
+  );
 }
 
 export default function TabsLayout() {
@@ -35,35 +54,35 @@ export default function TabsLayout() {
           name="hoy"
           options={{
             title: 'HOY',
-            tabBarIcon: ({ color }) => <TabIcon color={color} name="calendar.day.timeline.left" />,
+            tabBarIcon: ({ color, focused }) => <TabIcon color={color} focused={focused} name="calendar-today" />,
           }}
         />
         <Tabs.Screen
           name="dieta"
           options={{
             title: 'DIETA',
-            tabBarIcon: ({ color }) => <TabIcon color={color} name="fork.knife" />,
+            tabBarIcon: ({ color, focused }) => <TabIcon color={color} focused={focused} name="silverware-fork-knife" />,
           }}
         />
         <Tabs.Screen
           name="entreno"
           options={{
             title: 'ENTRENO',
-            tabBarIcon: ({ color }) => <TabIcon color={color} name="dumbbell" />,
+            tabBarIcon: ({ color, focused }) => <TabIcon color={color} focused={focused} name="dumbbell" />,
           }}
         />
         <Tabs.Screen
           name="progreso"
           options={{
             title: 'PROGRESO',
-            tabBarIcon: ({ color }) => <TabIcon color={color} name="chart.bar.fill" />,
+            tabBarIcon: ({ color, focused }) => <TabIcon color={color} focused={focused} name="chart-bar" />,
           }}
         />
         <Tabs.Screen
           name="perfil"
           options={{
             title: 'PERFIL',
-            tabBarIcon: ({ color }) => <TabIcon color={color} name="person.fill" />,
+            tabBarIcon: ({ color, focused }) => <TabIcon color={color} focused={focused} name="account" />,
           }}
         />
       </Tabs>

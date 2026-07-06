@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { C, F } from '@/constants/colors';
 import { useSession } from '@/context/session';
@@ -44,7 +45,7 @@ export default function LoginScreen() {
       contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 64, paddingBottom: 48 }}
     >
       {/* Brand */}
-      <View style={{ marginBottom: 48 }}>
+      <Animated.View entering={FadeInDown.duration(400)} style={{ marginBottom: 48 }}>
         <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 2.4, color: C.yellow, textTransform: 'uppercase', marginBottom: 10 }}>
           PULSO · APP DEL ATLETA
         </Text>
@@ -54,10 +55,10 @@ export default function LoginScreen() {
         <Text style={{ fontFamily: F.inter, fontSize: 14, color: C.textSecondary, marginTop: 8 }}>
           Ingresá para ver tu plan de hoy
         </Text>
-      </View>
+      </Animated.View>
 
       {/* Form */}
-      <View style={{ gap: 12 }}>
+      <Animated.View entering={FadeInDown.duration(400).delay(120)} style={{ gap: 12 }}>
         <View>
           <Text style={{ fontFamily: F.mono, fontSize: 9, letterSpacing: 1.4, color: C.textTertiary, textTransform: 'uppercase', marginBottom: 7 }}>
             EMAIL
@@ -112,7 +113,7 @@ export default function LoginScreen() {
             : <Text style={{ fontFamily: F.monoBold, fontSize: 12, letterSpacing: 0.8, color: C.bg, textTransform: 'uppercase' }}>INGRESAR</Text>
           }
         </TouchableOpacity>
-      </View>
+      </Animated.View>
 
       {/* Switch to sign up */}
       <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 32, gap: 6 }}>

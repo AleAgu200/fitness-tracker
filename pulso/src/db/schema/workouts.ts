@@ -85,6 +85,7 @@ export const templateExerciseSlots = sqliteTable('template_exercise_slots', {
   targetRpeMax:   integer('target_rpe_max'),
   targetWeightKg: real('target_weight_kg'),
   restSeconds:    integer('rest_seconds').notNull().default(90),
+  stepKg:         real('step_kg').notNull().default(2.5),
   coachNotes:     text('coach_notes'),
 });
 

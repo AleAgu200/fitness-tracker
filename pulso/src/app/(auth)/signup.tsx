@@ -2,28 +2,24 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { C, F } from '@/constants/colors';
 import { useSession } from '@/context/session';
 import { saveAthleteProfile, saveInitialWeight } from '@/db/profile';
-import { getActiveSession, signIn, signUp } from '@/lib/auth';
+import { getActiveSession, isUserExistsError, signIn, signUp } from '@/lib/auth';
+import { getInitials } from '@/lib/names';
 
 type Sexo = 'M' | 'F' | 'X';
 const SEX_LABELS: Record<Sexo, string> = { M: 'HOMBRE', F: 'MUJER', X: 'OTRO' };
-
-function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
 
 function SectionHeader({ label }: { label: string }) {
   return (
@@ -106,11 +102,25 @@ export default function SignUpScreen() {
       await refresh();
       router.replace('/hoy' as any);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : '';
-      if (msg.includes('UNIQUE') || msg.includes('unique')) {
-        setError('Ese email ya está registrado');
+      if (isUserExistsError(e)) {
+        Alert.alert(
+          'Cuenta existente',
+          `Ya hay una cuenta registrada con ${email.trim().toLowerCase()}. Iniciá sesión para continuar.`,
+          [
+            {
+              text: 'IR A INICIAR SESIÓN',
+              onPress: () => router.replace('/(auth)/login' as any),
+            },
+          ],
+          { cancelable: false },
+        );
       } else {
-        setError('Error al crear la cuenta. Intentá de nuevo.');
+        const msg = e instanceof Error ? e.message : '';
+        if (msg.includes('UNIQUE') || msg.includes('unique')) {
+          setError('Ese email ya está registrado');
+        } else {
+          setError('Error al crear la cuenta. Intentá de nuevo.');
+        }
       }
     } finally {
       setLoading(false);
@@ -130,7 +140,7 @@ export default function SignUpScreen() {
       contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 64, paddingBottom: insets.bottom + 48 }}
     >
       {/* Brand */}
-      <View style={{ marginBottom: 40 }}>
+      <Animated.View entering={FadeInDown.duration(400)} style={{ marginBottom: 40 }}>
         <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 2.4, color: C.yellow, textTransform: 'uppercase', marginBottom: 10 }}>
           PULSO · APP DEL ATLETA
         </Text>
@@ -140,7 +150,7 @@ export default function SignUpScreen() {
         <Text style={{ fontFamily: F.inter, fontSize: 14, color: C.textSecondary, marginTop: 8 }}>
           Completá tu perfil para empezar
         </Text>
-      </View>
+      </Animated.View>
 
       {/* ── CUENTA ── */}
       <SectionHeader label="CUENTA" />

@@ -1,0 +1,1 @@
+ALTER TABLE `template_exercise_slots` ADD `step_kg` real DEFAULT 2.5 NOT NULL;

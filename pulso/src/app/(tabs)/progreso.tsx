@@ -1,6 +1,11 @@
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
+import { useEffect } from 'react';
+import { ScrollView, Text, View } from 'react-native';
+import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Card, Label, PressableScale } from '@/components/ui/kit';
 import { C, F } from '@/constants/colors';
 import { MetricKey, useApp } from '@/context/app-state';
 
@@ -10,52 +15,68 @@ const METRICS: { key: MetricKey; label: string; unit: string; color: string }[] 
   { key: 'musculo', label: 'MÚSCULO', unit: '%',  color: C.cyan },
 ];
 
-function Label({ children, style }: { children: React.ReactNode; style?: object }) {
-  return (
-    <Text style={{ fontFamily: F.mono, fontSize: 9, letterSpacing: 1.4, color: C.textTertiary, textTransform: 'uppercase', ...style }}>
-      {children}
-    </Text>
-  );
-}
-
 function EmptyChart({ label }: { label: string }) {
   return (
     <View style={{ height: 96, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.border, borderStyle: 'dashed' }}>
       <Text style={{ fontFamily: F.mono, fontSize: 10, color: C.textTertiary }}>
-        Sin datos de {label.toLowerCase()} aún
+        Sin datos de {label.toLowerCase()} aún — registrá tu primer valor abajo
       </Text>
     </View>
   );
 }
 
+/** Vertical chart bar that animates to its height */
+function VBar({ pct, color }: { pct: number; color: string }) {
+  const h = useSharedValue(0);
+  useEffect(() => {
+    h.value = withTiming(pct, { duration: 550 });
+  }, [pct, h]);
+  const style = useAnimatedStyle(() => ({ height: `${h.value}%` }));
+  return <Animated.View style={[{ width: '100%', backgroundColor: color }, style]} />;
+}
+
 export default function ProgresoScreen() {
-  const { state, setMetric, incWeighIn, decWeighIn, registrarPeso } = useApp();
+  const { state, setMetric, incWeighIn, decWeighIn, registrarPeso, addProgressPhoto } = useApp();
   const insets = useSafeAreaInsets();
 
   const metricDef = METRICS.find(m => m.key === state.metric)!;
-
-  // Only peso has a history in state; grasa/musculo are future features
-  const hist = state.metric === 'peso' ? state.pesoHist : [];
+  const hist = state.histories[state.metric];
   const hasData = hist.length > 0;
+  const stepVal = state.metricVals[state.metric];
+  const logged = state.loggedToday[state.metric];
 
-  const cur   = hasData ? hist[hist.length - 1] : state.weighIn;
-  const prev  = hasData ? hist[0] : null;
+  const cur   = hasData ? hist[hist.length - 1].value : stepVal;
+  const prev  = hasData && hist.length > 1 ? hist[0].value : null;
   const delta = prev != null ? cur - prev : null;
   const deltaStr  = delta != null ? `${delta >= 0 ? '+' : ''}${delta.toFixed(1)} ${metricDef.unit}` : null;
   const deltaColor = delta != null
     ? (state.metric === 'musculo' ? (delta >= 0 ? C.yellow : C.red) : (delta <= 0 ? C.yellow : C.red))
     : C.textTertiary;
 
-  const maxH = hasData ? Math.max(...hist) : 0;
-  const minH = hasData ? Math.min(...hist) : 0;
+  const values = hist.map(p => p.value);
+  const maxH = hasData ? Math.max(...values) : 0;
+  const minH = hasData ? Math.min(...values) : 0;
   const range = maxH - minH || 1;
+  const barPct = (v: number) => Math.round(30 + ((v - minH) / range) * 70);
 
-  function barHeight(v: number): `${number}%` {
-    const ratio = (v - minH) / range;
-    return `${Math.round(30 + ratio * 70)}%`;
+  const antes = state.photos[0] ?? null;
+  const hoy = state.photos.length > 1 ? state.photos[state.photos.length - 1] : null;
+
+  async function pickPhoto() {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.8,
+        allowsEditing: true,
+        aspect: [3, 4],
+      });
+      if (!result.canceled && result.assets[0]) {
+        addProgressPhoto(result.assets[0].uri);
+      }
+    } catch (e) {
+      console.error('[picker]', e);
+    }
   }
-
-  const weekLabels = hist.map((_, i) => `S${i + 1}`);
 
   return (
     <ScrollView
@@ -72,7 +93,7 @@ export default function ProgresoScreen() {
           {METRICS.map(m => {
             const sel = state.metric === m.key;
             return (
-              <TouchableOpacity
+              <PressableScale
                 key={m.key}
                 onPress={() => setMetric(m.key)}
                 style={{
@@ -81,18 +102,17 @@ export default function ProgresoScreen() {
                   backgroundColor: sel ? `${m.color}22` : C.card,
                   alignItems: 'center',
                 }}
-                activeOpacity={0.8}
               >
                 <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 0.6, textTransform: 'uppercase', color: sel ? m.color : C.textSecondary }}>
                   {m.label}
                 </Text>
-              </TouchableOpacity>
+              </PressableScale>
             );
           })}
         </View>
 
         {/* CHART */}
-        <View style={{ backgroundColor: C.card, borderWidth: 1, borderColor: C.border, padding: 14, marginBottom: 14 }}>
+        <Card index={0} style={{ padding: 14, marginBottom: 14 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16 }}>
             <View>
               <Label style={{ marginBottom: 7 }}>{metricDef.label} ACTUAL</Label>
@@ -109,59 +129,81 @@ export default function ProgresoScreen() {
           </View>
 
           {hasData ? (
-            <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 7, height: 96 }}>
-              {hist.map((v, i) => (
-                <View key={i} style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: '100%' }}>
-                  <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textSecondary, marginBottom: 6 }}>{v}</Text>
-                  <View style={{ width: '100%', backgroundColor: i === hist.length - 1 ? metricDef.color : `${metricDef.color}55`, height: barHeight(v) }} />
-                  <Text style={{ fontFamily: F.mono, fontSize: 8, color: C.textTertiary, marginTop: 6 }}>{weekLabels[i]}</Text>
+            <Animated.View key={state.metric} entering={FadeIn.duration(250)} style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 7, height: 110 }}>
+              {hist.map((p, i) => (
+                <View key={`${p.label}-${i}`} style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: '100%' }}>
+                  <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textSecondary, marginBottom: 6 }}>{p.value.toFixed(1)}</Text>
+                  <View style={{ width: '100%', flex: 1, justifyContent: 'flex-end' }}>
+                    <VBar pct={barPct(p.value)} color={i === hist.length - 1 ? metricDef.color : `${metricDef.color}55`} />
+                  </View>
+                  <Text style={{ fontFamily: F.mono, fontSize: 8, color: C.textTertiary, marginTop: 6 }}>{p.label}</Text>
                 </View>
               ))}
-            </View>
+            </Animated.View>
           ) : (
             <EmptyChart label={metricDef.label} />
           )}
-        </View>
+        </Card>
 
-        {/* WEIGH-IN */}
-        <View style={{ backgroundColor: C.card, borderWidth: 1, borderColor: C.border, padding: 14, marginBottom: 14 }}>
-          <Label style={{ marginBottom: 14 }}>REGISTRAR PESAJE · HOY</Label>
+        {/* LOG VALUE */}
+        <Card index={1} style={{ padding: 14, marginBottom: 14 }}>
+          <Label style={{ marginBottom: 14 }}>REGISTRAR {metricDef.label} · HOY</Label>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14, marginBottom: 14 }}>
-            <TouchableOpacity onPress={decWeighIn} style={{ width: 38, height: 38, borderWidth: 1, borderColor: C.border, backgroundColor: C.bgEl, alignItems: 'center', justifyContent: 'center' }} activeOpacity={0.7}>
+            <PressableScale onPress={decWeighIn} style={{ width: 38, height: 38, borderWidth: 1, borderColor: C.border, backgroundColor: C.bgEl, alignItems: 'center', justifyContent: 'center' }}>
               <Text style={{ fontFamily: F.mono, fontSize: 20, color: C.textPrimary }}>−</Text>
-            </TouchableOpacity>
+            </PressableScale>
             <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4 }}>
               <Text style={{ fontFamily: F.monoXBold, fontSize: 40, color: C.textPrimary, fontVariant: ['tabular-nums'] as any }}>
-                {state.weighIn.toFixed(1)}
+                {stepVal.toFixed(1)}
               </Text>
-              <Text style={{ fontFamily: F.mono, fontSize: 14, color: C.textTertiary }}>kg</Text>
+              <Text style={{ fontFamily: F.mono, fontSize: 14, color: C.textTertiary }}>{metricDef.unit}</Text>
             </View>
-            <TouchableOpacity onPress={incWeighIn} style={{ width: 38, height: 38, borderWidth: 1, borderColor: C.border, backgroundColor: C.bgEl, alignItems: 'center', justifyContent: 'center' }} activeOpacity={0.7}>
+            <PressableScale onPress={incWeighIn} style={{ width: 38, height: 38, borderWidth: 1, borderColor: C.border, backgroundColor: C.bgEl, alignItems: 'center', justifyContent: 'center' }}>
               <Text style={{ fontFamily: F.mono, fontSize: 20, color: C.textPrimary }}>+</Text>
-            </TouchableOpacity>
+            </PressableScale>
           </View>
-          <TouchableOpacity
+          <PressableScale
             onPress={registrarPeso}
+            haptic="success"
             style={{
-              padding: 14, borderWidth: 1, borderColor: C.yellow, alignItems: 'center',
-              backgroundColor: state.weighed ? C.yellow : 'transparent',
+              padding: 14, borderWidth: 1, borderColor: metricDef.color, alignItems: 'center',
+              backgroundColor: logged ? metricDef.color : 'transparent',
             }}
-            activeOpacity={0.8}
           >
-            <Text style={{ fontFamily: F.monoBold, fontSize: 12, letterSpacing: 0.6, color: state.weighed ? C.bg : C.yellow, textTransform: 'uppercase' }}>
-              {state.weighed ? '✓ REGISTRADO' : 'REGISTRAR PESO'}
+            <Text style={{ fontFamily: F.monoBold, fontSize: 12, letterSpacing: 0.6, color: logged ? C.bg : metricDef.color, textTransform: 'uppercase' }}>
+              {logged ? '✓ REGISTRADO · TOCÁ PARA ACTUALIZAR' : `REGISTRAR ${metricDef.label}`}
             </Text>
-          </TouchableOpacity>
-        </View>
+          </PressableScale>
+        </Card>
 
         {/* FOTOS */}
         <Label style={{ marginBottom: 9 }}>FOTOS · ANTES / AHORA</Label>
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          {[{ label: 'foto · antes', color: C.border, textColor: C.textTertiary }, { label: 'foto · hoy', color: C.yellow, textColor: C.yellow }].map((f, i) => (
+          {[
+            { label: 'foto · antes', photo: antes, color: C.border, textColor: C.textTertiary },
+            { label: 'foto · hoy', photo: hoy, color: C.yellow, textColor: C.yellow },
+          ].map((f, i) => (
             <View key={i} style={{ flex: 1 }}>
-              <View style={{ height: 180, borderWidth: 1, borderColor: f.color, backgroundColor: C.bgEl, alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={{ fontFamily: F.mono, fontSize: 10, color: f.textColor, letterSpacing: 0.6 }}>{f.label}</Text>
-              </View>
+              <PressableScale onPress={pickPhoto} haptic="light" style={{ height: 180, borderWidth: 1, borderColor: f.color, backgroundColor: C.bgEl, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                {f.photo ? (
+                  <Image
+                    source={{ uri: f.photo.uri }}
+                    style={{ width: '100%', height: '100%' }}
+                    contentFit="cover"
+                    transition={250}
+                  />
+                ) : (
+                  <>
+                    <Text style={{ fontFamily: F.mono, fontSize: 10, color: f.textColor, letterSpacing: 0.6 }}>{f.label}</Text>
+                    <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textTertiary, marginTop: 6 }}>+ tocar para subir</Text>
+                  </>
+                )}
+              </PressableScale>
+              {f.photo && (
+                <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textTertiary, marginTop: 5, textAlign: 'center' }}>
+                  {f.photo.takenAt.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
+                </Text>
+              )}
             </View>
           ))}
         </View>
