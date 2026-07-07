@@ -3,6 +3,7 @@ import Animated, { Easing, FadeIn, FadeInDown, FadeOutUp, LinearTransition } fro
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedBar, Card, GlowPulse, Label, PressableScale } from '@/components/ui/kit';
+import { WorkoutXSearch } from '@/components/workoutx-search';
 import { C, F } from '@/constants/colors';
 import { useApp } from '@/context/app-state';
 
@@ -35,7 +36,8 @@ export default function EntrenoScreen() {
     addRest, skipRest, dismissPrFlash,
   } = useApp();
   const insets = useSafeAreaInsets();
-  const { exercises, exIndex, log, curPeso, curReps, curRpe, restActive, restLeft, restTotal, prFlash, prMap, editingEx, addingEx, draft, sessionDone } = state;
+  const { exercises, exIndex, log, curPeso, curReps, curRpe, restActive, restLeft, restTotal, prFlash, prMap, editingEx, addingEx, draft, sessionDone, assignedWorkoutBy } = state;
+  const isAssigned = assignedWorkoutBy != null;
 
   const activeEx = exercises[exIndex];
   const doneSets = (log[activeEx?.id] || []).length;
@@ -81,7 +83,7 @@ export default function EntrenoScreen() {
         {/* Header */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
           <View>
-            <Label style={{ marginBottom: 6 }}>SESIÓN A · FULL BODY</Label>
+            <Label style={{ marginBottom: 6 }}>{isAssigned ? `PLAN DE ${assignedWorkoutBy?.toUpperCase()}` : 'SESIÓN A · FULL BODY'}</Label>
             <Text style={{ fontFamily: F.grotesk, fontSize: 27, color: C.textPrimary }}>Entreno</Text>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
@@ -91,6 +93,16 @@ export default function EntrenoScreen() {
             <Label style={{ marginTop: 4 }}>TONELAJE kg</Label>
           </View>
         </View>
+
+        {/* ASSIGNED PLAN BANNER */}
+        {isAssigned && (
+          <Animated.View entering={FadeInDown.duration(280)} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: C.cyan, backgroundColor: 'rgba(61,220,255,0.06)', padding: 12, marginBottom: 12 }}>
+            <Text style={{ fontFamily: F.mono, fontSize: 13, color: C.cyan }}>◆</Text>
+            <Text style={{ flex: 1, fontFamily: F.inter, fontSize: 12, color: C.textSecondary, lineHeight: 17 }}>
+              Plan asignado por <Text style={{ color: C.cyan, fontFamily: F.interSemi }}>{assignedWorkoutBy}</Text>. Podés ajustarlo; desde el portal solo tu entrenador puede cambiar el entrenamiento.
+            </Text>
+          </Animated.View>
+        )}
 
         {/* SESSION COMPLETE BANNER */}
         {sessionDone && (
@@ -248,12 +260,19 @@ export default function EntrenoScreen() {
             <Label style={{ color: C.yellow, marginBottom: 12 }}>
               {editingEx ? 'EDITAR EJERCICIO' : 'NUEVO EJERCICIO'}
             </Label>
+            <Label style={{ marginBottom: 6 }}>NOMBRE · BUSCAR EN WORKOUTX</Label>
             <TextInput
               value={draft.nombre}
               onChangeText={v => setDraft('nombre', v)}
-              placeholder="Nombre del ejercicio"
+              placeholder="Ej: sentadilla, curl, press…"
               placeholderTextColor={C.textTertiary}
               style={{ backgroundColor: C.bgEl, borderWidth: 1, borderColor: C.border, padding: 10, color: C.textPrimary, fontFamily: F.inter, fontSize: 14, marginBottom: 10 }}
+            />
+
+            <WorkoutXSearch
+              query={String(draft.nombre)}
+              enabled={editingEx || addingEx}
+              onSelect={suggestion => setDraft('nombre', suggestion.name)}
             />
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 13 }}>
               {[{ label: 'SERIES', field: 'target' as const }, { label: 'REPS', field: 'reps' as const }, { label: 'PESO kg', field: 'peso' as const }].map(item => (

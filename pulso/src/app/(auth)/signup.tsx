@@ -12,6 +12,7 @@ import {
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { LightningBackground } from '@/components/ui/lightning-bg';
 import { C, F } from '@/constants/colors';
 import { useSession } from '@/context/session';
 import { saveAthleteProfile, saveInitialWeight } from '@/db/profile';
@@ -133,10 +134,12 @@ export default function SignUpScreen() {
   } as const;
 
   return (
+    <View style={{ flex: 1, backgroundColor: C.bg }}>
+    <LightningBackground />
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
-      style={{ flex: 1, backgroundColor: C.bg }}
+      style={{ flex: 1 }}
       contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 64, paddingBottom: insets.bottom + 48 }}
     >
       {/* Brand */}
@@ -284,5 +287,6 @@ export default function SignUpScreen() {
         </TouchableOpacity>
       </View>
     </ScrollView>
+    </View>
   );
 }

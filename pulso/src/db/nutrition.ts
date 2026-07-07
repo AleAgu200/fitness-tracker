@@ -132,6 +132,36 @@ export async function deleteMealSlot(mealPlanId: string, slotId: string): Promis
   await syncPlanTargets(mealPlanId);
 }
 
+/** Replace the whole plan with a nutritionist-assigned one. Today's per-slot statuses reset. */
+export async function replaceMealSlots(mealPlanId: string, meals: MealDraft[]): Promise<void> {
+  const slots = await db
+    .select({ id: mealSlots.id })
+    .from(mealSlots)
+    .where(eq(mealSlots.mealPlanId, mealPlanId));
+  for (const s of slots) {
+    await db.delete(mealLogEntries).where(eq(mealLogEntries.slotId, s.id));
+  }
+  await db.delete(mealSlots).where(eq(mealSlots.mealPlanId, mealPlanId));
+
+  if (meals.length > 0) {
+    await db.insert(mealSlots).values(
+      meals.map((m, i) => ({
+        id: nanoid(),
+        mealPlanId,
+        name: m.label,
+        scheduledTime: m.time || null,
+        slotOrder: i,
+        defaultName: m.n,
+        targetKcal: m.kcal,
+        targetProteinG: m.p,
+        targetCarbsG: m.c,
+        targetFatG: m.g,
+      })),
+    );
+  }
+  await syncPlanTargets(mealPlanId);
+}
+
 async function getOrCreateDailyLog(athleteId: string, mealPlanId: string): Promise<string> {
   const date = todayStr();
   const rows = await db

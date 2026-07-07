@@ -52,6 +52,15 @@ export const authClient = createAuthClient({
   },
 });
 
+/** Session cookie + server URL for authenticated non-auth API calls */
+export function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { origin: SERVER_URL };
+  if (_cookieHeader) headers.cookie = _cookieHeader;
+  return headers;
+}
+
+export { SERVER_URL };
+
 export async function restoreCookieFromStorage() {
   const storage = await getStorage();
   const saved = await storage.get("pulso_cookie");

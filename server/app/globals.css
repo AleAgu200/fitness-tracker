@@ -1,49 +1,50 @@
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@import "tailwindcss";
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* PULSO design tokens */
+@theme {
+  --color-ink: #0a0a0b;
+  --color-card: #141416;
+  --color-elev: #0e0e10;
+  --color-line: #26262a;
+  --color-line-soft: #1b1b1e;
+  --color-volt: #e8ff59;
+  --color-neon: #3ddcff;
+  --color-danger: #ff3d5a;
+  --color-warn: #ffa62b;
+  --color-fg: #fafafa;
+  --color-fg-mid: #c7c7ce;
+  --color-fg-sec: #8a8a93;
+  --color-fg-ter: #5a5a62;
+  --font-app: "Inter", system-ui, sans-serif;
+  --font-mono-app: "JetBrains Mono", ui-monospace, monospace;
 }
 
 html {
   height: 100%;
 }
 
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
-}
-
 body {
   min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
+  background: var(--color-ink);
+  color: var(--color-fg);
+  font-family: var(--font-app);
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-* {
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
 }
 
 @media (prefers-color-scheme: dark) {
   html {
     color-scheme: dark;
   }
+}
+
+/* Lightning pulse for the portal login background.
+   Per-bolt intensity comes from --bolt-peak on the element. */
+@keyframes boltFlash {
+  0%   { opacity: 0; }
+  2%   { opacity: var(--bolt-peak, 0.85); }
+  5%   { opacity: calc(var(--bolt-peak, 0.85) * 0.25); }
+  7%   { opacity: calc(var(--bolt-peak, 0.85) * 0.8); }
+  22%  { opacity: 0; }
+  100% { opacity: 0; }
 }

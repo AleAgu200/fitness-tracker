@@ -47,6 +47,7 @@ import {
   logSet,
   PRHistoryItem,
 } from '@/db/workout';
+import { getStoredAssignmentMeta, syncAssignments } from '@/lib/sync';
 import { useSession } from './session';
 
 export type MealStatus = 'cumplido' | 'sustituido' | 'pendiente';
@@ -128,6 +129,10 @@ export interface AppState {
   profileData: ProfileData | null;
   goalWeightKg: number | null;
 
+  // supervision — non-null when a professional assigned the plan (attribution only)
+  assignedWorkoutBy: string | null;
+  assignedMealsBy: string | null;
+
   // habits / derived
   racha: number;
   weekDays: WeekDay[];
@@ -175,6 +180,8 @@ const initialState: AppState = {
   profile: null,
   profileData: null,
   goalWeightKg: null,
+  assignedWorkoutBy: null,
+  assignedMealsBy: null,
   racha: 0,
   weekDays: [],
   heatmap: Array.from({ length: 12 }, () => Array.from({ length: 7 }, () => 0)),
@@ -281,12 +288,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        const [profile, plan, session, mealPlan, entries, water, histories, photos] =
+        // Plan/meal-plan first: assignments from coach/nutritionist may replace them
+        let [plan, mealPlan] = await Promise.all([getPlan(userId), getMealPlan(userId)]);
+        let assignedWorkoutBy: string | null = null;
+        let assignedMealsBy: string | null = null;
+        try {
+          const sync = await syncAssignments(userId, plan.templateId, mealPlan.mealPlanId);
+          assignedWorkoutBy = sync.workoutBy;
+          assignedMealsBy = sync.mealsBy;
+          if (sync.workoutChanged) plan = await getPlan(userId);
+          if (sync.mealsChanged) mealPlan = await getMealPlan(userId);
+        } catch {
+          // Offline — keep last-known assignment authors for attribution banners
+          const meta = await getStoredAssignmentMeta(userId);
+          assignedWorkoutBy = meta.workoutBy;
+          assignedMealsBy = meta.mealsBy;
+        }
+
+        const [profile, session, entries, water, histories, photos] =
           await Promise.all([
             getAthleteProfile(userId),
-            getPlan(userId),
             getTodaySession(userId),
-            getMealPlan(userId),
             getTodayMealEntries(userId),
             getTodayWater(userId),
             getMetricHistories(userId),
@@ -350,6 +372,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               }
             : null,
           goalWeightKg: profile?.goalWeightKg ?? null,
+          assignedWorkoutBy,
+          assignedMealsBy,
           racha,
           weekDays,
           heatmap,

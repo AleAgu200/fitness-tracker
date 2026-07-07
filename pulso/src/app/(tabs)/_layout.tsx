@@ -1,11 +1,12 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import { useEffect } from 'react';
 import { ColorValue } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { C, F } from '@/constants/colors';
 import { AppProvider } from '@/context/app-state';
+import { useSession } from '@/context/session';
 
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
@@ -30,6 +31,13 @@ function TabIcon({ color, name, focused }: { color: ColorValue; name: IconName; 
 }
 
 export default function TabsLayout() {
+  const { userId, loading } = useSession();
+
+  // Signing out (or an expired session) kicks the user back to the login
+  if (!loading && !userId) {
+    return <Redirect href={'/(auth)/login' as any} />;
+  }
+
   return (
     <AppProvider>
       <Tabs

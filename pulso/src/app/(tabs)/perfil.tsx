@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ScrollView, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -7,6 +7,10 @@ import { Card, GlowPulse, Label, PressableScale } from '@/components/ui/kit';
 import { C, F } from '@/constants/colors';
 import { useApp } from '@/context/app-state';
 import { useSession } from '@/context/session';
+import { ApiError } from '@/lib/api';
+import { fetchUnread } from '@/lib/messages';
+import { fetchTeam, redeemInvite, TeamMember } from '@/lib/team';
+import { router } from 'expo-router';
 
 const ALL_BADGES = [
   { key: 'first_pr',  icon: '⚡', label: 'PRIMER PR' },
@@ -168,6 +172,155 @@ function ProfileSection() {
   );
 }
 
+const KIND_LABELS = { coach: 'ENTRENADOR', nutritionist: 'NUTRICIONISTA' } as const;
+
+function TeamSection() {
+  const [team, setTeam] = useState<TeamMember[] | null>(null);
+  const [unread, setUnread] = useState<Record<string, number>>({});
+  const [offline, setOffline] = useState(false);
+  const [code, setCode] = useState('');
+  const [linking, setLinking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [justLinked, setJustLinked] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setTeam(await fetchTeam());
+      setOffline(false);
+      try {
+        setUnread((await fetchUnread()).bySender);
+      } catch {
+        // unread badge is best-effort
+      }
+    } catch {
+      setOffline(true);
+      setTeam([]);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function link() {
+    if (code.trim().length < 4 || linking) return;
+    setLinking(true);
+    setError(null);
+    setJustLinked(null);
+    try {
+      const res = await redeemInvite(code);
+      setCode('');
+      setJustLinked(`${KIND_LABELS[res.kind]}: ${res.professionalName}`);
+      await load();
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'invalid_code') setError('Código inválido o ya usado');
+      else if (e instanceof ApiError && e.code === 'already_linked') setError('Ya tenés un profesional de ese tipo vinculado');
+      else setError('No se pudo conectar con el servidor');
+    } finally {
+      setLinking(false);
+    }
+  }
+
+  const coach = team?.find(t => t.kind === 'coach');
+  const nutri = team?.find(t => t.kind === 'nutritionist');
+  const missingAny = team != null && (!coach || !nutri);
+
+  return (
+    <Card index={4} style={{ marginBottom: 14 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: C.border }}>
+        <Label>EQUIPO · SUPERVISIÓN</Label>
+        {offline && <Label style={{ color: C.orange }}>SIN CONEXIÓN</Label>}
+      </View>
+
+      {team == null ? (
+        <View style={{ padding: 18, alignItems: 'center' }}>
+          <ActivityIndicator color={C.textTertiary} size="small" />
+        </View>
+      ) : (
+        <>
+          {([['coach', coach], ['nutritionist', nutri]] as const).map(([kind, member]) => {
+            const unreadCount = member ? unread[member.userId] ?? 0 : 0;
+            const row = (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11, padding: 11, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: C.borderLight }}>
+                <View style={{ width: 34, height: 34, backgroundColor: C.bgEl, borderWidth: 1, borderColor: member ? C.cyan : C.border, alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ fontFamily: F.mono, fontSize: 12, color: member ? C.cyan : C.textTertiary }}>
+                    {kind === 'coach' ? '◆' : '✚'}
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Label>{KIND_LABELS[kind]}</Label>
+                  <Text style={{ fontFamily: F.interMed, fontSize: 13, color: member ? C.textPrimary : C.textTertiary, marginTop: 3 }}>
+                    {member ? member.name : 'Sin vincular'}
+                  </Text>
+                </View>
+                {member && unreadCount > 0 && (
+                  <View style={{ backgroundColor: C.red, borderRadius: 9, minWidth: 18, height: 18, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontFamily: F.monoBold, fontSize: 10, color: C.textPrimary }}>{unreadCount}</Text>
+                  </View>
+                )}
+                {member && (
+                  <Text style={{ fontFamily: F.mono, fontSize: 11, color: C.cyan }}>CHAT →</Text>
+                )}
+              </View>
+            );
+            return member ? (
+              <PressableScale
+                key={kind}
+                haptic="light"
+                onPress={() => router.push({ pathname: '/mensajes', params: { with: member.userId } } as any)}
+              >
+                {row}
+              </PressableScale>
+            ) : (
+              <View key={kind}>{row}</View>
+            );
+          })}
+
+          {missingAny && !offline && (
+            <View style={{ padding: 12, paddingHorizontal: 14 }}>
+              <Label style={{ marginBottom: 8 }}>¿TENÉS UN CÓDIGO DE INVITACIÓN?</Label>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TextInput
+                  value={code}
+                  onChangeText={t => { setCode(t.toUpperCase()); setError(null); }}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  maxLength={6}
+                  placeholder="ABC123"
+                  placeholderTextColor={C.textTertiary}
+                  style={{
+                    flex: 1, backgroundColor: C.bgEl, borderWidth: 1, borderColor: C.border,
+                    height: 48, paddingHorizontal: 10, color: C.textPrimary, fontFamily: F.monoBold, fontSize: 15,
+                    letterSpacing: 3, textAlign: 'center',
+                  }}
+                />
+                <PressableScale
+                  onPress={link}
+                  haptic="medium"
+                  disabled={linking || code.trim().length < 4}
+                  style={{ backgroundColor: C.cyan, paddingHorizontal: 20, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}
+                >
+                  {linking
+                    ? <ActivityIndicator color={C.bg} size="small" />
+                    : <Text style={{ fontFamily: F.monoXBold, fontSize: 12, letterSpacing: 0.8, color: C.bg }}>VINCULAR</Text>}
+                </PressableScale>
+              </View>
+              {error && (
+                <Text style={{ fontFamily: F.mono, fontSize: 10, color: C.red, marginTop: 8 }}>{error}</Text>
+              )}
+              {justLinked && (
+                <Animated.View entering={FadeIn.duration(250)}>
+                  <Text style={{ fontFamily: F.mono, fontSize: 10, color: C.yellow, marginTop: 8 }}>
+                    ✓ Vinculado — {justLinked}
+                  </Text>
+                </Animated.View>
+              )}
+            </View>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
 function heatColor(v: number) {
   if (v === 0) return C.bgEl;
   if (v === 1) return 'rgba(232,255,89,0.3)';
@@ -229,8 +382,11 @@ export default function PerfilScreen() {
         {/* MI PERFIL */}
         <ProfileSection />
 
+        {/* EQUIPO */}
+        <TeamSection />
+
         {/* PROGRAMA */}
-        <Card index={4} style={{ padding: 16, marginBottom: 14, alignItems: 'center' }}>
+        <Card index={5} style={{ padding: 16, marginBottom: 14, alignItems: 'center' }}>
           <Label style={{ marginBottom: 10 }}>FASE DEL PROGRAMA</Label>
           {state.exercises.length > 0 ? (
             <>
@@ -267,18 +423,21 @@ export default function PerfilScreen() {
               <Animated.View
                 key={b.key}
                 entering={FadeInDown.duration(280).delay(i * 40).easing(Easing.out(Easing.cubic))}
-                style={{ width: '30.5%', opacity: earned ? 1 : 0.4 }}
+                style={{ width: '30.5%' }}
               >
-                {earned ? (
-                  // Unlocked badges glow with a slow golden pulse
-                  <GlowPulse color={C.yellow} intensity={0.12} period={1400} style={{ backgroundColor: C.card, borderWidth: 1, borderColor: C.yellow, padding: 13, alignItems: 'center' }}>
-                    {inner}
-                  </GlowPulse>
-                ) : (
-                  <Animated.View style={{ backgroundColor: C.card, borderWidth: 1, borderColor: C.borderLight, padding: 13, alignItems: 'center' }}>
-                    {inner}
-                  </Animated.View>
-                )}
+                {/* opacity lives on a plain child so the entering animation owns the Animated.View's */}
+                <View style={{ opacity: earned ? 1 : 0.4 }}>
+                  {earned ? (
+                    // Unlocked badges glow with a slow golden pulse
+                    <GlowPulse color={C.yellow} intensity={0.12} period={1400} style={{ backgroundColor: C.card, borderWidth: 1, borderColor: C.yellow, padding: 13, alignItems: 'center' }}>
+                      {inner}
+                    </GlowPulse>
+                  ) : (
+                    <View style={{ backgroundColor: C.card, borderWidth: 1, borderColor: C.borderLight, padding: 13, alignItems: 'center' }}>
+                      {inner}
+                    </View>
+                  )}
+                </View>
               </Animated.View>
             );
           })}

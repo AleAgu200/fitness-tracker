@@ -162,6 +162,39 @@ export async function deletePlanExercise(slotId: string): Promise<void> {
   await db.delete(templateExerciseSlots).where(eq(templateExerciseSlots.id, slotId));
 }
 
+export interface AssignedExercise {
+  nombre: string;
+  target: number;
+  reps: number;
+  peso: number;
+  step: number;
+  restSeconds: number;
+}
+
+/** Replace the whole plan with a coach-assigned one (logged history keeps its rows — slotId nulls out) */
+export async function replacePlanExercises(
+  athleteId: string,
+  templateId: string,
+  items: AssignedExercise[],
+): Promise<void> {
+  await db.delete(templateExerciseSlots).where(eq(templateExerciseSlots.templateId, templateId));
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    const exerciseId = await resolveExerciseId(athleteId, it.nombre);
+    await db.insert(templateExerciseSlots).values({
+      id: nanoid(),
+      templateId,
+      exerciseId,
+      slotOrder: i,
+      targetSets: it.target,
+      targetReps: it.reps,
+      targetWeightKg: it.peso,
+      restSeconds: it.restSeconds,
+      stepKg: it.step,
+    });
+  }
+}
+
 const SUGGESTED_PLAN = [
   { exerciseId: 'ex_sentadilla',    target: 4, reps: 6,  peso: 60, step: 5 },
   { exerciseId: 'ex_press_banca',   target: 4, reps: 8,  peso: 40, step: 2.5 },

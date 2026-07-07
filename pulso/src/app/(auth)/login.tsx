@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
+import { LightningBackground } from '@/components/ui/lightning-bg';
 import { C, F } from '@/constants/colors';
 import { useSession } from '@/context/session';
 import { signIn } from '@/lib/auth';
@@ -38,10 +39,12 @@ export default function LoginScreen() {
   }
 
   return (
+    <View style={{ flex: 1, backgroundColor: C.bg }}>
+    <LightningBackground />
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
-      style={{ flex: 1, backgroundColor: C.bg }}
+      style={{ flex: 1 }}
       contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 64, paddingBottom: 48 }}
     >
       {/* Brand */}
@@ -123,5 +126,6 @@ export default function LoginScreen() {
         </TouchableOpacity>
       </View>
     </ScrollView>
+    </View>
   );
 }

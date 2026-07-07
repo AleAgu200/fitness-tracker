@@ -51,6 +51,10 @@ export async function getActiveSession() {
 }
 
 export async function signOut() {
-  await authClient.signOut();
-  await clearStoredCookie();
+  try {
+    await authClient.signOut();
+  } finally {
+    // Always drop the stored cookie, even if the server call failed
+    await clearStoredCookie();
+  }
 }

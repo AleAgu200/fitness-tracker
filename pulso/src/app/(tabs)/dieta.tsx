@@ -170,6 +170,7 @@ export default function DietaScreen() {
   const insets = useSafeAreaInsets();
 
   const hasPlan = state.meals.length > 0;
+  const isAssigned = state.assignedMealsBy != null;
   const formOpen = state.addingMeal || state.editingMealId != null;
 
   const consumed = state.meals.reduce((acc, m) => {
@@ -202,8 +203,18 @@ export default function DietaScreen() {
       keyboardShouldPersistTaps="handled"
     >
       <View style={{ paddingTop: insets.top + 16, paddingHorizontal: 16 }}>
-        <Label style={{ marginBottom: 6 }}>PLAN NUTRICIONAL</Label>
+        <Label style={{ marginBottom: 6 }}>{isAssigned ? `PLAN DE ${state.assignedMealsBy?.toUpperCase()}` : 'PLAN NUTRICIONAL'}</Label>
         <Text style={{ fontFamily: F.grotesk, fontSize: 27, color: C.textPrimary, marginBottom: 16 }}>Nutrición</Text>
+
+        {/* ASSIGNED PLAN BANNER */}
+        {isAssigned && (
+          <Animated.View entering={FadeInDown.duration(280)} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: C.cyan, backgroundColor: 'rgba(61,220,255,0.06)', padding: 12, marginBottom: 12 }}>
+            <Text style={{ fontFamily: F.mono, fontSize: 13, color: C.cyan }}>✚</Text>
+            <Text style={{ flex: 1, fontFamily: F.inter, fontSize: 12, color: C.textSecondary, lineHeight: 17 }}>
+              Dieta asignada por <Text style={{ color: C.cyan, fontFamily: F.interSemi }}>{state.assignedMealsBy}</Text>. Podés ajustarla; desde el portal solo tu nutricionista puede cambiar la dieta.
+            </Text>
+          </Animated.View>
+        )}
 
         {formOpen && <MealForm />}
 

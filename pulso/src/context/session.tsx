@@ -28,7 +28,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
-    await authSignOut();
+    try {
+      await authSignOut();
+    } catch (e) {
+      // Server unreachable — still sign out locally; the cookie is cleared either way
+      console.warn('[session] remote sign-out failed', e);
+    }
     setState({ userId: null, sessionId: null, loading: false });
   }, []);
 

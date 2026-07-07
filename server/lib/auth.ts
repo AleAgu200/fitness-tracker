@@ -14,10 +14,11 @@ export const auth = betterAuth({
 
   onAPIError: {
     onError(error, ctx) {
+      const request = (ctx as { request?: Request }).request;
       console.error("[Better Auth error]", {
-        path:    ctx.request?.url,
-        method:  ctx.request?.method,
-        origin:  ctx.request?.headers?.get?.("origin"),
+        path:    request?.url,
+        method:  request?.method,
+        origin:  request?.headers?.get?.("origin"),
         status:  (error as any)?.statusCode,
         message: (error as any)?.message ?? String(error),
       });
