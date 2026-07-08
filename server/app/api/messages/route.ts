@@ -1,5 +1,6 @@
 import { getSessionUser, unauthorized } from "@/lib/api-auth";
 import { areLinked, getConversation, sendMessage } from "@/lib/messaging";
+import { pushProfessionalMessage } from "@/lib/push-notifications";
 
 const MAX_CONTENT = 2000;
 
@@ -36,5 +37,13 @@ export async function POST(request: Request) {
   }
   if (!areLinked(user.id, to)) return Response.json({ error: "not_linked" }, { status: 403 });
 
-  return Response.json({ message: sendMessage(user.id, to, content.trim()) });
+  const cleanContent = content.trim();
+  const message = sendMessage(user.id, to, cleanContent);
+  try {
+    await pushProfessionalMessage(user.id, to, cleanContent);
+  } catch (error) {
+    // The message is already persisted; push delivery is best-effort.
+    console.error("[push-message]", error);
+  }
+  return Response.json({ message });
 }

@@ -4,6 +4,7 @@ import Animated, { Easing, FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Card, GlowPulse, Label, PressableScale } from '@/components/ui/kit';
+import { NotificationSettings } from '@/components/notification-settings';
 import { C, F } from '@/constants/colors';
 import { useApp } from '@/context/app-state';
 import { useSession } from '@/context/session';
@@ -384,6 +385,9 @@ export default function PerfilScreen() {
 
         {/* EQUIPO */}
         <TeamSection />
+
+        {/* NOTIFICACIONES */}
+        <NotificationSettings />
 
         {/* PROGRAMA */}
         <Card index={5} style={{ padding: 16, marginBottom: 14, alignItems: 'center' }}>

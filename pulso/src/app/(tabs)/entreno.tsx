@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -6,6 +7,7 @@ import { AnimatedBar, Card, GlowPulse, Label, PressableScale } from '@/component
 import { WorkoutXSearch } from '@/components/workoutx-search';
 import { C, F } from '@/constants/colors';
 import { useApp } from '@/context/app-state';
+import { WxSuggestion } from '@/lib/workoutx';
 
 const RPE_VALUES = [6, 7, 8, 9, 10];
 
@@ -38,6 +40,18 @@ export default function EntrenoScreen() {
   const insets = useSafeAreaInsets();
   const { exercises, exIndex, log, curPeso, curReps, curRpe, restActive, restLeft, restTotal, prFlash, prMap, editingEx, addingEx, draft, sessionDone, assignedWorkoutBy } = state;
   const isAssigned = assignedWorkoutBy != null;
+  const exerciseFormOpen = editingEx || addingEx;
+  const [selectedWorkoutX, setSelectedWorkoutX] = useState<WxSuggestion | null>(null);
+  const [usingManualName, setUsingManualName] = useState(false);
+
+  useEffect(() => {
+    if (!exerciseFormOpen) {
+      setSelectedWorkoutX(null);
+      setUsingManualName(false);
+    }
+  }, [exerciseFormOpen]);
+
+  const canConfigureExercise = editingEx || selectedWorkoutX != null || usingManualName;
 
   const activeEx = exercises[exIndex];
   const doneSets = (log[activeEx?.id] || []).length;
@@ -263,7 +277,11 @@ export default function EntrenoScreen() {
             <Label style={{ marginBottom: 6 }}>NOMBRE · BUSCAR EN WORKOUTX</Label>
             <TextInput
               value={draft.nombre}
-              onChangeText={v => setDraft('nombre', v)}
+              onChangeText={v => {
+                setSelectedWorkoutX(null);
+                setUsingManualName(false);
+                setDraft('nombre', v);
+              }}
               placeholder="Ej: sentadilla, curl, press…"
               placeholderTextColor={C.textTertiary}
               style={{ backgroundColor: C.bgEl, borderWidth: 1, borderColor: C.border, padding: 10, color: C.textPrimary, fontFamily: F.inter, fontSize: 14, marginBottom: 10 }}
@@ -272,35 +290,58 @@ export default function EntrenoScreen() {
             <WorkoutXSearch
               query={String(draft.nombre)}
               enabled={editingEx || addingEx}
-              onSelect={suggestion => setDraft('nombre', suggestion.name)}
+              onSelect={suggestion => {
+                setSelectedWorkoutX(suggestion);
+                setUsingManualName(false);
+                setDraft('nombre', suggestion.name);
+              }}
             />
-            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 13 }}>
-              {[{ label: 'SERIES', field: 'target' as const }, { label: 'REPS', field: 'reps' as const }, { label: 'PESO kg', field: 'peso' as const }].map(item => (
-                <View key={item.field} style={{ flex: 1 }}>
-                  <Label style={{ marginBottom: 6 }}>{item.label}</Label>
-                  <TextInput
-                    keyboardType="numeric"
-                    value={String(draft[item.field])}
-                    onChangeText={v => setDraft(item.field, v)}
-                    style={{ backgroundColor: C.bgEl, borderWidth: 1, borderColor: C.border, padding: 9, color: C.textPrimary, fontFamily: F.monoBold, fontSize: 15, textAlign: 'center' }}
-                  />
+
+            {addingEx && !canConfigureExercise && String(draft.nombre).trim().length > 0 && (
+              <PressableScale
+                onPress={() => setUsingManualName(true)}
+                style={{ borderWidth: 1, borderColor: C.border, backgroundColor: C.bgEl, padding: 10, marginBottom: 12, alignItems: 'center' }}
+              >
+                <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textSecondary, textTransform: 'uppercase', textAlign: 'center' }}>
+                  USAR “{String(draft.nombre).trim()}” COMO EJERCICIO MANUAL
+                </Text>
+              </PressableScale>
+            )}
+
+            {canConfigureExercise && (
+              <>
+                <Label style={{ color: C.yellow, marginBottom: 8 }}>CONFIGURACIÓN DEL EJERCICIO</Label>
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 13 }}>
+                  {[{ label: 'SERIES', field: 'target' as const }, { label: 'REPS', field: 'reps' as const }, { label: 'PESO kg', field: 'peso' as const }].map(item => (
+                    <View key={item.field} style={{ flex: 1 }}>
+                      <Label style={{ marginBottom: 6 }}>{item.label}</Label>
+                      <TextInput
+                        keyboardType="numeric"
+                        value={String(draft[item.field])}
+                        onChangeText={v => setDraft(item.field, v)}
+                        style={{ backgroundColor: C.bgEl, borderWidth: 1, borderColor: C.border, padding: 9, color: C.textPrimary, fontFamily: F.monoBold, fontSize: 15, textAlign: 'center' }}
+                      />
+                    </View>
+                  ))}
                 </View>
-              ))}
-            </View>
+              </>
+            )}
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <PressableScale onPress={cancelExForm} style={{ flex: 1, padding: 12, borderWidth: 1, borderColor: C.border, backgroundColor: C.bgEl, alignItems: 'center' }}>
                 <Text style={{ fontFamily: F.mono, fontSize: 11, letterSpacing: 0.4, color: C.textSecondary, textTransform: 'uppercase' }}>CANCELAR</Text>
               </PressableScale>
-              {editingEx && (
+              {canConfigureExercise && editingEx && (
                 <PressableScale onPress={deleteEx} haptic="medium" style={{ paddingHorizontal: 13, padding: 12, borderWidth: 1, borderColor: C.red, backgroundColor: 'rgba(255,61,90,0.06)', alignItems: 'center' }}>
                   <Text style={{ fontFamily: F.mono, fontSize: 11, color: C.red, textTransform: 'uppercase' }}>ELIMINAR</Text>
                 </PressableScale>
               )}
-              <PressableScale onPress={editingEx ? saveEditEx : saveAddEx} haptic="medium" style={{ flex: 1.5, padding: 12, backgroundColor: C.yellow, alignItems: 'center' }}>
-                <Text style={{ fontFamily: F.monoXBold, fontSize: 11, letterSpacing: 0.6, color: C.bg, textTransform: 'uppercase' }}>
-                  {editingEx ? 'GUARDAR' : 'AGREGAR'}
-                </Text>
-              </PressableScale>
+              {canConfigureExercise && (
+                <PressableScale onPress={editingEx ? saveEditEx : saveAddEx} haptic="medium" style={{ flex: 1.5, padding: 12, backgroundColor: C.yellow, alignItems: 'center' }}>
+                  <Text style={{ fontFamily: F.monoXBold, fontSize: 11, letterSpacing: 0.6, color: C.bg, textTransform: 'uppercase' }}>
+                    {editingEx ? 'GUARDAR CAMBIOS' : 'AGREGAR AL PLAN'}
+                  </Text>
+                </PressableScale>
+              )}
             </View>
           </Animated.View>
         )}

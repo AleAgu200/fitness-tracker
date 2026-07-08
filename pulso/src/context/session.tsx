@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
 import { getActiveSession, signOut as authSignOut } from '@/lib/auth';
+import { unregisterNotificationsForUser } from '@/lib/notifications';
 
 interface SessionState {
   userId: string | null;
@@ -28,6 +29,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    if (state.userId) {
+      try {
+        await unregisterNotificationsForUser(state.userId);
+      } catch (e) {
+        console.warn('[session] push unregister failed', e);
+      }
+    }
     try {
       await authSignOut();
     } catch (e) {
@@ -35,7 +43,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       console.warn('[session] remote sign-out failed', e);
     }
     setState({ userId: null, sessionId: null, loading: false });
-  }, []);
+  }, [state.userId]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
