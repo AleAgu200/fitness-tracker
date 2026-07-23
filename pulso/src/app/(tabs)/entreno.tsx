@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,6 +7,12 @@ import { AnimatedBar, Card, GlowPulse, Label, PressableScale } from '@/component
 import { WorkoutXSearch } from '@/components/workoutx-search';
 import { C, F } from '@/constants/colors';
 import { useApp } from '@/context/app-state';
+import {
+  cancelRestTimerNotification,
+  completeRestTimerNotification,
+  loadRestTimerOverlayPreference,
+  showRestTimerNotification,
+} from '@/lib/notifications';
 import { WxSuggestion } from '@/lib/workoutx';
 
 const RPE_VALUES = [6, 7, 8, 9, 10];
@@ -41,8 +47,37 @@ export default function EntrenoScreen() {
   const { exercises, exIndex, log, curPeso, curReps, curRpe, restActive, restLeft, restTotal, prFlash, prMap, editingEx, addingEx, draft, sessionDone, assignedWorkoutBy } = state;
   const isAssigned = assignedWorkoutBy != null;
   const exerciseFormOpen = editingEx || addingEx;
+  const activeEx = exercises[exIndex];
+  const previousSession = activeEx ? state.previousSessions[activeEx.exerciseId] : null;
   const [selectedWorkoutX, setSelectedWorkoutX] = useState<WxSuggestion | null>(null);
   const [usingManualName, setUsingManualName] = useState(false);
+  const previousRestActive = useRef(false);
+  const previousRestTotal = useRef(restTotal);
+
+  useEffect(() => {
+    const wasActive = previousRestActive.current;
+    const durationChanged = previousRestTotal.current !== restTotal;
+
+    if (restActive && (!wasActive || durationChanged)) {
+      loadRestTimerOverlayPreference()
+        .then(enabled => enabled
+          ? showRestTimerNotification(restLeft, activeEx?.nombre)
+          : false)
+        .catch(() => {});
+    } else if (wasActive && !restActive) {
+      const cleanup = restLeft === 0
+        ? completeRestTimerNotification()
+        : cancelRestTimerNotification();
+      cleanup.catch(() => {});
+    }
+
+    previousRestActive.current = restActive;
+    previousRestTotal.current = restTotal;
+  }, [activeEx?.nombre, restActive, restLeft, restTotal]);
+
+  useEffect(() => () => {
+    if (!restActive) cancelRestTimerNotification().catch(() => {});
+  }, [restActive]);
 
   useEffect(() => {
     if (!exerciseFormOpen) {
@@ -53,7 +88,6 @@ export default function EntrenoScreen() {
 
   const canConfigureExercise = editingEx || selectedWorkoutX != null || usingManualName;
 
-  const activeEx = exercises[exIndex];
   const doneSets = (log[activeEx?.id] || []).length;
   const totalSets = Object.values(log).reduce((a, sets) => a + sets.length, 0);
   const totalTonelaje = exercises.reduce((a, e) => {
@@ -66,6 +100,16 @@ export default function EntrenoScreen() {
   const restMMSS = `${restMins}:${restSecs.toString().padStart(2, '0')}`;
 
   const hasPlan = exercises.length > 0;
+  const currentE1rm = curPeso * (1 + curReps / 30);
+  const previousBeat = previousSession
+    ? currentE1rm > previousSession.bestE1rm
+      ? 'SUPERÁS TU PULSO ANTERIOR'
+      : Math.abs(currentE1rm - previousSession.bestE1rm) < 0.05 && curRpe < previousSession.bestSet.rpe
+        ? 'MISMO RENDIMIENTO · MENOR ESFUERZO'
+        : currentE1rm >= previousSession.bestE1rm * 0.97
+          ? 'ESTÁS A UN PULSO DE IGUALARLO'
+          : 'HOY PODÉS CONSOLIDAR'
+    : null;
 
   return (
     <ScrollView
@@ -203,6 +247,53 @@ export default function EntrenoScreen() {
                 <Text style={{ fontFamily: F.mono, fontSize: 11, color: C.yellow }}>{doneSets}/{activeEx.target}</Text>
               </View>
             </View>
+
+            {/* PREVIOUS PULSE */}
+            {previousSession ? (
+              <View style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.bgEl }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 9 }}>
+                  <Label style={{ color: C.cyan }}>◉ PULSO ANTERIOR</Label>
+                  <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textTertiary }}>
+                    {previousSession.completedAt.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' }).toUpperCase()}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+                  <Text style={{ fontFamily: F.monoXBold, fontSize: 22, color: C.textPrimary }}>
+                    {previousSession.bestSet.peso} KG × {previousSession.bestSet.reps}
+                  </Text>
+                  <Text style={{ fontFamily: F.mono, fontSize: 10, color: C.textTertiary }}>
+                    RPE {previousSession.bestSet.rpe}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 5, marginTop: 9 }}>
+                  {previousSession.sets.map((set, index) => (
+                    <View
+                      key={`${set.peso}-${set.reps}-${index}`}
+                      style={{ flex: 1, borderWidth: 1, borderColor: C.border, paddingVertical: 6, alignItems: 'center' }}
+                    >
+                      <Text style={{ fontFamily: F.mono, fontSize: 8, color: C.textSecondary }}>
+                        {set.peso}×{set.reps}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+                <Text style={{
+                  fontFamily: F.monoBold,
+                  fontSize: 9,
+                  letterSpacing: 0.6,
+                  color: currentE1rm > previousSession.bestE1rm ? C.yellow : C.cyan,
+                  marginTop: 10,
+                }}>
+                  {previousBeat}
+                </Text>
+              </View>
+            ) : (
+              <View style={{ padding: 11, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.bgEl }}>
+                <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textTertiary }}>
+                  ◉ PRIMER PULSO · ESTA SESIÓN CREARÁ TU REFERENCIA
+                </Text>
+              </View>
+            )}
 
             {/* STEPPERS */}
             <View style={{ flexDirection: 'row', gap: 1, backgroundColor: C.border }}>

@@ -45,7 +45,8 @@
           "color": "#E8FF59",
           "defaultChannel": "pulso-general"
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

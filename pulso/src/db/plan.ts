@@ -21,6 +21,7 @@ export interface PlanExercise {
   step: number;     // kg per increment
   restSeconds: number;
   basePR: number;
+  muscleGroup: 'chest' | 'back' | 'legs' | 'shoulders' | 'arms' | 'core' | 'full' | null;
 }
 
 async function getOrCreateTemplate(athleteId: string): Promise<string> {
@@ -70,6 +71,7 @@ export async function getPlan(athleteId: string): Promise<{ templateId: string; 
       peso: templateExerciseSlots.targetWeightKg,
       step: templateExerciseSlots.stepKg,
       restSeconds: templateExerciseSlots.restSeconds,
+      muscleGroup: exercises.muscleGroup,
     })
     .from(templateExerciseSlots)
     .innerJoin(exercises, eq(templateExerciseSlots.exerciseId, exercises.id))
@@ -94,6 +96,7 @@ export async function getPlan(athleteId: string): Promise<{ templateId: string; 
       step: r.step,
       restSeconds: r.restSeconds,
       basePR: prByExercise.get(r.exerciseId) ?? r.peso ?? 0,
+      muscleGroup: r.muscleGroup,
     })),
   };
 }

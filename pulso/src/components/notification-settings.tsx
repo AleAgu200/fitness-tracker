@@ -1,4 +1,3 @@
-import * as Notifications from 'expo-notifications';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Switch, Text, TextInput, View } from 'react-native';
 
@@ -9,9 +8,13 @@ import {
   applyNotificationPreferences,
   getNotificationPermission,
   loadNotificationPreferences,
+  loadRestTimerOverlayPreference,
+  NOTIFICATION_PERMISSION,
+  NotificationPermissionStatus,
   NotificationPreferences,
   NotificationSetupResult,
   sendTestNotification,
+  setRestTimerOverlayPreference,
 } from '@/lib/notifications';
 
 const DAYS = [
@@ -59,8 +62,9 @@ function SettingSwitch({ label, detail, value, onValueChange }: {
 export function NotificationSettings() {
   const { userId } = useSession();
   const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
-  const [permission, setPermission] = useState<Notifications.PermissionStatus>(Notifications.PermissionStatus.UNDETERMINED);
+  const [permission, setPermission] = useState<NotificationPermissionStatus>(NOTIFICATION_PERMISSION.UNDETERMINED);
   const [pushReady, setPushReady] = useState(false);
+  const [restTimerOverlayEnabled, setRestTimerOverlayEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,12 +72,16 @@ export function NotificationSettings() {
     if (!userId) return;
     let alive = true;
     (async () => {
-      const loaded = await loadNotificationPreferences(userId);
+      const [loaded, restTimerEnabled] = await Promise.all([
+        loadNotificationPreferences(userId),
+        loadRestTimerOverlayPreference(),
+      ]);
       const status = await getNotificationPermission();
       if (!alive) return;
       setPreferences(loaded);
+      setRestTimerOverlayEnabled(restTimerEnabled);
       setPermission(status);
-      if (status === Notifications.PermissionStatus.GRANTED) {
+      if (status === NOTIFICATION_PERMISSION.GRANTED) {
         const result = await applyNotificationPreferences(userId, loaded, false);
         if (alive) setPushReady(result.pushReady);
       }
@@ -92,11 +100,27 @@ export function NotificationSettings() {
       const result: NotificationSetupResult = await applyNotificationPreferences(userId, next, requestPermission);
       setPermission(result.permission);
       setPushReady(result.pushReady);
-      if (result.permission === Notifications.PermissionStatus.DENIED) {
+      if (result.permission === NOTIFICATION_PERMISSION.DENIED) {
         setError('Permiso bloqueado. Habilitá notificaciones desde los ajustes del teléfono.');
       }
     } catch {
       setError('No se pudieron actualizar las notificaciones.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleRestTimerOverlay(enabled: boolean) {
+    setSaving(true);
+    setError(null);
+    try {
+      const active = await setRestTimerOverlayPreference(enabled);
+      setRestTimerOverlayEnabled(active);
+      if (enabled && !active) {
+        setError('El timer superpuesto requiere permitir notificaciones y usar un development build.');
+      }
+    } catch {
+      setError('No se pudo actualizar el timer superpuesto.');
     } finally {
       setSaving(false);
     }
@@ -110,7 +134,7 @@ export function NotificationSettings() {
     );
   }
 
-  const granted = permission === Notifications.PermissionStatus.GRANTED;
+  const granted = permission === NOTIFICATION_PERMISSION.GRANTED;
   const inputStyle = {
     width: 78,
     height: 38,
@@ -266,6 +290,15 @@ export function NotificationSettings() {
           detail="Push al recibir mensajes de tu entrenador o nutricionista."
           value={preferences.messagesEnabled}
           onValueChange={value => commit({ ...preferences, messagesEnabled: value })}
+        />
+      </View>
+
+      <View style={{ borderTopWidth: 1, borderTopColor: C.border }}>
+        <SettingSwitch
+          label="Timer de descanso superpuesto"
+          detail="Muestra el descanso en la barra del teléfono después de guardar cada set."
+          value={restTimerOverlayEnabled}
+          onValueChange={toggleRestTimerOverlay}
         />
       </View>
 

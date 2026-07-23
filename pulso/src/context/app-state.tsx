@@ -42,9 +42,11 @@ import { getAthleteProfile, saveAthleteProfile } from '@/db/profile';
 import { getInitials } from '@/lib/names';
 import {
   finishSession as dbFinishSession,
+  getPreviousExerciseSession,
   getPRHistory,
   getTodaySession,
   logSet,
+  PreviousExerciseSession,
   PRHistoryItem,
 } from '@/db/workout';
 import { getStoredAssignmentMeta, syncAssignments } from '@/lib/sync';
@@ -52,7 +54,7 @@ import { useSession } from './session';
 
 export type MealStatus = 'cumplido' | 'sustituido' | 'pendiente';
 export type MetricKey = 'peso' | 'grasa' | 'musculo';
-export type { WeekDay, MetricPoint, ProgressPhoto, PRHistoryItem };
+export type { WeekDay, MetricPoint, ProgressPhoto, PreviousExerciseSession, PRHistoryItem };
 
 const STATUS_TO_DB: Record<MealStatus, MealStatusDb> = {
   cumplido: 'completed',
@@ -82,6 +84,7 @@ export interface Exercise {
   peso: number;
   step: number;
   basePR: number;
+  muscleGroup: 'chest' | 'back' | 'legs' | 'shoulders' | 'arms' | 'core' | 'full' | null;
 }
 
 export interface Meal {
@@ -154,6 +157,7 @@ export interface AppState {
   exercises: Exercise[];
   exIndex: number;
   log: Record<string, ExerciseSet[]>;
+  previousSessions: Record<string, PreviousExerciseSession>;
   prMap: Record<string, number>;
   sessionDone: boolean;
   curReps: number;
@@ -198,6 +202,7 @@ const initialState: AppState = {
   exercises: [],
   exIndex: 0,
   log: {},
+  previousSessions: {},
   prMap: {},
   sessionDone: false,
   curReps: 8,
@@ -251,6 +256,13 @@ interface AppContextValue {
   addRest: () => void;
   skipRest: () => void;
   dismissPrFlash: () => void;
+  addRecommendedExercise: (exercise: {
+    name: string;
+    sets: number;
+    reps: number;
+    weight: number;
+    step: number;
+  }) => Promise<void>;
   // progress
   setMetric: (m: MetricKey) => void;
   incWeighIn: () => void;
@@ -338,6 +350,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           peso: e.peso,
           step: e.step,
           basePR: e.basePR,
+          muscleGroup: e.muscleGroup,
         }));
         const prMap: Record<string, number> = {};
         for (const e of exercises) prMap[e.id] = e.basePR;
@@ -356,6 +369,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}`;
 
         const first = exercises[0];
+        const previousPairs = await Promise.all(exercises.map(async exercise => [
+          exercise.exerciseId,
+          await getPreviousExerciseSession(userId, exercise.exerciseId),
+        ] as const));
+        if (cancelled) return;
+        const previousSessions: Record<string, PreviousExerciseSession> = {};
+        for (const [exerciseId, previous] of previousPairs) {
+          if (previous) previousSessions[exerciseId] = previous;
+        }
         setState({
           ...initialState,
           ready: true,
@@ -387,6 +409,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           exercises,
           exIndex: 0,
           log: session?.log ?? {},
+          previousSessions,
           prMap,
           sessionDone: session?.completed ?? false,
           curReps: first?.reps ?? 8,
@@ -463,6 +486,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!uid) return;
     const plan = await getPlan(uid);
     templateIdRef.current = plan.templateId;
+    const previousPairs = await Promise.all(plan.exercises.map(async exercise => [
+      exercise.exerciseId,
+      await getPreviousExerciseSession(uid, exercise.exerciseId),
+    ] as const));
     setState(s => {
       const exercises: Exercise[] = plan.exercises.map(e => ({
         id: e.slotId,
@@ -474,14 +501,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         peso: e.peso,
         step: e.step,
         basePR: e.basePR,
+        muscleGroup: e.muscleGroup,
       }));
       const prMap: Record<string, number> = {};
       for (const e of exercises) prMap[e.id] = Math.max(e.basePR, s.prMap[e.id] ?? 0);
       const exIndex = Math.min(s.exIndex, Math.max(0, exercises.length - 1));
       const cur = exercises[exIndex];
+      const previousSessions: Record<string, PreviousExerciseSession> = {};
+      for (const [exerciseId, previous] of previousPairs) {
+        if (previous) previousSessions[exerciseId] = previous;
+      }
       return {
         ...s,
         exercises,
+        previousSessions,
         prMap,
         exIndex,
         curReps: cur?.reps ?? s.curReps,
@@ -806,6 +839,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const dismissPrFlash = useCallback(() =>
     setState(s => ({ ...s, prFlash: null })), []);
 
+  const addRecommendedExercise = useCallback(async (exercise: {
+    name: string;
+    sets: number;
+    reps: number;
+    weight: number;
+    step: number;
+  }) => {
+    const uid = userRef.current;
+    const templateId = templateIdRef.current;
+    if (!uid || !templateId) return;
+    if (stateRef.current.exercises.some(item =>
+      item.nombre.trim().toLocaleLowerCase('es') === exercise.name.trim().toLocaleLowerCase('es'))) return;
+    await addPlanExercise(uid, templateId, {
+      nombre: exercise.name,
+      target: exercise.sets,
+      reps: exercise.reps,
+      peso: exercise.weight,
+      step: exercise.step,
+    });
+    await reloadPlan();
+  }, [reloadPlan]);
+
   // ── progress actions ──────────────────────────────────────────────────────
 
   const setMetric = useCallback((m: MetricKey) =>
@@ -856,6 +911,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       finishWorkout, applySuggestedPlan,
       startEditEx, startAddEx, cancelExForm, setDraft, saveEditEx, saveAddEx, deleteEx,
       addRest, skipRest, dismissPrFlash,
+      addRecommendedExercise,
       setMetric, incWeighIn, decWeighIn, registrarPeso, addProgressPhoto,
     }}>
       {children}

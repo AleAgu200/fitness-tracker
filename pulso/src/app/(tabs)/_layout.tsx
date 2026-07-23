@@ -87,6 +87,13 @@ export default function TabsLayout() {
           }}
         />
         <Tabs.Screen
+          name="pulso"
+          options={{
+            title: 'PULSO',
+            tabBarIcon: ({ color, focused }) => <TabIcon color={color} focused={focused} name="lightning-bolt" />,
+          }}
+        />
+        <Tabs.Screen
           name="perfil"
           options={{
             title: 'PERFIL',

@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, lt, sql } from 'drizzle-orm';
 
 import { nanoid } from '@/lib/id';
 import { dayStart } from '@/lib/dates';
@@ -22,6 +22,74 @@ export interface TodaySession {
   completed: boolean;
   /** sets grouped by plan slot id */
   log: Record<string, LoggedSetRow[]>;
+}
+
+export interface PreviousExerciseSession {
+  sessionId: string;
+  completedAt: Date;
+  sets: LoggedSetRow[];
+  bestSet: LoggedSetRow;
+  bestE1rm: number;
+  totalVolumeKg: number;
+}
+
+/** Most recent completed session before today that contains this exercise. */
+export async function getPreviousExerciseSession(
+  athleteId: string,
+  exerciseId: string,
+): Promise<PreviousExerciseSession | null> {
+  const priorExercises = await db
+    .select({
+      sessionId: workoutSessions.id,
+      completedAt: workoutSessions.finishedAt,
+    })
+    .from(loggedExercises)
+    .innerJoin(workoutSessions, eq(loggedExercises.sessionId, workoutSessions.id))
+    .where(and(
+      eq(workoutSessions.athleteId, athleteId),
+      eq(workoutSessions.status, 'completed'),
+      eq(loggedExercises.exerciseId, exerciseId),
+      lt(workoutSessions.createdAt, dayStart(new Date())),
+    ))
+    .orderBy(desc(workoutSessions.finishedAt))
+    .limit(1);
+  const prior = priorExercises[0];
+  if (!prior?.completedAt) return null;
+
+  const rows = await db
+    .select({
+      reps: loggedSets.reps,
+      peso: loggedSets.weightKg,
+      rpe: loggedSets.rpe,
+      pr: loggedSets.isPR,
+      setNumber: loggedSets.setNumber,
+    })
+    .from(loggedSets)
+    .innerJoin(loggedExercises, eq(loggedSets.loggedExerciseId, loggedExercises.id))
+    .where(and(
+      eq(loggedExercises.sessionId, prior.sessionId),
+      eq(loggedExercises.exerciseId, exerciseId),
+    ))
+    .orderBy(asc(loggedSets.setNumber));
+  if (!rows.length) return null;
+
+  const sets: LoggedSetRow[] = rows.map(row => ({
+    reps: row.reps,
+    peso: row.peso,
+    rpe: row.rpe ?? 8,
+    pr: row.pr,
+  }));
+  const e1rm = (set: LoggedSetRow) => set.peso * (1 + set.reps / 30);
+  const bestSet = sets.reduce((best, set) => e1rm(set) > e1rm(best) ? set : best);
+
+  return {
+    sessionId: prior.sessionId,
+    completedAt: prior.completedAt,
+    sets,
+    bestSet,
+    bestE1rm: +e1rm(bestSet).toFixed(1),
+    totalVolumeKg: sets.reduce((total, set) => total + set.peso * set.reps, 0),
+  };
 }
 
 export async function getTodaySession(athleteId: string): Promise<TodaySession | null> {
