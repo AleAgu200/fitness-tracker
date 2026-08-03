@@ -16,6 +16,15 @@ export const C = {
   textTertiary: '#5A5A62',
 } as const;
 
+/** Blends a `#rrggbb` hex color with the given alpha (0..1) into an `rgba(...)` string. */
+export function withAlpha(hex: string, alpha: number): string {
+  const clean = hex.replace('#', '');
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export const F = {
   grotesk: 'SpaceGrotesk_700Bold',
   groteskMed: 'SpaceGrotesk_500Medium',

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Switch, Text, View } from 'react-native';
 
 import { Card, Label, PressableScale } from '@/components/ui/kit';
-import { C, F } from '@/constants/colors';
+import { TimePickerField } from '@/components/ui/time-picker-field';
+import { C, F, withAlpha } from '@/constants/colors';
+import { usePreferences } from '@/context/preferences';
 import { useSession } from '@/context/session';
 import {
   applyNotificationPreferences,
@@ -27,21 +29,12 @@ const DAYS = [
   { value: 1, label: 'D' },
 ];
 
-function formatTimeInput(value: string): string {
-  const digits = value.replace(/\D/g, '').slice(0, 4);
-  return digits.length > 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits;
-}
-
-function validTime(value: string): boolean {
-  const match = /^(\d{2}):(\d{2})$/.exec(value);
-  return !!match && Number(match[1]) <= 23 && Number(match[2]) <= 59;
-}
-
-function SettingSwitch({ label, detail, value, onValueChange }: {
+function SettingSwitch({ label, detail, value, onValueChange, accent }: {
   label: string;
   detail: string;
   value: boolean;
   onValueChange: (value: boolean) => void;
+  accent: string;
 }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11 }}>
@@ -52,8 +45,8 @@ function SettingSwitch({ label, detail, value, onValueChange }: {
       <Switch
         value={value}
         onValueChange={onValueChange}
-        trackColor={{ false: C.border, true: 'rgba(232,255,89,0.45)' }}
-        thumbColor={value ? C.yellow : C.textSecondary}
+        trackColor={{ false: C.border, true: withAlpha(accent, 0.45) }}
+        thumbColor={value ? accent : C.textSecondary}
       />
     </View>
   );
@@ -61,6 +54,7 @@ function SettingSwitch({ label, detail, value, onValueChange }: {
 
 export function NotificationSettings() {
   const { userId } = useSession();
+  const { accent } = usePreferences();
   const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
   const [permission, setPermission] = useState<NotificationPermissionStatus>(NOTIFICATION_PERMISSION.UNDETERMINED);
   const [pushReady, setPushReady] = useState(false);
@@ -135,35 +129,24 @@ export function NotificationSettings() {
   }
 
   const granted = permission === NOTIFICATION_PERMISSION.GRANTED;
-  const inputStyle = {
-    width: 78,
-    height: 38,
-    borderWidth: 1,
-    borderColor: C.border,
-    backgroundColor: C.bgEl,
-    color: C.textPrimary,
-    fontFamily: F.monoBold,
-    fontSize: 13,
-    textAlign: 'center' as const,
-  };
 
   return (
     <Card index={5} style={{ padding: 14, marginBottom: 14 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: C.border }}>
         <View style={{ gap: 4 }}>
           <Label>NOTIFICACIONES</Label>
-          <Text style={{ fontFamily: F.inter, fontSize: 11, color: granted ? C.yellow : C.textTertiary }}>
+          <Text style={{ fontFamily: F.inter, fontSize: 11, color: granted ? accent : C.textTertiary }}>
             {granted ? 'Activas en este dispositivo' : 'Necesitan tu permiso'}
           </Text>
         </View>
-        {saving && <ActivityIndicator color={C.yellow} size="small" />}
+        {saving && <ActivityIndicator color={accent} size="small" />}
       </View>
 
       {!granted && (
         <PressableScale
           onPress={() => commit(preferences, true)}
           haptic="medium"
-          style={{ backgroundColor: C.yellow, padding: 12, alignItems: 'center', marginTop: 12 }}
+          style={{ backgroundColor: accent, padding: 12, alignItems: 'center', marginTop: 12 }}
         >
           <Text style={{ fontFamily: F.monoXBold, fontSize: 10, letterSpacing: 0.7, color: C.bg }}>
             ACTIVAR NOTIFICACIONES
@@ -173,9 +156,9 @@ export function NotificationSettings() {
       {granted && (
         <PressableScale
           onPress={() => sendTestNotification().catch(() => setError('No se pudo mostrar la notificación de prueba.'))}
-          style={{ borderWidth: 1, borderColor: C.yellow, padding: 10, alignItems: 'center', marginTop: 12 }}
+          style={{ borderWidth: 1, borderColor: accent, padding: 10, alignItems: 'center', marginTop: 12 }}
         >
-          <Text style={{ fontFamily: F.monoBold, fontSize: 9, letterSpacing: 0.6, color: C.yellow }}>
+          <Text style={{ fontFamily: F.monoBold, fontSize: 9, letterSpacing: 0.6, color: accent }}>
             ENVIAR NOTIFICACIÓN DE PRUEBA
           </Text>
         </PressableScale>
@@ -186,10 +169,11 @@ export function NotificationSettings() {
         detail="Te avisa los días y la hora que elijas."
         value={preferences.trainingEnabled}
         onValueChange={value => commit({ ...preferences, trainingEnabled: value })}
+        accent={accent}
       />
       {preferences.trainingEnabled && (
         <View style={{ paddingBottom: 12, gap: 10 }}>
-          <View style={{ flexDirection: 'row', gap: 6 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             {DAYS.map(day => {
               const selected = preferences.trainingDays.includes(day.value);
               return (
@@ -202,34 +186,26 @@ export function NotificationSettings() {
                     commit({ ...preferences, trainingDays });
                   }}
                   style={{
-                    flex: 1,
-                    height: 34,
+                    width: 38,
+                    height: 38,
                     borderWidth: 1,
-                    borderColor: selected ? C.yellow : C.border,
-                    backgroundColor: selected ? 'rgba(232,255,89,0.10)' : C.bgEl,
+                    borderColor: selected ? accent : C.border,
+                    backgroundColor: selected ? withAlpha(accent, 0.10) : C.bgEl,
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}
                 >
-                  <Text style={{ fontFamily: F.monoBold, fontSize: 10, color: selected ? C.yellow : C.textTertiary }}>{day.label}</Text>
+                  <Text style={{ fontFamily: F.monoBold, fontSize: 12, letterSpacing: 0.4, color: selected ? accent : C.textTertiary }}>{day.label}</Text>
                 </PressableScale>
               );
             })}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <Label>HORA DEL ENTRENO</Label>
-            <TextInput
+            <TimePickerField
               value={preferences.trainingTime}
-              onChangeText={trainingTime => setPreferences({ ...preferences, trainingTime: formatTimeInput(trainingTime) })}
-              onEndEditing={() => {
-                if (validTime(preferences.trainingTime)) commit(preferences);
-                else setError('Usá una hora válida en formato HH:MM.');
-              }}
-              keyboardType="number-pad"
-              maxLength={5}
-              placeholder="18:00"
-              placeholderTextColor={C.textTertiary}
-              style={inputStyle}
+              onChange={trainingTime => commit({ ...preferences, trainingTime })}
+              accentColor={accent}
             />
           </View>
         </View>
@@ -241,6 +217,7 @@ export function NotificationSettings() {
           detail="Se repiten durante el intervalo diario configurado."
           value={preferences.waterEnabled}
           onValueChange={value => commit({ ...preferences, waterEnabled: value })}
+          accent={accent}
         />
       </View>
       {preferences.waterEnabled && (
@@ -249,17 +226,11 @@ export function NotificationSettings() {
             <Label>DESDE / HASTA</Label>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
               {(['waterStart', 'waterEnd'] as const).map(field => (
-                <TextInput
+                <TimePickerField
                   key={field}
                   value={preferences[field]}
-                  onChangeText={value => setPreferences({ ...preferences, [field]: formatTimeInput(value) })}
-                  onEndEditing={() => {
-                    if (validTime(preferences[field])) commit(preferences);
-                    else setError('Usá horas válidas en formato HH:MM.');
-                  }}
-                  keyboardType="number-pad"
-                  maxLength={5}
-                  style={inputStyle}
+                  onChange={value => commit({ ...preferences, [field]: value })}
+                  accentColor={accent}
                 />
               ))}
             </View>
@@ -290,6 +261,7 @@ export function NotificationSettings() {
           detail="Push al recibir mensajes de tu entrenador o nutricionista."
           value={preferences.messagesEnabled}
           onValueChange={value => commit({ ...preferences, messagesEnabled: value })}
+          accent={accent}
         />
       </View>
 
@@ -299,6 +271,7 @@ export function NotificationSettings() {
           detail="Muestra el descanso en la barra del teléfono después de guardar cada set."
           value={restTimerOverlayEnabled}
           onValueChange={toggleRestTimerOverlay}
+          accent={accent}
         />
       </View>
 

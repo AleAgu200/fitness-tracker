@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 1x1: the smallest cell Android offers, so resizing is disabled. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="40dp"
+    android:minHeight="40dp"
+    android:targetCellWidth="1"
+    android:targetCellHeight="1"
+    android:resizeMode="none"
+    android:widgetCategory="home_screen"
+    android:initialLayout="@layout/pulso_widget_small"
+    android:previewLayout="@layout/pulso_widget_small"
+    android:description="@string/pulso_widget_small_description"
+    android:updatePeriodMillis="0" />

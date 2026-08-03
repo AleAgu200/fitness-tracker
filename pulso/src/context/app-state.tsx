@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { AppState as RNAppState } from 'react-native';
 
 import {
   evaluateAchievements,
@@ -49,7 +50,11 @@ import {
   PreviousExerciseSession,
   PRHistoryItem,
 } from '@/db/workout';
+import { CLEARED_REST_STATE, loadRestTimerState, RestTimerState, saveRestTimerState } from '@/lib/rest-timer-store';
+import { addWidgetRestListener } from '@/modules/pulso-widget';
 import { getStoredAssignmentMeta, syncAssignments } from '@/lib/sync';
+import { formatWeight } from '@/lib/units';
+import { usePreferences } from './preferences';
 import { useSession } from './session';
 
 export type MealStatus = 'cumplido' | 'sustituido' | 'pendiente';
@@ -254,6 +259,7 @@ interface AppContextValue {
   saveAddEx: () => void;
   deleteEx: () => void;
   addRest: () => void;
+  reduceRest: () => void;
   skipRest: () => void;
   dismissPrFlash: () => void;
   addRecommendedExercise: (exercise: {
@@ -276,15 +282,20 @@ const AppContext = createContext<AppContextValue | null>(null);
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AppState>(initialState);
   const { userId } = useSession();
+  const { weightUnit } = usePreferences();
 
   const stateRef = useRef(state);
   stateRef.current = state;
   const userRef = useRef<string | null>(null);
   userRef.current = userId;
+  const weightUnitRef = useRef(weightUnit);
+  weightUnitRef.current = weightUnit;
 
   const templateIdRef = useRef<string | null>(null);
   const mealPlanIdRef = useRef<string | null>(null);
   const restTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** Authoritative rest-timer end timestamp — mirrored to SecureStore so the widget can read/mutate it. */
+  const restEndAtRef = useRef<number | null>(null);
   const prTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noteTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -654,19 +665,78 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // ── workout actions ───────────────────────────────────────────────────────
 
-  const startRest = useCallback((duration: number) => {
+  // Ticks off restEndAtRef (not a decrementing counter) so the displayed time is always
+  // correct even after the JS thread was paused/backgrounded, or the widget changed it.
+  const tickRestTimer = useCallback(() => {
     if (restTimer.current) clearInterval(restTimer.current);
-    setState(s => ({ ...s, restActive: true, restLeft: duration, restTotal: duration }));
     restTimer.current = setInterval(() => {
-      setState(s => {
-        if (s.restLeft <= 1) {
-          if (restTimer.current) clearInterval(restTimer.current);
-          return { ...s, restLeft: 0, restActive: false };
-        }
-        return { ...s, restLeft: s.restLeft - 1 };
-      });
+      const endAt = restEndAtRef.current;
+      if (endAt == null) {
+        if (restTimer.current) clearInterval(restTimer.current);
+        return;
+      }
+      const left = Math.max(0, Math.round((endAt - Date.now()) / 1000));
+      if (left <= 0) {
+        if (restTimer.current) clearInterval(restTimer.current);
+        restEndAtRef.current = null;
+        saveRestTimerState(CLEARED_REST_STATE).catch(() => {});
+        setState(s => ({ ...s, restLeft: 0, restActive: false }));
+        return;
+      }
+      setState(s => ({ ...s, restLeft: left, restActive: true }));
     }, 1000);
   }, []);
+
+  const startRest = useCallback((duration: number) => {
+    const endAt = Date.now() + duration * 1000;
+    restEndAtRef.current = endAt;
+    saveRestTimerState({ restEndAt: endAt, restTotal: duration }).catch(() => {});
+    setState(s => ({ ...s, restActive: true, restLeft: duration, restTotal: duration }));
+    tickRestTimer();
+  }, [tickRestTimer]);
+
+  // Reconciles with the persisted rest-timer snapshot on mount and whenever the app
+  // returns to the foreground, adopting any change made by the widget while backgrounded.
+  useEffect(() => {
+    function adopt(persisted: RestTimerState) {
+      if (persisted.restEndAt === restEndAtRef.current) return;
+      restEndAtRef.current = persisted.restEndAt;
+
+      if (persisted.restEndAt == null) {
+        if (restTimer.current) clearInterval(restTimer.current);
+        setState(s => ({ ...s, restActive: false, restLeft: 0 }));
+        return;
+      }
+
+      const left = Math.max(0, Math.round((persisted.restEndAt - Date.now()) / 1000));
+      if (left <= 0) {
+        restEndAtRef.current = null;
+        if (restTimer.current) clearInterval(restTimer.current);
+        setState(s => ({ ...s, restActive: false, restLeft: 0 }));
+        return;
+      }
+
+      setState(s => ({ ...s, restActive: true, restLeft: left, restTotal: persisted.restTotal }));
+      tickRestTimer();
+    }
+
+    function reconcile() {
+      loadRestTimerState().then(adopt).catch(() => {});
+    }
+
+    reconcile();
+    const subscription = RNAppState.addEventListener('change', nextAppState => {
+      if (nextAppState === 'active') reconcile();
+    });
+    // Covers the case the AppState listener misses: a widget button tapped while the app
+    // is alive but backgrounded, so it never transitions back to 'active'.
+    const widgetSubscription = addWidgetRestListener(adopt);
+
+    return () => {
+      subscription.remove();
+      widgetSubscription.remove();
+    };
+  }, [tickRestTimer]);
 
   const selectEx = useCallback((i: number) =>
     setState(s => {
@@ -723,7 +793,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ...st,
             log: { ...st.log, [ex.id]: sets },
             prMap: { ...st.prMap, [ex.id]: Math.max(st.prMap[ex.id] ?? 0, set.peso) },
-            prFlash: { ej: ex.nombre, val: `${set.peso} kg` },
+            prFlash: { ej: ex.nombre, val: formatWeight(set.peso, weightUnitRef.current) },
           };
         });
         if (prTimer.current) clearTimeout(prTimer.current);
@@ -738,6 +808,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!uid) return;
     setState(s => ({ ...s, sessionDone: true, restActive: false }));
     if (restTimer.current) clearInterval(restTimer.current);
+    restEndAtRef.current = null;
+    saveRestTimerState(CLEARED_REST_STATE).catch(() => {});
     getTodaySession(uid)
       .then(session => (session ? dbFinishSession(session.sessionId) : undefined))
       .then(() => syncCheckIn({ workoutCompleted: true }))
@@ -828,11 +900,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       .catch(e => console.error('[plan-delete]', e));
   }, [reloadPlan]);
 
-  const addRest = useCallback(() =>
-    setState(s => ({ ...s, restLeft: s.restLeft + 30, restTotal: Math.max(s.restTotal, s.restLeft + 30) })), []);
+  const addRest = useCallback(() => {
+    const endAt = (restEndAtRef.current ?? Date.now()) + 30_000;
+    const left = Math.max(0, Math.round((endAt - Date.now()) / 1000));
+    const restTotal = Math.max(stateRef.current.restTotal, left);
+    restEndAtRef.current = endAt;
+    saveRestTimerState({ restEndAt: endAt, restTotal }).catch(() => {});
+    setState(s => ({ ...s, restLeft: left, restTotal, restActive: true }));
+    if (!restTimer.current) tickRestTimer();
+  }, [tickRestTimer]);
+
+  const reduceRest = useCallback(() => {
+    const endAt = Math.max(Date.now(), (restEndAtRef.current ?? Date.now()) - 30_000);
+    const left = Math.max(0, Math.round((endAt - Date.now()) / 1000));
+    if (left <= 0) {
+      restEndAtRef.current = null;
+      if (restTimer.current) clearInterval(restTimer.current);
+      saveRestTimerState(CLEARED_REST_STATE).catch(() => {});
+      setState(s => ({ ...s, restLeft: 0, restActive: false }));
+      return;
+    }
+    restEndAtRef.current = endAt;
+    saveRestTimerState({ restEndAt: endAt, restTotal: stateRef.current.restTotal }).catch(() => {});
+    setState(s => ({ ...s, restLeft: left, restActive: true }));
+  }, []);
 
   const skipRest = useCallback(() => {
     if (restTimer.current) clearInterval(restTimer.current);
+    restEndAtRef.current = null;
+    saveRestTimerState(CLEARED_REST_STATE).catch(() => {});
     setState(s => ({ ...s, restActive: false, restLeft: REST_DEFAULT, restTotal: REST_DEFAULT }));
   }, []);
 
@@ -910,7 +1006,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       selectEx, incPeso, decPeso, incReps, decReps, setRpe, guardarSet,
       finishWorkout, applySuggestedPlan,
       startEditEx, startAddEx, cancelExForm, setDraft, saveEditEx, saveAddEx, deleteEx,
-      addRest, skipRest, dismissPrFlash,
+      addRest, reduceRest, skipRest, dismissPrFlash,
       addRecommendedExercise,
       setMetric, incWeighIn, decWeighIn, registrarPeso, addProgressPhoto,
     }}>

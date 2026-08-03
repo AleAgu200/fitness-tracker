@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pulso_widget_large_label">Pulso · Entreno</string>
+    <string name="pulso_widget_large_description">Ejercicio actual, siguiente y descanso con controles.</string>
+    <string name="pulso_widget_small_label">Pulso · Entreno mini</string>
+    <string name="pulso_widget_small_description">Ejercicio actual, siguiente y descanso.</string>
+</resources>

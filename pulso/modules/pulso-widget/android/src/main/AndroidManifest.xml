@@ -1,0 +1,31 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <receiver
+        android:name="expo.modules.pulsowidget.PulsoWidgetLargeProvider"
+        android:exported="false"
+        android:label="@string/pulso_widget_large_label">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        <action android:name="expo.modules.pulsowidget.REST_ADD" />
+        <action android:name="expo.modules.pulsowidget.REST_REDUCE" />
+        <action android:name="expo.modules.pulsowidget.REST_SKIP" />
+        <action android:name="expo.modules.pulsowidget.REST_ELAPSED" />
+      </intent-filter>
+      <meta-data
+          android:name="android.appwidget.provider"
+          android:resource="@xml/pulso_widget_large_info" />
+    </receiver>
+
+    <receiver
+        android:name="expo.modules.pulsowidget.PulsoWidgetSmallProvider"
+        android:exported="false"
+        android:label="@string/pulso_widget_small_label">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+          android:name="android.appwidget.provider"
+          android:resource="@xml/pulso_widget_small_info" />
+    </receiver>
+  </application>
+</manifest>

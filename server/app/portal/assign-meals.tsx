@@ -92,53 +92,62 @@ function AddFoodRow({ foods, onAdd }: { foods: Food[]; onAdd: (item: Item) => vo
   );
 }
 
-export function AssignMeals({ athlete }: { athlete: Athlete }) {
+/** Exposes unsaved-edit state to the parent so it can guard against losing work on athlete switch. */
+export function AssignMeals({ athlete, onDirtyChange }: { athlete: Athlete; onDirtyChange?: (dirty: boolean) => void }) {
   const [foods, setFoods] = useState<Food[]>([]);
   const [meals, setMeals] = useState<MealDraft[]>([{ label: "DESAYUNO", time: "07:30", items: [] }]);
+  const [baseline, setBaseline] = useState<MealDraft[]>([{ label: "DESAYUNO", time: "07:30", items: [] }]);
   const [current, setCurrent] = useState<MealAssignment | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmingOverwrite, setConfirmingOverwrite] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const foodsById = new Map(foods.map(f => [f.id, f]));
 
+  const dirty = JSON.stringify(meals) !== JSON.stringify(baseline);
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
+
   useEffect(() => {
     let alive = true;
-    (async () => {
+    const load = async () => {
       try {
         const lib = await api<{ foods: Food[] }>("/api/library/foods");
         const asg = await api<{ mealPlan: MealAssignment | null }>(`/api/assignments?athleteId=${encodeURIComponent(athlete.userId)}`);
         if (!alive) return;
         setFoods(lib.foods);
         setCurrent(asg.mealPlan);
-        if (asg.mealPlan) {
-          setMeals(asg.mealPlan.payload.meals.map(m => ({
-            label: m.label,
-            time: m.time,
-            items: m.items ?? [],
-          })));
-        } else {
-          setMeals([{ label: "DESAYUNO", time: "07:30", items: [] }]);
-        }
+        const loaded = asg.mealPlan
+          ? asg.mealPlan.payload.meals.map(m => ({ label: m.label, time: m.time, items: m.items ?? [] }))
+          : [{ label: "DESAYUNO", time: "07:30", items: [] }];
+        setMeals(loaded);
+        setBaseline(loaded);
         setStatus(null);
         setError(null);
+        setConfirmingOverwrite(false);
+        setLoadFailed(false);
       } catch {
-        if (alive) setError("No se pudo cargar el plan actual");
+        if (alive) setLoadFailed(true);
       }
-    })();
+    };
+    load();
     return () => { alive = false; };
   }, [athlete.userId]);
 
   function patchMeal(i: number, patch: Partial<MealDraft>) {
     setMeals(m => m.map((meal, idx) => (idx === i ? { ...meal, ...patch } : meal)));
+    setConfirmingOverwrite(false);
   }
 
   async function assign() {
     const valid = meals.filter(m => m.label.trim() && m.items.length > 0);
     if (valid.length === 0) {
-      setError("Cada comida necesita nombre y al menos un alimento");
+      setError("Cada comida necesita nombre y al menos un alimento antes de asignar");
       return;
     }
+    setConfirmingOverwrite(false);
     setBusy(true);
     setError(null);
     try {
@@ -161,10 +170,19 @@ export function AssignMeals({ athlete }: { athlete: Athlete }) {
       });
       setStatus(`✓ Dieta v${res.version} asignada — ${athlete.name.split(" ")[0]} la recibe al abrir la app`);
       setCurrent({ version: res.version, payload: { nutritionistName: "", meals: payloadMeals }, createdAt: Date.now() });
+      setBaseline(meals);
     } catch {
-      setError("No se pudo asignar la dieta");
+      setError("No se pudo asignar la dieta — revisá tu conexión e intentá de nuevo");
     } finally {
       setBusy(false);
+    }
+  }
+
+  function handleAssignClick() {
+    if (current) {
+      setConfirmingOverwrite(true);
+    } else {
+      assign();
     }
   }
 
@@ -187,6 +205,15 @@ export function AssignMeals({ athlete }: { athlete: Athlete }) {
       </div>
 
       <div className="flex flex-col gap-3 p-4">
+        {loadFailed && (
+          <div className="flex items-center justify-between border border-warn/40 bg-warn/10 px-3 py-2 font-mono-app text-[11px] text-warn">
+            <span>No se pudo cargar el plan actual — puede que estés viendo datos desactualizados</span>
+            <button type="button" onClick={() => setLoadFailed(false)} className="cursor-pointer underline hover:text-fg">
+              CERRAR
+            </button>
+          </div>
+        )}
+
         {meals.map((meal, i) => {
           const mac = mealMacros(meal.items, foodsById);
           return (
@@ -239,6 +266,20 @@ export function AssignMeals({ athlete }: { athlete: Athlete }) {
           );
         })}
 
+        {confirmingOverwrite && current && (
+          <div className="flex items-center justify-between border border-warn/40 bg-warn/10 px-3 py-2 font-mono-app text-[11px] text-warn">
+            <span>Reemplazás la dieta v{current.version} ({current.payload.meals.length} comidas) — ¿confirmar?</span>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setConfirmingOverwrite(false)} className="cursor-pointer text-fg-sec hover:text-fg">
+                CANCELAR
+              </button>
+              <button type="button" onClick={assign} className="cursor-pointer font-bold text-warn hover:text-fg">
+                SÍ, REEMPLAZAR →
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -249,14 +290,21 @@ export function AssignMeals({ athlete }: { athlete: Athlete }) {
           </button>
           <button
             type="button"
-            onClick={assign}
+            onClick={handleAssignClick}
             disabled={busy}
             className="cursor-pointer bg-neon px-5 py-2 font-mono-app text-[11px] font-extrabold tracking-[1px] text-ink transition hover:brightness-110 disabled:opacity-60"
           >
             {busy ? "..." : "ASIGNAR DIETA →"}
           </button>
           {status && <span className="font-mono-app text-[11px] text-neon">{status}</span>}
-          {error && <span className="font-mono-app text-[11px] text-danger">{error}</span>}
+          {error && (
+            <span className="font-mono-app text-[11px] text-danger">
+              {error}{" "}
+              <button type="button" onClick={assign} className="cursor-pointer underline hover:text-fg">
+                Reintentar
+              </button>
+            </span>
+          )}
         </div>
       </div>
     </div>

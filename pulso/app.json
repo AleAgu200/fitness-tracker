@@ -25,6 +25,7 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      "./plugins/withShortCxxPath",
       "expo-router",
       [
         "expo-splash-screen",
@@ -46,7 +47,22 @@
           "defaultChannel": "pulso-general"
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-widgets",
+        {
+          "widgets": [
+            {
+              "name": "PulsoEntrenoWidget",
+              "displayName": "Pulso · Entreno",
+              "description": "Ejercicio actual, siguiente y descanso.",
+              "ios": {
+                "supportedFamilies": ["systemSmall", "systemLarge"]
+              }
+            }
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

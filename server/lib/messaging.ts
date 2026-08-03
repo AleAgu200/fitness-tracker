@@ -70,6 +70,20 @@ export function markConversationRead(me: string, other: string): void {
   ).run(Date.now(), me, other);
 }
 
+/** Most recent message time (either direction) per conversation partner */
+export function lastMessageAt(me: string): Record<string, number> {
+  const rows = db.prepare(
+    `SELECT CASE WHEN "senderId" = ? THEN "receiverId" ELSE "senderId" END AS other,
+            MAX("sentAt") AS last
+     FROM "messages"
+     WHERE "senderId" = ? OR "receiverId" = ?
+     GROUP BY other`,
+  ).all(me, me, me) as { other: string; last: number }[];
+  const result: Record<string, number> = {};
+  for (const r of rows) result[r.other] = r.last;
+  return result;
+}
+
 /** Unread incoming messages grouped by sender */
 export function unreadCounts(me: string): { total: number; bySender: Record<string, number> } {
   const rows = db.prepare(

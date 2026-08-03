@@ -1,0 +1,64 @@
+-- Merging decision tree log ---
+manifest
+ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:1:1-31:12
+INJECTED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:1:1-31:12
+	package
+		INJECTED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml
+	xmlns:android
+		ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:1:11-69
+application
+ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:2:3-30:17
+receiver#expo.modules.pulsowidget.PulsoWidgetLargeProvider
+ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:3:5-17:16
+	android:label
+		ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:6:9-57
+	android:exported
+		ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:5:9-33
+	android:name
+		ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:4:9-73
+intent-filter#action:name:android.appwidget.action.APPWIDGET_UPDATE+action:name:expo.modules.pulsowidget.REST_ADD+action:name:expo.modules.pulsowidget.REST_ELAPSED+action:name:expo.modules.pulsowidget.REST_REDUCE+action:name:expo.modules.pulsowidget.REST_SKIP
+ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:7:7-13:23
+action#android.appwidget.action.APPWIDGET_UPDATE
+ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:8:9-76
+	android:name
+		ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:8:17-73
+action#expo.modules.pulsowidget.REST_ADD
+ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:9:9-68
+	android:name
+		ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:9:17-65
+action#expo.modules.pulsowidget.REST_REDUCE
+ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:10:9-71
+	android:name
+		ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:10:17-68
+action#expo.modules.pulsowidget.REST_SKIP
+ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:11:9-69
+	android:name
+		ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:11:17-66
+action#expo.modules.pulsowidget.REST_ELAPSED
+ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:12:9-72
+	android:name
+		ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:12:17-69
+meta-data#android.appwidget.provider
+ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:14:7-16:61
+	android:resource
+		ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:16:11-58
+	android:name
+		ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:15:11-52
+receiver#expo.modules.pulsowidget.PulsoWidgetSmallProvider
+ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:19:5-29:16
+	android:label
+		ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:22:9-57
+	android:exported
+		ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:21:9-33
+	android:name
+		ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:20:9-73
+intent-filter#action:name:android.appwidget.action.APPWIDGET_UPDATE
+ADDED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml:23:7-25:23
+uses-sdk
+INJECTED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml
+INJECTED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from C:\Users\Alessandro\Desktop\proyectos\fitness\fitness-tracker\pulso\modules\pulso-widget\android\src\main\AndroidManifest.xml

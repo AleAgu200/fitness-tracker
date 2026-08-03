@@ -38,7 +38,7 @@ body {
   }
 }
 
-/* Lightning pulse for the portal login background.
+/* Lightning pulse for the portal login background (reduced-motion fallback).
    Per-bolt intensity comes from --bolt-peak on the element. */
 @keyframes boltFlash {
   0%   { opacity: 0; }
@@ -47,4 +47,18 @@ body {
   7%   { opacity: calc(var(--bolt-peak, 0.85) * 0.8); }
   22%  { opacity: 0; }
   100% { opacity: 0; }
+}
+
+/* Login success: a bright flash masks the swap into the authenticated shell. */
+@keyframes surgeFlash {
+  0%   { opacity: 0; }
+  18%  { opacity: 0.9; }
+  100% { opacity: 0; }
+}
+
+/* Login button "charging" on successful auth, just before the surge flash. */
+@keyframes chargeUp {
+  0%   { filter: brightness(1); transform: scale(1); box-shadow: 0 0 0 rgba(232, 255, 89, 0); }
+  65%  { filter: brightness(1.9); transform: scale(1.015); box-shadow: 0 0 28px rgba(232, 255, 89, 0.6); }
+  100% { filter: brightness(1.9); transform: scale(1.015); box-shadow: 0 0 28px rgba(232, 255, 89, 0.6); }
 }

@@ -4,7 +4,8 @@ import { Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { PressableScale } from '@/components/ui/kit';
-import { C, F } from '@/constants/colors';
+import { C, F, withAlpha } from '@/constants/colors';
+import { usePreferences } from '@/context/preferences';
 import { ApiError } from '@/lib/api';
 import { searchWorkoutX, workoutXGifSource, WxSuggestion } from '@/lib/workoutx';
 
@@ -59,6 +60,7 @@ function WorkoutXResult({ suggestion, onSelect }: {
 }
 
 function SelectedWorkoutXResult({ suggestion }: { suggestion: WxSuggestion }) {
+  const { accent } = usePreferences();
   const [imageFailed, setImageFailed] = useState(false);
 
   return (
@@ -70,8 +72,8 @@ function SelectedWorkoutXResult({ suggestion }: { suggestion: WxSuggestion }) {
         marginTop: -4,
         marginBottom: 12,
         borderWidth: 1,
-        borderColor: C.yellow,
-        backgroundColor: 'rgba(232,255,89,0.05)',
+        borderColor: accent,
+        backgroundColor: withAlpha(accent, 0.05),
         overflow: 'hidden',
       }}
     >
@@ -92,7 +94,7 @@ function SelectedWorkoutXResult({ suggestion }: { suggestion: WxSuggestion }) {
         )}
       </View>
       <View style={{ flex: 1, justifyContent: 'center', padding: 12, gap: 5 }}>
-        <Text style={{ fontFamily: F.monoBold, fontSize: 8, letterSpacing: 1, color: C.yellow }}>
+        <Text style={{ fontFamily: F.monoBold, fontSize: 8, letterSpacing: 1, color: accent }}>
           ✓ EJERCICIO SELECCIONADO
         </Text>
         <Text style={{ fontFamily: F.interSemi, fontSize: 14, color: C.textPrimary, lineHeight: 19 }}>

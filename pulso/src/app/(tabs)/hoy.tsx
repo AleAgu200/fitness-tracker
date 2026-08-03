@@ -6,12 +6,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedBar, Card, GlowPulse, Label, PressableScale } from '@/components/ui/kit';
 import { C, F } from '@/constants/colors';
 import { useApp } from '@/context/app-state';
+import { usePreferences } from '@/context/preferences';
+import { displayWeight } from '@/lib/units';
 
 const DIAS  = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
 const MESES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
 
 export default function HoyScreen() {
   const { state } = useApp();
+  const { accent, weightUnit } = usePreferences();
   const insets = useSafeAreaInsets();
 
   const today = new Date();
@@ -26,7 +29,7 @@ export default function HoyScreen() {
   const hidratacionPct = Math.min(100, Math.round((state.water / 10) * 100));
 
   const loadBars = [
-    { k: 'ENTRENAMIENTO', fill: misionPct / 100,      color: C.yellow, val: `${misionPct}%` },
+    { k: 'ENTRENAMIENTO', fill: misionPct / 100,      color: accent, val: `${misionPct}%` },
     { k: 'NUTRICIÓN',     fill: nutricionPct / 100,   color: C.cyan,   val: state.meals.length > 0 ? `${nutricionPct}%` : '—' },
     { k: 'HIDRATACIÓN',   fill: hidratacionPct / 100, color: C.orange, val: `${hidratacionPct}%` },
   ];
@@ -36,8 +39,11 @@ export default function HoyScreen() {
   const initials  = state.profile?.initials || '?';
 
   const pesoHist = state.histories.peso;
-  const pesoActual = pesoHist.length ? pesoHist[pesoHist.length - 1].value : state.metricVals.peso;
-  const pesoDelta = pesoHist.length > 1 ? pesoHist[pesoHist.length - 1].value - pesoHist[0].value : null;
+  const pesoActualKg = pesoHist.length ? pesoHist[pesoHist.length - 1].value : state.metricVals.peso;
+  const pesoActual = displayWeight(pesoActualKg, weightUnit);
+  const pesoDelta = pesoHist.length > 1
+    ? displayWeight(pesoHist[pesoHist.length - 1].value, weightUnit) - displayWeight(pesoHist[0].value, weightUnit)
+    : null;
 
   const hasPlan = state.exercises.length > 0;
 
@@ -60,7 +66,7 @@ export default function HoyScreen() {
             </Text>
           </View>
           <View style={{ width: 42, height: 42, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={{ fontFamily: F.monoBold, fontSize: 13, color: C.yellow }}>{initials}</Text>
+            <Text style={{ fontFamily: F.monoBold, fontSize: 13, color: accent }}>{initials}</Text>
           </View>
         </Animated.View>
 
@@ -71,10 +77,10 @@ export default function HoyScreen() {
             <Label>META 100%</Label>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, marginBottom: 16 }}>
-            <Text style={{ fontFamily: F.monoXBold, fontSize: 54, lineHeight: 44, color: C.yellow, letterSpacing: -1 }}>
+            <Text style={{ fontFamily: F.monoXBold, fontSize: 54, lineHeight: 44, color: accent, letterSpacing: -1 }}>
               {loadPct}
             </Text>
-            <Text style={{ fontFamily: F.monoBold, fontSize: 22, color: C.yellow }}>%</Text>
+            <Text style={{ fontFamily: F.monoBold, fontSize: 22, color: accent }}>%</Text>
             <Text style={{ marginLeft: 'auto', fontFamily: F.mono, fontSize: 11, color: C.textSecondary }}>
               promedio
             </Text>
@@ -122,16 +128,16 @@ export default function HoyScreen() {
               <Text style={{ fontFamily: F.monoXBold, fontSize: 30, lineHeight: 26, color: C.textPrimary }}>
                 {pesoActual.toFixed(1)}
               </Text>
-              <Text style={{ fontFamily: F.mono, fontSize: 12, color: C.textTertiary }}>kg</Text>
+              <Text style={{ fontFamily: F.mono, fontSize: 12, color: C.textTertiary }}>{weightUnit}</Text>
             </View>
             {pesoDelta != null && (
-              <Text style={{ fontFamily: F.mono, fontSize: 11, color: pesoDelta <= 0 ? C.yellow : C.orange, marginTop: 10 }}>
-                {`${pesoDelta <= 0 ? '▼' : '▲'} ${Math.abs(pesoDelta).toFixed(1)} kg`}
+              <Text style={{ fontFamily: F.mono, fontSize: 11, color: pesoDelta <= 0 ? accent : C.orange, marginTop: 10 }}>
+                {`${pesoDelta <= 0 ? '▼' : '▲'} ${Math.abs(pesoDelta).toFixed(1)} ${weightUnit}`}
               </Text>
             )}
             {state.goalWeightKg != null && (
               <Text style={{ fontFamily: F.mono, fontSize: 10, color: C.textTertiary, marginTop: 4 }}>
-                meta {state.goalWeightKg.toFixed(1)} kg
+                meta {displayWeight(state.goalWeightKg, weightUnit).toFixed(1)} {weightUnit}
               </Text>
             )}
           </Card>
@@ -141,20 +147,20 @@ export default function HoyScreen() {
         {hasPlan ? (
           <Card index={3} style={{ padding: 14, marginBottom: 14 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 1.8, color: C.yellow, textTransform: 'uppercase' }}>★ MISIÓN DE HOY</Text>
-              <Text style={{ fontFamily: F.mono, fontSize: 11, color: C.yellow }}>{misionPct}%</Text>
+              <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 1.8, color: accent, textTransform: 'uppercase' }}>★ MISIÓN DE HOY</Text>
+              <Text style={{ fontFamily: F.mono, fontSize: 11, color: accent }}>{misionPct}%</Text>
             </View>
             <Text style={{ fontFamily: F.groteskMed, fontSize: 16, color: C.textPrimary, lineHeight: 22, marginBottom: 12 }}>
               {state.sessionDone
                 ? '✓ Sesión completada — buen trabajo'
                 : `Completar ${state.exercises.length} ejercicio${state.exercises.length !== 1 ? 's' : ''} · registrá cada set`}
             </Text>
-            <AnimatedBar fill={misionPct / 100} color={C.yellow} height={10} />
+            <AnimatedBar fill={misionPct / 100} color={accent} height={10} />
             {!state.sessionDone && (
               <PressableScale
                 onPress={() => router.push('/entreno')}
                 haptic="medium"
-                style={{ marginTop: 12, backgroundColor: C.yellow, padding: 11, alignItems: 'center' }}
+                style={{ marginTop: 12, backgroundColor: accent, padding: 11, alignItems: 'center' }}
               >
                 <Text style={{ fontFamily: F.monoBold, fontSize: 11, letterSpacing: 0.5, color: C.bg, textTransform: 'uppercase' }}>
                   {totalSets > 0 ? 'CONTINUAR ENTRENO →' : 'EMPEZAR ENTRENO →'}
@@ -172,9 +178,9 @@ export default function HoyScreen() {
             </Text>
             <PressableScale
               onPress={() => router.push('/entreno')}
-              style={{ borderWidth: 1, borderColor: C.yellow, paddingVertical: 10, paddingHorizontal: 20 }}
+              style={{ borderWidth: 1, borderColor: accent, paddingVertical: 10, paddingHorizontal: 20 }}
             >
-              <Text style={{ fontFamily: F.monoBold, fontSize: 11, letterSpacing: 0.5, color: C.yellow, textTransform: 'uppercase' }}>
+              <Text style={{ fontFamily: F.monoBold, fontSize: 11, letterSpacing: 0.5, color: accent, textTransform: 'uppercase' }}>
                 IR A ENTRENO →
               </Text>
             </PressableScale>

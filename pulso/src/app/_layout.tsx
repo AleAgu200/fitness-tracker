@@ -19,6 +19,8 @@ import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { NotificationBootstrap } from '@/components/notification-bootstrap';
+import { AppProvider } from '@/context/app-state';
+import { PreferencesProvider } from '@/context/preferences';
 import { SessionProvider } from '@/context/session';
 import { runMigrations } from '@/db/migrate';
 
@@ -56,10 +58,14 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SessionProvider>
-        <NotificationBootstrap />
-        <Slot />
-      </SessionProvider>
+      <PreferencesProvider>
+        <SessionProvider>
+          <NotificationBootstrap />
+          <AppProvider>
+            <Slot />
+          </AppProvider>
+        </SessionProvider>
+      </PreferencesProvider>
     </GestureHandlerRootView>
   );
 }

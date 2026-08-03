@@ -14,6 +14,7 @@ export interface Athlete {
   name: string;
   email: string;
   since: number;
+  lastMessageAt: number | null;
 }
 
 export interface Msg {

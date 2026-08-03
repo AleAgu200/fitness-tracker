@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  4x1 strip. Text column on the left, countdown stacked over the rest controls on the
+  right. The countdown is a real Chronometer: once the provider hands it a base in the
+  elapsedRealtime timebase, Android ticks it every second on its own, with no broadcast,
+  no JS and no updatePeriodMillis involved (that floors at 30 min anyway).
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/pulso_widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/pulso_widget_card"
+    android:padding="12dp">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/pulso_eyebrow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="ENTRENO ACTUAL"
+            android:textSize="9sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.14"
+            android:textColor="#E8FF59"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/pulso_current"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:textColor="#FAFAFA"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/pulso_next"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textSize="10sp"
+            android:textColor="#8A8A93"
+            android:maxLines="1"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
+        android:orientation="vertical"
+        android:gravity="center_horizontal">
+
+        <Chronometer
+            android:id="@+id/pulso_chronometer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="#3DDCFF"
+            android:includeFontPadding="false" />
+
+        <TextView
+            android:id="@+id/pulso_rest_idle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="LISTO"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.12"
+            android:textColor="#5A5A62"
+            android:includeFontPadding="false"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/pulso_rest_actions"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/pulso_btn_reduce"
+                android:layout_width="34dp"
+                android:layout_height="26dp"
+                android:layout_marginEnd="4dp"
+                android:gravity="center"
+                android:background="@drawable/pulso_widget_button"
+                android:text="−30"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:textColor="#C7C7CE" />
+
+            <TextView
+                android:id="@+id/pulso_btn_skip"
+                android:layout_width="34dp"
+                android:layout_height="26dp"
+                android:gravity="center"
+                android:background="@drawable/pulso_widget_button"
+                android:text="✕"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="#FF3D5A" />
+
+            <TextView
+                android:id="@+id/pulso_btn_add"
+                android:layout_width="34dp"
+                android:layout_height="26dp"
+                android:layout_marginStart="4dp"
+                android:gravity="center"
+                android:background="@drawable/pulso_widget_button"
+                android:text="+30"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:textColor="#C7C7CE" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

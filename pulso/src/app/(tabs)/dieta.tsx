@@ -1,13 +1,44 @@
+import { useEffect } from 'react';
 import { ScrollView, Text, TextInput, View } from 'react-native';
-import Animated, { Easing, FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeInDown, LinearTransition, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedBar, Card, Label, PressableScale } from '@/components/ui/kit';
 import { C, F } from '@/constants/colors';
 import { Meal, MealStatus, useApp } from '@/context/app-state';
+import { usePreferences } from '@/context/preferences';
 
-function statusColor(s: MealStatus | undefined) {
-  if (s === 'cumplido')   return C.yellow;
+const WATER_MAX = 10;
+
+/** Horizontal canteen with a liquid fill; turns into an "energy drink" color once full. */
+function HydrationBottle({ level, max }: { level: number; max: number }) {
+  const full = level >= max;
+  const fill = useSharedValue(0);
+
+  useEffect(() => {
+    fill.value = withTiming(Math.max(0, Math.min(1, level / max)), { duration: 550, easing: Easing.out(Easing.cubic) });
+  }, [level, max, fill]);
+
+  const fillStyle = useAnimatedStyle(() => ({ width: `${fill.value * 100}%` }));
+
+  const edgeColor = full ? C.orange : C.border;
+  const liquidColor = full ? C.orange : C.cyan;
+  const liquidFill = full ? 'rgba(255,166,43,0.28)' : 'rgba(61,220,255,0.24)';
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', height: 46 }}>
+      <View style={{ width: 9, height: 20, backgroundColor: C.bgEl, borderWidth: 1, borderColor: edgeColor, borderRightWidth: 0 }} />
+      <View style={{ flex: 1, height: '100%', backgroundColor: C.bgEl, borderWidth: 1, borderColor: edgeColor, overflow: 'hidden' }}>
+        <Animated.View style={[{ position: 'absolute', top: 0, bottom: 0, left: 0, backgroundColor: liquidFill }, fillStyle]}>
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, backgroundColor: liquidColor }} />
+        </Animated.View>
+      </View>
+    </View>
+  );
+}
+
+function statusColor(s: MealStatus | undefined, accent: string) {
+  if (s === 'cumplido')   return accent;
   if (s === 'sustituido') return C.cyan;
   return C.textTertiary;
 }
@@ -20,8 +51,9 @@ function statusLabel(s: MealStatus | undefined) {
 
 function MealCard({ m, index }: { m: Meal; index: number }) {
   const { state, setMeal, setMealNote, startEditMeal } = useApp();
+  const { accent } = usePreferences();
   const s = state.mealStatus[m.id] as MealStatus | undefined;
-  const sc = statusColor(s);
+  const sc = statusColor(s, accent);
   const sl = statusLabel(s);
   const note = state.mealNotes[m.id] || '';
 
@@ -56,7 +88,7 @@ function MealCard({ m, index }: { m: Meal; index: number }) {
             onPress={() => setMeal(m.id, action)}
             style={{
               flex: 1, padding: 11,
-              backgroundColor: s === action ? (action === 'cumplido' ? C.yellow : action === 'sustituido' ? C.cyan : C.border) : C.card,
+              backgroundColor: s === action ? (action === 'cumplido' ? accent : action === 'sustituido' ? C.cyan : C.border) : C.card,
               borderRightWidth: i < 2 ? 1 : 0, borderRightColor: C.border,
               alignItems: 'center',
             }}
@@ -167,6 +199,7 @@ function MealForm() {
 
 export default function DietaScreen() {
   const { state, setWater, startAddMeal } = useApp();
+  const { accent } = usePreferences();
   const insets = useSafeAreaInsets();
 
   const hasPlan = state.meals.length > 0;
@@ -187,7 +220,7 @@ export default function DietaScreen() {
   const totalG    = state.meals.reduce((a, m) => a + m.g, 0);
 
   const macroBars = hasPlan ? [
-    { k: 'KCAL',     v: consumed.kcal,    t: totalKcal,    fill: totalKcal > 0 ? Math.min(1, consumed.kcal / totalKcal) : 0, color: C.yellow },
+    { k: 'KCAL',     v: consumed.kcal,    t: totalKcal,    fill: totalKcal > 0 ? Math.min(1, consumed.kcal / totalKcal) : 0, color: accent },
     { k: 'PROTEÍNA', v: `${consumed.p}g`, t: `${totalP}g`, fill: totalP > 0 ? Math.min(1, consumed.p / totalP) : 0,          color: C.cyan },
     { k: 'CARBOS',   v: `${consumed.c}g`, t: `${totalC}g`, fill: totalC > 0 ? Math.min(1, consumed.c / totalC) : 0,          color: C.orange },
     { k: 'GRASAS',   v: `${consumed.g}g`, t: `${totalG}g`, fill: totalG > 0 ? Math.min(1, consumed.g / totalG) : 0,          color: '#A855F7' },
@@ -278,31 +311,29 @@ export default function DietaScreen() {
         {/* AGUA — always visible */}
         <Card index={hasPlan ? 2 : 1} style={{ padding: 14 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 1.8, color: C.cyan, textTransform: 'uppercase' }}>HIDRATACIÓN</Text>
+            <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 1.8, color: state.water >= WATER_MAX ? C.orange : C.cyan, textTransform: 'uppercase' }}>
+              {state.water >= WATER_MAX ? '⚡ ENERGÍA AL MÁXIMO' : 'HIDRATACIÓN'}
+            </Text>
             <Text style={{ fontFamily: F.mono, fontSize: 13, color: C.textPrimary }}>
               <Text style={{ fontFamily: F.monoXBold }}>{(state.water * 0.35).toFixed(2)}</Text>
               <Text style={{ color: C.textTertiary, fontSize: 11 }}> / 3.5 L</Text>
             </Text>
           </View>
-          <View style={{ flexDirection: 'row', gap: 4 }}>
-            {Array.from({ length: 10 }, (_, i) => {
-              const filled = i < state.water;
-              return (
-                <PressableScale
-                  key={i}
-                  onPress={() => setWater(i + 1)}
-                  style={{
-                    flex: 1, height: 36,
-                    backgroundColor: filled ? 'rgba(61,220,255,0.25)' : C.bgEl,
-                    borderWidth: 1, borderColor: filled ? C.cyan : C.border,
-                  }}
-                >
-                  <View />
-                </PressableScale>
-              );
-            })}
-          </View>
-          <Label style={{ marginTop: 10, textAlign: 'center' }}>TOCÁ UN VASO · 0.35 L C/U</Label>
+          <HydrationBottle level={state.water} max={WATER_MAX} />
+          <PressableScale
+            onPress={() => setWater(Math.min(WATER_MAX, state.water + 1))}
+            haptic="medium"
+            disabled={state.water >= WATER_MAX}
+            style={{
+              marginTop: 12, padding: 12, alignItems: 'center', borderWidth: 1,
+              borderColor: state.water >= WATER_MAX ? C.border : C.cyan,
+              backgroundColor: state.water >= WATER_MAX ? C.bgEl : 'rgba(61,220,255,0.08)',
+            }}
+          >
+            <Text style={{ fontFamily: F.monoBold, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', color: state.water >= WATER_MAX ? C.textTertiary : C.cyan }}>
+              {state.water >= WATER_MAX ? '✓ BOTELLA COMPLETA' : '+ AGREGAR VASO · 0.35 L'}
+            </Text>
+          </PressableScale>
         </Card>
       </View>
     </ScrollView>

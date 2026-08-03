@@ -1,6 +1,6 @@
 {
   "name": "pulso",
-  "main": "expo-router/entry",
+  "main": "index.js",
   "version": "1.0.0",
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
@@ -30,6 +30,7 @@
     "expo-symbols": "~56.0.6",
     "expo-system-ui": "~56.0.5",
     "expo-web-browser": "~56.0.6",
+    "expo-widgets": "^56.0.25",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.85.3",
@@ -45,15 +46,26 @@
     "@types/react": "~19.2.2",
     "babel-plugin-inline-import": "^3.0.0",
     "drizzle-kit": "^0.31.10",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~56.0.4",
     "typescript": "~6.0.3"
   },
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint"
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "autolinking": {
+      "android": {
+        "exclude": [
+          "expo-widgets"
+        ]
+      }
+    }
+  }
 }

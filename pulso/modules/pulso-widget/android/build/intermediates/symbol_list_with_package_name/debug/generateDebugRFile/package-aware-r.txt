@@ -1,0 +1,21 @@
+expo.modules.pulsowidget
+drawable pulso_widget_button
+drawable pulso_widget_card
+id pulso_btn_add
+id pulso_btn_reduce
+id pulso_btn_skip
+id pulso_chronometer
+id pulso_current
+id pulso_eyebrow
+id pulso_next
+id pulso_rest_actions
+id pulso_rest_idle
+id pulso_widget_root
+layout pulso_widget_large
+layout pulso_widget_small
+string pulso_widget_large_description
+string pulso_widget_large_label
+string pulso_widget_small_description
+string pulso_widget_small_label
+xml pulso_widget_large_info
+xml pulso_widget_small_info

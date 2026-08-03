@@ -11,7 +11,11 @@
       "PowerShell(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\aless\\\\OneDrive - MSFT\\\\Desktop\\\\proyectos\\\\health tracker app\\\\server\\\\scripts\")",
       "mcp__rive__open_file_editor",
       "mcp__rive__path_editor",
-      "mcp__rive__get_artboard_hierarchy"
+      "mcp__rive__get_artboard_hierarchy",
+      "Bash(node \"C:\\\\Users\\\\Alessandro\\\\.claude\\\\plugins\\\\cache\\\\impeccable\\\\impeccable\\\\4.0.3\\\\skills\\\\impeccable\\\\scripts\\\\context.mjs\" --target \"pulso/src/app/\\(auth\\)/login.tsx\")",
+      "Bash(npx tsc *)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(npx expo *)"
     ]
   }
 }

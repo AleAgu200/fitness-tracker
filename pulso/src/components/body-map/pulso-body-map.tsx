@@ -2,6 +2,7 @@ import { memo, useMemo } from 'react';
 import { Path } from 'react-native-svg';
 
 import { C } from '@/constants/colors';
+import { usePreferences } from '@/context/preferences';
 
 import { bodyBack } from './vendor/body-back';
 import { bodyFemaleBack } from './vendor/body-female-back';
@@ -104,11 +105,11 @@ export function getAvailableMuscles(gender: BodyGender, side: BodySide): MuscleD
     });
 }
 
-function fillForSignal(signal: MuscleSignal | undefined, selected: boolean): string {
-  if (selected) return C.yellow;
+function fillForSignal(signal: MuscleSignal | undefined, selected: boolean, accent: string): string {
+  if (selected) return accent;
   if (!signal) return C.border;
   if (signal.discomfort) return C.red;
-  if (signal.selected) return C.yellow;
+  if (signal.selected) return accent;
   if (signal.recovery) return C.cyan;
   if (signal.load >= 0.75) return C.orange;
   if (signal.load > 0) return 'rgba(255,166,43,0.46)';
@@ -124,6 +125,7 @@ function PulsoBodyMapComponent({
   detailedLoads = {},
   onMusclePress,
 }: PulsoBodyMapProps) {
+  const { accent } = usePreferences();
   const source = sourceFor(gender, side);
   const Wrapper = gender === 'female' ? SvgFemaleWrapper : SvgMaleWrapper;
 
@@ -143,14 +145,14 @@ function PulsoBodyMapComponent({
         const signal = broadSignal && detailedLoad != null
           ? { ...broadSignal, load: detailedLoad, selected: false }
           : broadSignal;
-        const fill = fillForSignal(signal, selected);
+        const fill = fillForSignal(signal, selected, accent);
         return (part.pathArray ?? []).map((path, index) => (
           <Path
             key={`${part.slug}-${index}`}
             id={part.slug}
             d={path}
             fill={fill}
-            stroke={selected ? C.yellow : C.bg}
+            stroke={selected ? accent : C.bg}
             strokeWidth={selected ? 2.4 : 0.8}
             onPress={() => {
               if (group) onMusclePress?.(group, part.slug);

@@ -102,11 +102,12 @@ export default function AlimentosPage() {
         <div className="mb-3 font-mono-app text-[10px] tracking-[1.4px] text-volt">
           {editingId ? "EDITAR ALIMENTO" : "NUEVO ALIMENTO"}
         </div>
-        <div className="grid grid-cols-[2fr_1.2fr_repeat(4,1fr)_auto] gap-2">
+        <div className="grid grid-cols-[2fr_1.2fr_0.4fr_repeat(4,1fr)_auto] gap-2">
           <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Nombre" className={inputCls} />
           <select aria-label="Categoría" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className={inputCls}>
             {FOOD_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
+          <span />
           <input value={form.kcal} onChange={e => setForm({ ...form, kcal: e.target.value })} placeholder="kcal" type="number" min="0" className={inputCls} />
           <input value={form.proteinG} onChange={e => setForm({ ...form, proteinG: e.target.value })} placeholder="P g" type="number" min="0" step="0.1" className={inputCls} />
           <input value={form.carbsG} onChange={e => setForm({ ...form, carbsG: e.target.value })} placeholder="C g" type="number" min="0" step="0.1" className={inputCls} />

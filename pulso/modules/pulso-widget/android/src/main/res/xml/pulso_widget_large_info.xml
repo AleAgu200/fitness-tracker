@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Fixed 4x1: minWidth/minHeight follow Android's 70*n - 30 cell formula.
+
+  updatePeriodMillis is 0 on purpose: Android floors it at 30 min, so it is useless for a
+  countdown. The Chronometer ticks itself, and the provider redraws on demand (app push,
+  button tap, or the one alarm scheduled for the moment rest hits zero).
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="40dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="1"
+    android:resizeMode="none"
+    android:widgetCategory="home_screen"
+    android:initialLayout="@layout/pulso_widget_large"
+    android:previewLayout="@layout/pulso_widget_large"
+    android:description="@string/pulso_widget_large_description"
+    android:updatePeriodMillis="0" />

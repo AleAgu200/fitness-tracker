@@ -5,7 +5,7 @@ import { ColorValue } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { C, F } from '@/constants/colors';
-import { AppProvider } from '@/context/app-state';
+import { usePreferences } from '@/context/preferences';
 import { useSession } from '@/context/session';
 
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
@@ -32,6 +32,7 @@ function TabIcon({ color, name, focused }: { color: ColorValue; name: IconName; 
 
 export default function TabsLayout() {
   const { userId, loading } = useSession();
+  const { accent } = usePreferences();
 
   // Signing out (or an expired session) kicks the user back to the login
   if (!loading && !userId) {
@@ -39,68 +40,59 @@ export default function TabsLayout() {
   }
 
   return (
-    <AppProvider>
-      <Tabs
-        screenOptions={{
-          headerShown: false,
-          tabBarStyle: {
-            backgroundColor: C.bg,
-            borderTopColor: C.border,
-            borderTopWidth: 1,
-          },
-          tabBarActiveTintColor: C.yellow,
-          tabBarInactiveTintColor: C.textTertiary,
-          tabBarLabelStyle: {
-            fontFamily: F.mono,
-            fontSize: 9,
-            letterSpacing: 1.0,
-            textTransform: 'uppercase',
-          },
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: C.bg,
+          borderTopColor: C.border,
+          borderTopWidth: 1,
+        },
+        tabBarActiveTintColor: accent,
+        tabBarInactiveTintColor: C.textTertiary,
+        tabBarLabelStyle: {
+          fontFamily: F.mono,
+          fontSize: 9,
+          letterSpacing: 1.0,
+          textTransform: 'uppercase',
+        },
+      }}
+    >
+      <Tabs.Screen
+        name="hoy"
+        options={{
+          title: 'HOY',
+          tabBarIcon: ({ color, focused }) => <TabIcon color={color} focused={focused} name="calendar-today" />,
         }}
-      >
-        <Tabs.Screen
-          name="hoy"
-          options={{
-            title: 'HOY',
-            tabBarIcon: ({ color, focused }) => <TabIcon color={color} focused={focused} name="calendar-today" />,
-          }}
-        />
-        <Tabs.Screen
-          name="dieta"
-          options={{
-            title: 'DIETA',
-            tabBarIcon: ({ color, focused }) => <TabIcon color={color} focused={focused} name="silverware-fork-knife" />,
-          }}
-        />
-        <Tabs.Screen
-          name="entreno"
-          options={{
-            title: 'ENTRENO',
-            tabBarIcon: ({ color, focused }) => <TabIcon color={color} focused={focused} name="dumbbell" />,
-          }}
-        />
-        <Tabs.Screen
-          name="progreso"
-          options={{
-            title: 'PROGRESO',
-            tabBarIcon: ({ color, focused }) => <TabIcon color={color} focused={focused} name="chart-bar" />,
-          }}
-        />
-        <Tabs.Screen
-          name="pulso"
-          options={{
-            title: 'PULSO',
-            tabBarIcon: ({ color, focused }) => <TabIcon color={color} focused={focused} name="lightning-bolt" />,
-          }}
-        />
-        <Tabs.Screen
-          name="perfil"
-          options={{
-            title: 'PERFIL',
-            tabBarIcon: ({ color, focused }) => <TabIcon color={color} focused={focused} name="account" />,
-          }}
-        />
-      </Tabs>
-    </AppProvider>
+      />
+      <Tabs.Screen
+        name="dieta"
+        options={{
+          title: 'DIETA',
+          tabBarIcon: ({ color, focused }) => <TabIcon color={color} focused={focused} name="silverware-fork-knife" />,
+        }}
+      />
+      <Tabs.Screen
+        name="entreno"
+        options={{
+          title: 'ENTRENO',
+          tabBarIcon: ({ color, focused }) => <TabIcon color={color} focused={focused} name="dumbbell" />,
+        }}
+      />
+      <Tabs.Screen
+        name="pulso"
+        options={{
+          title: 'PULSO',
+          tabBarIcon: ({ color, focused }) => <TabIcon color={color} focused={focused} name="lightning-bolt" />,
+        }}
+      />
+      <Tabs.Screen
+        name="perfil"
+        options={{
+          title: 'PERFIL',
+          tabBarIcon: ({ color, focused }) => <TabIcon color={color} focused={focused} name="account" />,
+        }}
+      />
+    </Tabs>
   );
 }

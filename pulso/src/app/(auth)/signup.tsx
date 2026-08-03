@@ -13,7 +13,8 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LightningBackground } from '@/components/ui/lightning-bg';
-import { C, F } from '@/constants/colors';
+import { C, F, withAlpha } from '@/constants/colors';
+import { usePreferences } from '@/context/preferences';
 import { useSession } from '@/context/session';
 import { saveAthleteProfile, saveInitialWeight } from '@/db/profile';
 import { getActiveSession, isUserExistsError, signIn, signUp } from '@/lib/auth';
@@ -22,10 +23,10 @@ import { getInitials } from '@/lib/names';
 type Sexo = 'M' | 'F' | 'X';
 const SEX_LABELS: Record<Sexo, string> = { M: 'HOMBRE', F: 'MUJER', X: 'OTRO' };
 
-function SectionHeader({ label }: { label: string }) {
+function SectionHeader({ label, accent }: { label: string; accent: string }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-      <Text style={{ fontFamily: F.mono, fontSize: 9, letterSpacing: 2, color: C.yellow, textTransform: 'uppercase' }}>
+      <Text style={{ fontFamily: F.mono, fontSize: 9, letterSpacing: 2, color: accent, textTransform: 'uppercase' }}>
         {label}
       </Text>
       <View style={{ flex: 1, height: 1, backgroundColor: C.border }} />
@@ -43,6 +44,7 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 
 export default function SignUpScreen() {
   const { refresh } = useSession();
+  const { accent } = usePreferences();
   const insets = useSafeAreaInsets();
 
   const [email, setEmail]           = useState('');
@@ -144,7 +146,7 @@ export default function SignUpScreen() {
     >
       {/* Brand */}
       <Animated.View entering={FadeInDown.duration(400)} style={{ marginBottom: 40 }}>
-        <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 2.4, color: C.yellow, textTransform: 'uppercase', marginBottom: 10 }}>
+        <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 2.4, color: accent, textTransform: 'uppercase', marginBottom: 10 }}>
           PULSO · APP DEL ATLETA
         </Text>
         <Text style={{ fontFamily: F.grotesk, fontSize: 34, color: C.textPrimary, letterSpacing: -0.5 }}>
@@ -156,7 +158,7 @@ export default function SignUpScreen() {
       </Animated.View>
 
       {/* ── CUENTA ── */}
-      <SectionHeader label="CUENTA" />
+      <SectionHeader label="CUENTA" accent={accent} />
       <View style={{ gap: 12, marginBottom: 32 }}>
         <View>
           <FieldLabel>EMAIL</FieldLabel>
@@ -179,7 +181,7 @@ export default function SignUpScreen() {
       </View>
 
       {/* ── PERFIL ── */}
-      <SectionHeader label="TU PERFIL" />
+      <SectionHeader label="TU PERFIL" accent={accent} />
       <View style={{ gap: 12, marginBottom: 32 }}>
         <View>
           <FieldLabel>NOMBRE COMPLETO</FieldLabel>
@@ -202,13 +204,13 @@ export default function SignUpScreen() {
                   onPress={() => setSexo(sel ? null : s)}
                   style={{
                     flex: 1, padding: 13, borderWidth: 1,
-                    borderColor: sel ? C.yellow : C.border,
-                    backgroundColor: sel ? `${C.yellow}22` : C.card,
+                    borderColor: sel ? accent : C.border,
+                    backgroundColor: sel ? withAlpha(accent, 0.13) : C.card,
                     alignItems: 'center',
                   }}
                   activeOpacity={0.7}
                 >
-                  <Text style={{ fontFamily: F.monoBold, fontSize: 10, letterSpacing: 0.4, color: sel ? C.yellow : C.textSecondary }}>
+                  <Text style={{ fontFamily: F.monoBold, fontSize: 10, letterSpacing: 0.4, color: sel ? accent : C.textSecondary }}>
                     {SEX_LABELS[s]}
                   </Text>
                 </TouchableOpacity>
@@ -229,7 +231,7 @@ export default function SignUpScreen() {
       </View>
 
       {/* ── CUERPO ── */}
-      <SectionHeader label="TU CUERPO" />
+      <SectionHeader label="TU CUERPO" accent={accent} />
       <View style={{ gap: 12, marginBottom: 36 }}>
         <View>
           <FieldLabel>ALTURA (cm)</FieldLabel>
@@ -271,7 +273,7 @@ export default function SignUpScreen() {
       <TouchableOpacity
         onPress={handleSignUp}
         disabled={loading}
-        style={{ backgroundColor: C.yellow, padding: 16, alignItems: 'center', opacity: loading ? 0.7 : 1 }}
+        style={{ backgroundColor: accent, padding: 16, alignItems: 'center', opacity: loading ? 0.7 : 1 }}
         activeOpacity={0.8}
       >
         {loading
@@ -283,7 +285,7 @@ export default function SignUpScreen() {
       <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 28, gap: 6 }}>
         <Text style={{ fontFamily: F.inter, fontSize: 14, color: C.textSecondary }}>¿Ya tenés cuenta?</Text>
         <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7}>
-          <Text style={{ fontFamily: F.interSemi, fontSize: 14, color: C.yellow }}>Ingresar</Text>
+          <Text style={{ fontFamily: F.interSemi, fontSize: 14, color: accent }}>Ingresar</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>

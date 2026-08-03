@@ -24,46 +24,58 @@ const NEW_ROW: Row = { nombre: "", target: "3", reps: "8", peso: "0", step: "2.5
 const inputCls =
   "w-full min-w-0 border border-line bg-elev px-2 py-1.5 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none";
 
-export function AssignWorkout({ athlete }: { athlete: Athlete }) {
+/** Exposes unsaved-edit state to the parent so it can guard against losing work on athlete switch. */
+export function AssignWorkout({ athlete, onDirtyChange }: { athlete: Athlete; onDirtyChange?: (dirty: boolean) => void }) {
   const [library, setLibrary] = useState<LibraryExercise[]>([]);
   const [rows, setRows] = useState<Row[]>([NEW_ROW]);
+  const [baseline, setBaseline] = useState<Row[]>([NEW_ROW]);
   const [current, setCurrent] = useState<WorkoutAssignment | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmingOverwrite, setConfirmingOverwrite] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  const dirty = JSON.stringify(rows) !== JSON.stringify(baseline);
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   useEffect(() => {
     let alive = true;
-    (async () => {
+    const load = async () => {
       try {
         const lib = await api<{ exercises: LibraryExercise[] }>("/api/library/exercises");
         const asg = await api<{ workout: WorkoutAssignment | null }>(`/api/assignments?athleteId=${encodeURIComponent(athlete.userId)}`);
         if (!alive) return;
         setLibrary(lib.exercises);
         setCurrent(asg.workout);
-        if (asg.workout) {
-          setRows(asg.workout.payload.exercises.map(e => ({
-            nombre: e.nombre,
-            target: String(e.target),
-            reps: String(e.reps),
-            peso: String(e.peso),
-            step: String(e.step),
-            restSeconds: String(e.restSeconds),
-          })));
-        } else {
-          setRows([NEW_ROW]);
-        }
+        const loaded = asg.workout
+          ? asg.workout.payload.exercises.map(e => ({
+              nombre: e.nombre,
+              target: String(e.target),
+              reps: String(e.reps),
+              peso: String(e.peso),
+              step: String(e.step),
+              restSeconds: String(e.restSeconds),
+            }))
+          : [NEW_ROW];
+        setRows(loaded);
+        setBaseline(loaded);
         setStatus(null);
         setError(null);
+        setConfirmingOverwrite(false);
+        setLoadFailed(false);
       } catch {
-        if (alive) setError("No se pudo cargar el plan actual");
+        if (alive) setLoadFailed(true);
       }
-    })();
+    };
+    load();
     return () => { alive = false; };
   }, [athlete.userId]);
 
   function patch(i: number, field: keyof Row, value: string) {
     setRows(r => r.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
+    setConfirmingOverwrite(false);
   }
 
   async function assign() {
@@ -78,9 +90,10 @@ export function AssignWorkout({ athlete }: { athlete: Athlete }) {
         restSeconds: Number(r.restSeconds) || 90,
       }));
     if (exercises.length === 0) {
-      setError("Agregá al menos un ejercicio");
+      setError("Agregá al menos un ejercicio antes de asignar");
       return;
     }
+    setConfirmingOverwrite(false);
     setBusy(true);
     setError(null);
     try {
@@ -89,11 +102,20 @@ export function AssignWorkout({ athlete }: { athlete: Athlete }) {
         body: JSON.stringify({ athleteId: athlete.userId, exercises }),
       });
       setStatus(`✓ Plan v${res.version} asignado — ${athlete.name.split(" ")[0]} lo recibe al abrir la app`);
-      setCurrent(c => ({ version: res.version, payload: { coachName: "", exercises }, createdAt: Date.now(), ...(c ? {} : {}) }));
+      setCurrent({ version: res.version, payload: { coachName: "", exercises }, createdAt: Date.now() });
+      setBaseline(rows);
     } catch {
-      setError("No se pudo asignar el plan");
+      setError("No se pudo asignar el plan — revisá tu conexión e intentá de nuevo");
     } finally {
       setBusy(false);
+    }
+  }
+
+  function handleAssignClick() {
+    if (current) {
+      setConfirmingOverwrite(true);
+    } else {
+      assign();
     }
   }
 
@@ -111,13 +133,30 @@ export function AssignWorkout({ athlete }: { athlete: Athlete }) {
       </div>
 
       <div className="p-4">
-        {/* header row */}
-        <div className="mb-1 grid grid-cols-[2.4fr_repeat(5,1fr)_28px] gap-2 font-mono-app text-[9px] tracking-[1px] text-fg-ter">
-          <span>EJERCICIO</span><span>SERIES</span><span>REPS</span><span>PESO kg</span><span>STEP kg</span><span>DESC. s</span><span />
+        {loadFailed && (
+          <div className="mb-3 flex items-center justify-between border border-warn/40 bg-warn/10 px-3 py-2 font-mono-app text-[11px] text-warn">
+            <span>No se pudo cargar el plan actual — puede que estés viendo datos desactualizados</span>
+            <button
+              type="button"
+              onClick={() => setLoadFailed(false)}
+              className="cursor-pointer underline hover:text-fg"
+            >
+              CERRAR
+            </button>
+          </div>
+        )}
+
+        {/* header row — groups the fields a coach edits every session (series/reps/peso) apart from
+            the ones set once and rarely touched (step/descanso), with a spacer track between them */}
+        <div className="mb-1 grid grid-cols-[2.4fr_repeat(3,1fr)_0.3fr_repeat(2,1fr)_28px] gap-2 font-mono-app text-[9px] tracking-[1px] text-fg-ter">
+          <span>EJERCICIO</span><span>SERIES</span><span>REPS</span><span>PESO kg</span><span />
+          <span className="text-fg-ter/70" title="Incremento de peso por serie superada">STEP kg</span>
+          <span className="text-fg-ter/70" title="Descanso entre series, en segundos">DESC. s</span>
+          <span />
         </div>
 
         {rows.map((row, i) => (
-          <div key={i} className="mb-2 grid grid-cols-[2.4fr_repeat(5,1fr)_28px] gap-2">
+          <div key={i} className="mb-2 grid grid-cols-[2.4fr_repeat(3,1fr)_0.3fr_repeat(2,1fr)_28px] gap-2">
             <select
               aria-label="Ejercicio"
               value={row.nombre}
@@ -135,8 +174,9 @@ export function AssignWorkout({ athlete }: { athlete: Athlete }) {
             <input aria-label="Series" type="number" min="1" value={row.target} onChange={e => patch(i, "target", e.target.value)} className={inputCls} />
             <input aria-label="Reps" type="number" min="1" value={row.reps} onChange={e => patch(i, "reps", e.target.value)} className={inputCls} />
             <input aria-label="Peso" type="number" min="0" step="0.5" value={row.peso} onChange={e => patch(i, "peso", e.target.value)} className={inputCls} />
-            <input aria-label="Step" type="number" min="0.5" step="0.5" value={row.step} onChange={e => patch(i, "step", e.target.value)} className={inputCls} />
-            <input aria-label="Descanso" type="number" min="15" step="15" value={row.restSeconds} onChange={e => patch(i, "restSeconds", e.target.value)} className={inputCls} />
+            <span />
+            <input aria-label="Step" type="number" min="0.5" step="0.5" value={row.step} onChange={e => patch(i, "step", e.target.value)} className={`${inputCls} text-fg-sec`} />
+            <input aria-label="Descanso" type="number" min="15" step="15" value={row.restSeconds} onChange={e => patch(i, "restSeconds", e.target.value)} className={`${inputCls} text-fg-sec`} />
             <button
               type="button"
               onClick={() => setRows(r => r.filter((_, idx) => idx !== i))}
@@ -148,6 +188,20 @@ export function AssignWorkout({ athlete }: { athlete: Athlete }) {
           </div>
         ))}
 
+        {confirmingOverwrite && current && (
+          <div className="mb-3 flex items-center justify-between border border-warn/40 bg-warn/10 px-3 py-2 font-mono-app text-[11px] text-warn">
+            <span>Reemplazás el plan v{current.version} ({current.payload.exercises.length} ejercicios) — ¿confirmar?</span>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setConfirmingOverwrite(false)} className="cursor-pointer text-fg-sec hover:text-fg">
+                CANCELAR
+              </button>
+              <button type="button" onClick={assign} className="cursor-pointer font-bold text-warn hover:text-fg">
+                SÍ, REEMPLAZAR →
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="mt-3 flex items-center gap-3">
           <button
             type="button"
@@ -158,14 +212,21 @@ export function AssignWorkout({ athlete }: { athlete: Athlete }) {
           </button>
           <button
             type="button"
-            onClick={assign}
+            onClick={handleAssignClick}
             disabled={busy}
             className="cursor-pointer bg-volt px-5 py-2 font-mono-app text-[11px] font-extrabold tracking-[1px] text-ink transition hover:brightness-110 disabled:opacity-60"
           >
             {busy ? "..." : "ASIGNAR PLAN →"}
           </button>
           {status && <span className="font-mono-app text-[11px] text-volt">{status}</span>}
-          {error && <span className="font-mono-app text-[11px] text-danger">{error}</span>}
+          {error && (
+            <span className="font-mono-app text-[11px] text-danger">
+              {error}{" "}
+              <button type="button" onClick={assign} className="cursor-pointer underline hover:text-fg">
+                Reintentar
+              </button>
+            </span>
+          )}
         </div>
       </div>
     </div>
