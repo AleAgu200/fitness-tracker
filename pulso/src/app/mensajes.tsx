@@ -13,7 +13,7 @@ import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Label, PressableScale } from '@/components/ui/kit';
-import { C, F, withAlpha } from '@/constants/colors';
+import { F, useColors, withAlpha } from '@/constants/colors';
 import { usePreferences } from '@/context/preferences';
 import { useSession } from '@/context/session';
 import { ChatMessage, fetchMessages, markConversationRead, sendChatMessage } from '@/lib/messages';
@@ -24,6 +24,7 @@ const KIND_LABELS = { coach: 'ENTRENADOR', nutritionist: 'NUTRICIONISTA' } as co
 export default function MensajesScreen() {
   const insets = useSafeAreaInsets();
   const { accent } = usePreferences();
+  const C = useColors();
   const { userId } = useSession();
   const params = useLocalSearchParams<{ with?: string }>();
 

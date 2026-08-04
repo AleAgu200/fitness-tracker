@@ -3,7 +3,7 @@ import { ActivityIndicator, Switch, Text, View } from 'react-native';
 
 import { Card, Label, PressableScale } from '@/components/ui/kit';
 import { TimePickerField } from '@/components/ui/time-picker-field';
-import { C, F, withAlpha } from '@/constants/colors';
+import { F, useColors, withAlpha } from '@/constants/colors';
 import { usePreferences } from '@/context/preferences';
 import { useSession } from '@/context/session';
 import {
@@ -36,6 +36,7 @@ function SettingSwitch({ label, detail, value, onValueChange, accent }: {
   onValueChange: (value: boolean) => void;
   accent: string;
 }) {
+  const C = useColors();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11 }}>
       <View style={{ flex: 1, gap: 3 }}>
@@ -55,6 +56,7 @@ function SettingSwitch({ label, detail, value, onValueChange, accent }: {
 export function NotificationSettings() {
   const { userId } = useSession();
   const { accent } = usePreferences();
+  const C = useColors();
   const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
   const [permission, setPermission] = useState<NotificationPermissionStatus>(NOTIFICATION_PERMISSION.UNDETERMINED);
   const [pushReady, setPushReady] = useState(false);

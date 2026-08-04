@@ -13,17 +13,20 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LightningBackground } from '@/components/ui/lightning-bg';
-import { C, F, withAlpha } from '@/constants/colors';
+import { F, useColors, withAlpha } from '@/constants/colors';
 import { usePreferences } from '@/context/preferences';
 import { useSession } from '@/context/session';
-import { saveAthleteProfile, saveInitialWeight } from '@/db/profile';
+import { startOnboarding } from '@/db/onboarding';
+import { getLatestWeightMeasurement, saveAthleteProfile, saveInitialWeight } from '@/db/profile';
 import { getActiveSession, isUserExistsError, signIn, signUp } from '@/lib/auth';
 import { getInitials } from '@/lib/names';
+import { pushAthleteProfile } from '@/lib/profile-sync';
 
 type Sexo = 'M' | 'F' | 'X';
 const SEX_LABELS: Record<Sexo, string> = { M: 'HOMBRE', F: 'MUJER', X: 'OTRO' };
 
 function SectionHeader({ label, accent }: { label: string; accent: string }) {
+  const C = useColors();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 }}>
       <Text style={{ fontFamily: F.mono, fontSize: 9, letterSpacing: 2, color: accent, textTransform: 'uppercase' }}>
@@ -35,6 +38,7 @@ function SectionHeader({ label, accent }: { label: string; accent: string }) {
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
+  const C = useColors();
   return (
     <Text style={{ fontFamily: F.mono, fontSize: 9, letterSpacing: 1.4, color: C.textTertiary, textTransform: 'uppercase', marginBottom: 7 }}>
       {children}
@@ -45,6 +49,7 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 export default function SignUpScreen() {
   const { refresh } = useSession();
   const { accent } = usePreferences();
+  const C = useColors();
   const insets = useSafeAreaInsets();
 
   const [email, setEmail]           = useState('');
@@ -102,8 +107,31 @@ export default function SignUpScreen() {
         await saveInitialWeight(session.userId, pesoNum);
       }
 
+      // Authentication already succeeded, so keep signup offline-safe if this
+      // opportunistic sync fails; startup sync will retry from local SQLite.
+      try {
+        const measurement = await getLatestWeightMeasurement(session.userId);
+        await pushAthleteProfile({
+          fullName: nombre.trim(),
+          sex: sexo,
+          dateOfBirth: dob.trim() || null,
+          heightCm: heightNum ?? null,
+          goalWeightKg: metaNum ?? null,
+          measurement: measurement
+            ? {
+                id: measurement.id,
+                measuredAt: measurement.measuredAt.getTime(),
+                weightKg: measurement.weightKg,
+              }
+            : undefined,
+        });
+      } catch (syncError) {
+        console.warn('[profile-sync] signup deferred', syncError);
+      }
+
+      await startOnboarding(session.userId);
       await refresh();
-      router.replace('/hoy' as any);
+      router.replace('/' as any);
     } catch (e: unknown) {
       if (isUserExistsError(e)) {
         Alert.alert(

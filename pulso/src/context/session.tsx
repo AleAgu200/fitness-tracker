@@ -29,20 +29,28 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
-    if (state.userId) {
-      try {
-        await unregisterNotificationsForUser(state.userId);
-      } catch (e) {
-        console.warn('[session] push unregister failed', e);
-      }
-    }
-    try {
-      await authSignOut();
-    } catch (e) {
-      // Server unreachable — still sign out locally; the cookie is cleared either way
-      console.warn('[session] remote sign-out failed', e);
-    }
+    const userId = state.userId;
+    // Let route guards and screens react before any network cleanup. Logout
+    // must be immediate even when the server is slow or unavailable.
     setState({ userId: null, sessionId: null, loading: false });
+
+    const cleanups: Promise<void>[] = [];
+    if (userId) {
+      // Start this first so it captures the current cookie before authSignOut
+      // clears local storage. It still completes in parallel with revocation.
+      cleanups.push(
+        unregisterNotificationsForUser(userId).catch((e) => {
+          console.warn('[session] push unregister failed', e);
+        }),
+      );
+    }
+    cleanups.push(
+      authSignOut().catch((e) => {
+        // authSignOut has already cleared the local cookie at this point.
+        console.warn('[session] remote sign-out failed', e);
+      }),
+    );
+    await Promise.all(cleanups);
   }, [state.userId]);
 
   useEffect(() => { refresh(); }, [refresh]);

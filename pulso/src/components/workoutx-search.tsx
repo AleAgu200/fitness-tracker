@@ -4,7 +4,7 @@ import { Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { PressableScale } from '@/components/ui/kit';
-import { C, F, withAlpha } from '@/constants/colors';
+import { F, useColors, withAlpha } from '@/constants/colors';
 import { usePreferences } from '@/context/preferences';
 import { ApiError } from '@/lib/api';
 import { searchWorkoutX, workoutXGifSource, WxSuggestion } from '@/lib/workoutx';
@@ -13,6 +13,7 @@ function WorkoutXResult({ suggestion, onSelect }: {
   suggestion: WxSuggestion;
   onSelect: (suggestion: WxSuggestion) => void;
 }) {
+  const C = useColors();
   const [imageFailed, setImageFailed] = useState(false);
 
   return (
@@ -61,6 +62,7 @@ function WorkoutXResult({ suggestion, onSelect }: {
 
 function SelectedWorkoutXResult({ suggestion }: { suggestion: WxSuggestion }) {
   const { accent } = usePreferences();
+  const C = useColors();
   const [imageFailed, setImageFailed] = useState(false);
 
   return (
@@ -116,6 +118,7 @@ export function WorkoutXSearch({ query, enabled, onSelect }: {
   enabled: boolean;
   onSelect: (suggestion: WxSuggestion) => void;
 }) {
+  const C = useColors();
   const [results, setResults] = useState<WxSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -1,21 +1,85 @@
 import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedBar, Card, GlowPulse, Label, PressableScale } from '@/components/ui/kit';
-import { C, F } from '@/constants/colors';
+import { F, useColors } from '@/constants/colors';
 import { useApp } from '@/context/app-state';
+import { PlanGenerationJob, useOnboardingGeneration } from '@/context/onboarding-generation';
 import { usePreferences } from '@/context/preferences';
 import { displayWeight } from '@/lib/units';
 
 const DIAS  = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
 const MESES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
 
+function formatElapsed(milliseconds: number): string {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1_000));
+  return `${Math.floor(totalSeconds / 60)}:${(totalSeconds % 60).toString().padStart(2, '0')}`;
+}
+
+function generationCopy(job: PlanGenerationJob): { title: string; detail: string; action: string; route: string } {
+  if (job.status === 'succeeded') {
+    return {
+      title: 'Tu plan está listo',
+      detail: `Completado en ${formatElapsed(job.durationMs ?? job.elapsedMs)}. Revisalo antes de aplicarlo.`,
+      action: 'REVISAR Y APLICAR →',
+      route: '/(onboarding)/results',
+    };
+  }
+  if (job.status === 'requires_review') {
+    return {
+      title: 'Tu caso necesita revisión',
+      detail: 'Por seguridad no aplicamos un plan automático. Mirá el detalle y elegí cómo continuar.',
+      action: 'VER DETALLE →',
+      route: '/(onboarding)/generating',
+    };
+  }
+  if (job.status === 'failed') {
+    return {
+      title: 'La generación se detuvo',
+      detail: 'Tus respuestas siguen guardadas. Podés ver el diagnóstico y reintentar.',
+      action: 'VER Y REINTENTAR →',
+      route: '/(onboarding)/generating',
+    };
+  }
+
+  const phase = job.status === 'queued'
+    ? 'Esperando turno'
+    : job.phase === 'preparing'
+      ? 'Preparando datos y catálogos'
+      : job.phase === 'generating'
+        ? job.attempt > 1
+          ? 'La IA está reintentando automáticamente'
+          : 'La IA está creando la propuesta'
+        : 'Validando el resultado';
+  return {
+    title: 'Tu plan se está creando',
+    detail: phase,
+    action: 'VER PROGRESO →',
+    route: '/(onboarding)/generating',
+  };
+}
+
 export default function HoyScreen() {
   const { state } = useApp();
+  const {
+    job: generationJob,
+    connectionIssue,
+    refreshGeneration,
+  } = useOnboardingGeneration();
   const { accent, weightUnit } = usePreferences();
+  const C = useColors();
   const insets = useSafeAreaInsets();
+  const [generationNow, setGenerationNow] = useState(() => Date.now());
+
+  const generationActive = generationJob?.status === 'queued' || generationJob?.status === 'running';
+  useEffect(() => {
+    if (!generationActive) return;
+    const timer = setInterval(() => setGenerationNow(Date.now()), 1_000);
+    return () => clearInterval(timer);
+  }, [generationActive]);
 
   const today = new Date();
   const dateHeader = `${DIAS[today.getDay()]} ${today.getDate()} ${MESES[today.getMonth()]}`;
@@ -46,6 +110,12 @@ export default function HoyScreen() {
     : null;
 
   const hasPlan = state.exercises.length > 0;
+  const generationElapsed = generationJob
+    ? generationActive
+      ? Math.max(generationJob.elapsedMs, generationNow - generationJob.createdAt)
+      : (generationJob.durationMs ?? generationJob.elapsedMs)
+    : 0;
+  const generationStatus = generationJob ? generationCopy(generationJob) : null;
 
   return (
     <ScrollView
@@ -69,6 +139,56 @@ export default function HoyScreen() {
             <Text style={{ fontFamily: F.monoBold, fontSize: 13, color: accent }}>{initials}</Text>
           </View>
         </Animated.View>
+
+        {generationJob && generationStatus && (
+          <Card index={0} style={{ padding: 16, marginBottom: 14, gap: 9, borderColor: C.yellow }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Label>PLAN CON IA</Label>
+              <Text style={{ color: C.yellow, fontFamily: F.monoBold, fontSize: 12 }}>
+                {generationActive ? formatElapsed(generationElapsed) : generationJob.id.slice(0, 8).toUpperCase()}
+              </Text>
+            </View>
+            <Text style={{ color: C.textPrimary, fontFamily: F.groteskMed, fontSize: 18 }}>
+              {generationStatus.title}
+            </Text>
+            <Text style={{ color: C.textSecondary, fontFamily: F.inter, fontSize: 12, lineHeight: 18 }}>
+              {generationStatus.detail}
+            </Text>
+            {connectionIssue && generationActive && (
+              <Text style={{ color: C.orange, fontFamily: F.interMed, fontSize: 11, lineHeight: 17 }}>
+                No pudimos actualizar el estado; reintentamos automáticamente.
+              </Text>
+            )}
+            <PressableScale
+              onPress={() => router.push(generationStatus.route as never)}
+              style={{ marginTop: 3, borderWidth: 1, borderColor: C.yellow, paddingVertical: 10, alignItems: 'center' }}
+            >
+              <Text style={{ color: C.yellow, fontFamily: F.monoBold, fontSize: 10, letterSpacing: 0.5 }}>
+                {generationStatus.action}
+              </Text>
+            </PressableScale>
+          </Card>
+        )}
+
+        {!generationJob && connectionIssue && (
+          <Card index={0} style={{ padding: 16, marginBottom: 14, gap: 9, borderColor: C.orange }}>
+            <Label>ESTADO DEL PLAN</Label>
+            <Text style={{ color: C.textPrimary, fontFamily: F.groteskMed, fontSize: 18 }}>
+              No pudimos consultar el servidor
+            </Text>
+            <Text style={{ color: C.textSecondary, fontFamily: F.inter, fontSize: 12, lineHeight: 18 }}>
+              Reintentamos automáticamente. Si ya había un plan generándose, no se perdió ni se canceló.
+            </Text>
+            <PressableScale
+              onPress={() => void refreshGeneration()}
+              style={{ borderWidth: 1, borderColor: C.orange, paddingVertical: 10, alignItems: 'center' }}
+            >
+              <Text style={{ color: C.orange, fontFamily: F.monoBold, fontSize: 10 }}>
+                REINTENTAR AHORA
+              </Text>
+            </PressableScale>
+          </Card>
+        )}
 
         {/* CARGA DEL DÍA */}
         <Card index={0} style={{ padding: 16, marginBottom: 14 }}>

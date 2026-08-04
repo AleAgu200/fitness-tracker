@@ -5,7 +5,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Card, Label, PressableScale } from '@/components/ui/kit';
-import { C, F } from '@/constants/colors';
+import { F, useColors } from '@/constants/colors';
 import { usePreferences } from '@/context/preferences';
 import { ApiError } from '@/lib/api';
 import { fetchUnread } from '@/lib/messages';
@@ -15,6 +15,7 @@ const KIND_LABELS = { coach: 'ENTRENADOR', nutritionist: 'NUTRICIONISTA' } as co
 
 function TeamSection() {
   const { accent } = usePreferences();
+  const C = useColors();
   const [team, setTeam] = useState<TeamMember[] | null>(null);
   const [unread, setUnread] = useState<Record<string, number>>({});
   const [offline, setOffline] = useState(false);
@@ -162,6 +163,7 @@ function TeamSection() {
 }
 
 export default function EquipoScreen() {
+  const C = useColors();
   const insets = useSafeAreaInsets();
 
   return (

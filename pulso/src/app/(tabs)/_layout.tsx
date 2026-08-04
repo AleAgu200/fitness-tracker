@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { ColorValue } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
-import { C, F } from '@/constants/colors';
+import { F, useColors } from '@/constants/colors';
 import { usePreferences } from '@/context/preferences';
 import { useSession } from '@/context/session';
 
@@ -33,6 +33,7 @@ function TabIcon({ color, name, focused }: { color: ColorValue; name: IconName; 
 export default function TabsLayout() {
   const { userId, loading } = useSession();
   const { accent } = usePreferences();
+  const C = useColors();
 
   // Signing out (or an expired session) kicks the user back to the login
   if (!loading && !userId) {

@@ -4,7 +4,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Card, Label, PressableScale } from '@/components/ui/kit';
-import { C, F } from '@/constants/colors';
+import { F, useColors } from '@/constants/colors';
 import { useApp } from '@/context/app-state';
 import { usePreferences } from '@/context/preferences';
 
@@ -19,6 +19,7 @@ const NAV_ROWS: { key: string; label: string; detail: string; href: string }[] =
 export default function PerfilScreen() {
   const { state } = useApp();
   const { accent } = usePreferences();
+  const C = useColors();
   const insets = useSafeAreaInsets();
 
   const name     = state.profile?.name     || 'Atleta';

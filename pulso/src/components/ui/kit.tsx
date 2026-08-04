@@ -13,11 +13,12 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { C, F } from '@/constants/colors';
+import { F, useColors } from '@/constants/colors';
 
 // ── typography ───────────────────────────────────────────────────────────────
 
 export function Label({ children, style }: { children: React.ReactNode; style?: object }) {
+  const C = useColors();
   return (
     <Text style={{ fontFamily: F.mono, fontSize: 9, letterSpacing: 1.4, color: C.textTertiary, textTransform: 'uppercase', ...style }}>
       {children}
@@ -33,6 +34,7 @@ export function Card({ children, style, index = 0 }: {
   style?: ViewStyle;
   index?: number;
 }) {
+  const C = useColors();
   return (
     <Animated.View
       entering={FadeInDown.duration(280).delay(index * 50).easing(Easing.out(Easing.cubic))}
@@ -139,6 +141,7 @@ export function AnimatedBar({ fill, color, height = 8, duration = 500 }: {
   height?: number;
   duration?: number;
 }) {
+  const C = useColors();
   const w = useSharedValue(0);
 
   useEffect(() => {

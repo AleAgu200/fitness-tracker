@@ -1,17 +1,24 @@
 import { Text, View } from 'react-native';
 
 import { Card, Label, PressableScale } from '@/components/ui/kit';
-import { C, F } from '@/constants/colors';
+import { F, useColors } from '@/constants/colors';
 import { usePreferences } from '@/context/preferences';
-import { ACCENT_PRESETS } from '@/lib/settings';
+import { ACCENT_PRESETS, ThemeMode } from '@/lib/settings';
 
 const UNIT_OPTIONS = [
   { value: 'kg' as const, label: 'KG' },
   { value: 'lb' as const, label: 'LB' },
 ];
 
+const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
+  { value: 'system', label: 'SISTEMA' },
+  { value: 'light', label: 'CLARO' },
+  { value: 'dark', label: 'OSCURO' },
+];
+
 export function PreferencesSettings() {
-  const { accent, weightUnit, setAccent, setWeightUnit } = usePreferences();
+  const { accent, weightUnit, themeMode, setAccent, setWeightUnit, setThemeMode } = usePreferences();
+  const C = useColors();
 
   return (
     <Card index={6} style={{ padding: 14, marginBottom: 14 }}>
@@ -44,6 +51,39 @@ export function PreferencesSettings() {
                 }}
               >
                 <Text style={{ fontFamily: F.monoBold, fontSize: 11, letterSpacing: 0.4, color: selected ? accent : C.textTertiary }}>
+                  {option.label}
+                </Text>
+              </PressableScale>
+            );
+          })}
+        </View>
+      </View>
+
+      <View style={{ paddingVertical: 12, gap: 10, borderBottomWidth: 1, borderBottomColor: C.border }}>
+        <View style={{ gap: 3 }}>
+          <Text style={{ fontFamily: F.interSemi, fontSize: 13, color: C.textPrimary }}>Apariencia</Text>
+          <Text style={{ fontFamily: F.inter, fontSize: 11, lineHeight: 16, color: C.textTertiary }}>
+            Sistema sigue el ajuste del teléfono.
+          </Text>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          {THEME_OPTIONS.map(option => {
+            const selected = themeMode === option.value;
+            return (
+              <PressableScale
+                key={option.value}
+                onPress={() => setThemeMode(option.value)}
+                style={{
+                  flex: 1,
+                  height: 38,
+                  borderWidth: 1,
+                  borderColor: selected ? accent : C.border,
+                  backgroundColor: selected ? `${accent}22` : C.bgEl,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ fontFamily: F.monoBold, fontSize: 10, letterSpacing: 0.3, color: selected ? accent : C.textTertiary }}>
                   {option.label}
                 </Text>
               </PressableScale>

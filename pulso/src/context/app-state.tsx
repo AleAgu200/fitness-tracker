@@ -32,6 +32,7 @@ import {
   setTodayWater,
   updateMealSlot,
 } from '@/db/nutrition';
+import { ExercisePlanValues } from '@/components/exercise-plan-form';
 import {
   addPlanExercise,
   applySuggestedPlan as dbApplySuggestedPlan,
@@ -39,7 +40,8 @@ import {
   getPlan,
   updatePlanExercise,
 } from '@/db/plan';
-import { getAthleteProfile, saveAthleteProfile } from '@/db/profile';
+import { getAthleteProfile, getLatestWeightMeasurement, saveAthleteProfile } from '@/db/profile';
+import { weekdayOf } from '@/lib/dates';
 import { getInitials } from '@/lib/names';
 import {
   finishSession as dbFinishSession,
@@ -53,13 +55,14 @@ import {
 import { CLEARED_REST_STATE, loadRestTimerState, RestTimerState, saveRestTimerState } from '@/lib/rest-timer-store';
 import { addWidgetRestListener } from '@/modules/pulso-widget';
 import { getStoredAssignmentMeta, syncAssignments } from '@/lib/sync';
+import { pushAthleteProfile, syncAthleteProfile } from '@/lib/profile-sync';
 import { formatWeight } from '@/lib/units';
 import { usePreferences } from './preferences';
 import { useSession } from './session';
 
 export type MealStatus = 'cumplido' | 'sustituido' | 'pendiente';
 export type MetricKey = 'peso' | 'grasa' | 'musculo';
-export type { WeekDay, MetricPoint, ProgressPhoto, PreviousExerciseSession, PRHistoryItem };
+export type { WeekDay, MetricPoint, ProgressPhoto, PreviousExerciseSession, PRHistoryItem, ExercisePlanValues };
 
 const STATUS_TO_DB: Record<MealStatus, MealStatusDb> = {
   cumplido: 'completed',
@@ -158,7 +161,7 @@ export interface AppState {
   editingMealId: string | null;
   mealDraft: MealDraftUI;
 
-  // workout
+  // workout — always today's plan (see components/other-day-plan-editor for other days)
   exercises: Exercise[];
   exIndex: number;
   log: Record<string, ExerciseSet[]>;
@@ -170,7 +173,6 @@ export interface AppState {
   curRpe: number;
   editingEx: boolean;
   addingEx: boolean;
-  draft: { nombre: string; target: number; reps: number; peso: number; step: number };
   restActive: boolean;
   restLeft: number;
   restTotal: number;
@@ -215,7 +217,6 @@ const initialState: AppState = {
   curRpe: 8,
   editingEx: false,
   addingEx: false,
-  draft: { nombre: '', target: 3, reps: 8, peso: 0, step: 2.5 },
   restActive: false,
   restLeft: REST_DEFAULT,
   restTotal: REST_DEFAULT,
@@ -230,7 +231,8 @@ const initialState: AppState = {
 interface AppContextValue {
   state: AppState;
   // profile
-  saveProfile: (data: ProfileData) => void;
+  saveProfile: (data: ProfileData) => Promise<void>;
+  reloadAll: () => Promise<void>;
   // nutrition
   setMeal: (id: string, st: MealStatus) => void;
   setMealNote: (id: string, txt: string) => void;
@@ -254,9 +256,8 @@ interface AppContextValue {
   startEditEx: () => void;
   startAddEx: () => void;
   cancelExForm: () => void;
-  setDraft: (f: keyof AppState['draft'], v: string | number) => void;
-  saveEditEx: () => void;
-  saveAddEx: () => void;
+  saveEditEx: (values: ExercisePlanValues) => void;
+  saveAddEx: (values: ExercisePlanValues) => void;
   deleteEx: () => void;
   addRest: () => void;
   reduceRest: () => void;
@@ -311,15 +312,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
+        try {
+          await syncAthleteProfile(userId);
+        } catch (error) {
+          console.warn('[profile-sync] startup deferred', error);
+        }
+        if (cancelled) return;
+
+        const todayWeekday = weekdayOf(new Date());
         // Plan/meal-plan first: assignments from coach/nutritionist may replace them
-        let [plan, mealPlan] = await Promise.all([getPlan(userId), getMealPlan(userId)]);
+        let [plan, mealPlan] = await Promise.all([getPlan(userId, todayWeekday), getMealPlan(userId)]);
         let assignedWorkoutBy: string | null = null;
         let assignedMealsBy: string | null = null;
         try {
           const sync = await syncAssignments(userId, plan.templateId, mealPlan.mealPlanId);
           assignedWorkoutBy = sync.workoutBy;
           assignedMealsBy = sync.mealsBy;
-          if (sync.workoutChanged) plan = await getPlan(userId);
+          if (sync.workoutChanged) plan = await getPlan(userId, todayWeekday);
           if (sync.mealsChanged) mealPlan = await getMealPlan(userId);
         } catch {
           // Offline — keep last-known assignment authors for attribution banners
@@ -495,7 +504,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const reloadPlan = useCallback(async () => {
     const uid = userRef.current;
     if (!uid) return;
-    const plan = await getPlan(uid);
+    const plan = await getPlan(uid, weekdayOf(new Date()));
     templateIdRef.current = plan.templateId;
     const previousPairs = await Promise.all(plan.exercises.map(async exercise => [
       exercise.exerciseId,
@@ -542,9 +551,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, meals: mealPlan.meals }));
   }, []);
 
+  const reloadProfile = useCallback(async () => {
+    const uid = userRef.current;
+    if (!uid) return;
+    const profile = await getAthleteProfile(uid);
+    setState(s => ({
+      ...s,
+      profile: profile
+        ? {
+            name: profile.fullName,
+            initials: profile.initials,
+            firstName: profile.fullName.split(' ')[0],
+          }
+        : null,
+      profileData: profile
+        ? {
+            fullName: profile.fullName,
+            sex: profile.sex,
+            dateOfBirth: profile.dateOfBirth,
+            heightCm: profile.heightCm,
+            goalWeightKg: profile.goalWeightKg,
+          }
+        : null,
+      goalWeightKg: profile?.goalWeightKg ?? null,
+    }));
+  }, []);
+
+  const reloadAll = useCallback(async () => {
+    await Promise.all([
+      reloadPlan(),
+      reloadMeals(),
+      refreshDerived(),
+      reloadProfile(),
+    ]);
+  }, [refreshDerived, reloadMeals, reloadPlan, reloadProfile]);
+
   // ── profile actions ───────────────────────────────────────────────────────
 
-  const saveProfile = useCallback((data: ProfileData) => {
+  const saveProfile = useCallback(async (data: ProfileData): Promise<void> => {
     const uid = userRef.current;
     if (!uid || !data.fullName.trim()) return;
     const fullName = data.fullName.trim();
@@ -555,14 +599,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       profileData: { ...data, fullName },
       goalWeightKg: data.goalWeightKg,
     }));
-    saveAthleteProfile(uid, {
+    await saveAthleteProfile(uid, {
       fullName,
       initials,
       sex: data.sex ?? undefined,
       dateOfBirth: data.dateOfBirth ?? undefined,
       heightCm: data.heightCm ?? undefined,
       goalWeightKg: data.goalWeightKg ?? undefined,
-    }).catch(e => console.error('[profile-save]', e));
+    });
+    try {
+      const measurement = await getLatestWeightMeasurement(uid);
+      await pushAthleteProfile({
+        fullName,
+        sex: data.sex,
+        dateOfBirth: data.dateOfBirth,
+        heightCm: data.heightCm,
+        goalWeightKg: data.goalWeightKg,
+        measurement: measurement
+          ? {
+              id: measurement.id,
+              measuredAt: measurement.measuredAt.getTime(),
+              weightKg: measurement.weightKg,
+            }
+          : undefined,
+      });
+    } catch (error) {
+      // Local SQLite remains authoritative while offline; startup sync retries.
+      console.warn('[profile-sync] save deferred', error);
+    }
   }, []);
 
   // ── nutrition actions ─────────────────────────────────────────────────────
@@ -825,33 +889,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [reloadPlan]);
 
   const startEditEx = useCallback(() =>
-    setState(s => {
-      const e = s.exercises[s.exIndex];
-      if (!e) return s;
-      return { ...s, editingEx: true, addingEx: false, draft: { nombre: e.nombre, target: e.target, reps: e.reps, peso: e.peso, step: e.step } };
-    }), []);
+    setState(s => ({ ...s, editingEx: true, addingEx: false })), []);
 
   const startAddEx = useCallback(() =>
-    setState(s => ({ ...s, addingEx: true, editingEx: false, draft: { nombre: '', target: 3, reps: 8, peso: 0, step: 2.5 } })), []);
+    setState(s => ({ ...s, addingEx: true, editingEx: false })), []);
 
   const cancelExForm = useCallback(() =>
     setState(s => ({ ...s, editingEx: false, addingEx: false })), []);
 
-  const setDraft = useCallback((f: keyof AppState['draft'], v: string | number) =>
-    setState(s => ({ ...s, draft: { ...s.draft, [f]: v } })), []);
-
-  const saveEditEx = useCallback(() => {
+  const saveEditEx = useCallback((values: ExercisePlanValues) => {
     const s = stateRef.current;
     const uid = userRef.current;
     const cur = s.exercises[s.exIndex];
     if (!cur || !uid) return;
-    const d = s.draft;
     const data = {
-      nombre: String(d.nombre).trim() || cur.nombre,
-      target: Math.max(1, +d.target || 1),
-      reps: Math.max(1, +d.reps || 1),
-      peso: Math.max(0, +d.peso || 0),
-      step: +d.step || 2.5,
+      nombre: values.nombre.trim() || cur.nombre,
+      target: Math.max(1, values.target || 1),
+      reps: Math.max(1, values.reps || 1),
+      peso: Math.max(0, values.peso || 0),
+      step: values.step || 2.5,
     };
     setState(st => ({ ...st, editingEx: false }));
     updatePlanExercise(uid, cur.id, data)
@@ -859,22 +915,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       .catch(e => console.error('[plan-edit]', e));
   }, [reloadPlan]);
 
-  const saveAddEx = useCallback(() => {
-    const s = stateRef.current;
+  const saveAddEx = useCallback((values: ExercisePlanValues) => {
     const uid = userRef.current;
     const templateId = templateIdRef.current;
-    const d = s.draft;
     if (!uid || !templateId) return;
-    if (!String(d.nombre).trim()) {
+    if (!values.nombre.trim()) {
       setState(st => ({ ...st, addingEx: false }));
       return;
     }
     const data = {
-      nombre: String(d.nombre).trim(),
-      target: Math.max(1, +d.target || 1),
-      reps: Math.max(1, +d.reps || 1),
-      peso: Math.max(0, +d.peso || 0),
-      step: +d.step || 2.5,
+      nombre: values.nombre.trim(),
+      target: Math.max(1, values.target || 1),
+      reps: Math.max(1, values.reps || 1),
+      peso: Math.max(0, values.peso || 0),
+      step: values.step || 2.5,
     };
     setState(st => ({ ...st, addingEx: false }));
     addPlanExercise(uid, templateId, data)
@@ -1000,12 +1054,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   return (
     <AppContext.Provider value={{
       state,
-      saveProfile,
+      saveProfile, reloadAll,
       setMeal, setMealNote, setWater,
       startAddMeal, startEditMeal, cancelMealForm, setMealDraft, saveMealForm, deleteMeal,
       selectEx, incPeso, decPeso, incReps, decReps, setRpe, guardarSet,
       finishWorkout, applySuggestedPlan,
-      startEditEx, startAddEx, cancelExForm, setDraft, saveEditEx, saveAddEx, deleteEx,
+      startEditEx, startAddEx, cancelExForm, saveEditEx, saveAddEx, deleteEx,
       addRest, reduceRest, skipRest, dismissPrFlash,
       addRecommendedExercise,
       setMetric, incWeighIn, decWeighIn, registrarPeso, addProgressPhoto,

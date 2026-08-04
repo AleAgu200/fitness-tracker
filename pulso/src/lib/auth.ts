@@ -51,10 +51,15 @@ export async function getActiveSession() {
 }
 
 export async function signOut() {
+  // Start server revocation while the in-memory cookie is still available,
+  // then clear the device session immediately so offline logout still works.
   try {
-    await authClient.signOut();
+    const remoteSignOut = authClient.signOut();
+    await clearStoredCookie();
+    await remoteSignOut;
   } finally {
-    // Always drop the stored cookie, even if the server call failed
+    // The response hook may observe Better Auth's expired Set-Cookie header.
+    // Clear again so no empty or stale cookie is restored on next launch.
     await clearStoredCookie();
   }
 }

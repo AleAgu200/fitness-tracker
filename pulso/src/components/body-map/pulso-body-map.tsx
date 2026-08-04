@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react';
 import { Path } from 'react-native-svg';
 
-import { C } from '@/constants/colors';
+import { ColorTokens, useColors } from '@/constants/colors';
 import { usePreferences } from '@/context/preferences';
 
 import { bodyBack } from './vendor/body-back';
@@ -105,7 +105,7 @@ export function getAvailableMuscles(gender: BodyGender, side: BodySide): MuscleD
     });
 }
 
-function fillForSignal(signal: MuscleSignal | undefined, selected: boolean, accent: string): string {
+function fillForSignal(signal: MuscleSignal | undefined, selected: boolean, accent: string, C: ColorTokens): string {
   if (selected) return accent;
   if (!signal) return C.border;
   if (signal.discomfort) return C.red;
@@ -126,6 +126,7 @@ function PulsoBodyMapComponent({
   onMusclePress,
 }: PulsoBodyMapProps) {
   const { accent } = usePreferences();
+  const C = useColors();
   const source = sourceFor(gender, side);
   const Wrapper = gender === 'female' ? SvgFemaleWrapper : SvgMaleWrapper;
 
@@ -145,7 +146,7 @@ function PulsoBodyMapComponent({
         const signal = broadSignal && detailedLoad != null
           ? { ...broadSignal, load: detailedLoad, selected: false }
           : broadSignal;
-        const fill = fillForSignal(signal, selected, accent);
+        const fill = fillForSignal(signal, selected, accent, C);
         return (part.pathArray ?? []).map((path, index) => (
           <Path
             key={`${part.slug}-${index}`}

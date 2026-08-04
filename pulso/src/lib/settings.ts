@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 
 export type WeightUnit = 'kg' | 'lb';
+export type ThemeMode = 'system' | 'light' | 'dark';
 
 export const ACCENT_PRESETS = [
   { key: 'yellow', label: 'Amarillo', hex: '#E8FF59' },
@@ -13,9 +14,11 @@ export const ACCENT_PRESETS = [
 
 export const DEFAULT_ACCENT = ACCENT_PRESETS[0].hex;
 export const DEFAULT_WEIGHT_UNIT: WeightUnit = 'kg';
+export const DEFAULT_THEME_MODE: ThemeMode = 'system';
 
 const weightUnitKey = 'pulso_weight_unit';
 const accentColorKey = 'pulso_accent_color';
+const themeModeKey = 'pulso_theme_mode';
 
 export async function loadWeightUnit(): Promise<WeightUnit> {
   const saved = await SecureStore.getItemAsync(weightUnitKey);
@@ -34,4 +37,13 @@ export async function loadAccentColor(): Promise<string> {
 
 export async function setAccentColor(hex: string): Promise<void> {
   await SecureStore.setItemAsync(accentColorKey, hex);
+}
+
+export async function loadThemeMode(): Promise<ThemeMode> {
+  const saved = await SecureStore.getItemAsync(themeModeKey);
+  return saved === 'light' || saved === 'dark' ? saved : DEFAULT_THEME_MODE;
+}
+
+export async function setThemeMode(mode: ThemeMode): Promise<void> {
+  await SecureStore.setItemAsync(themeModeKey, mode);
 }

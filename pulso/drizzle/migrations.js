@@ -4,13 +4,17 @@ import journal from './meta/_journal.json';
 import m0000 from './0000_wonderful_big_bertha.sql';
 import m0001 from './0001_good_miek.sql';
 import m0002 from './0002_lucky_supreme_intelligence.sql';
+import m0003 from './0003_calm_shinko_yamashiro.sql';
+import m0004 from './0004_cuddly_greymalkin.sql';
 
   export default {
     journal,
     migrations: {
       m0000,
 m0001,
-m0002
+m0002,
+m0003,
+m0004
     }
   }
   

@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card, Label, PressableScale } from '@/components/ui/kit';
 import { NotificationSettings } from '@/components/notification-settings';
 import { PreferencesSettings } from '@/components/preferences-settings';
-import { C, F, withAlpha } from '@/constants/colors';
+import { F, useColors, withAlpha } from '@/constants/colors';
 import { useApp } from '@/context/app-state';
 import { usePreferences } from '@/context/preferences';
 import { useSession } from '@/context/session';
@@ -26,6 +26,7 @@ function formatDob(text: string): string {
 function ProfileSection() {
   const { state, saveProfile } = useApp();
   const { accent, weightUnit } = usePreferences();
+  const C = useColors();
   const [editing, setEditing] = useState(false);
   const [nombre, setNombre] = useState('');
   const [sexo, setSexo] = useState<Sexo | null>(null);
@@ -47,13 +48,13 @@ function ProfileSection() {
   function save() {
     if (!nombre.trim()) return;
     const metaValue = parseFloat(meta);
-    saveProfile({
+    void saveProfile({
       fullName: nombre,
       sex: sexo,
       dateOfBirth: dob.trim() || null,
       heightCm: parseFloat(altura) || null,
       goalWeightKg: Number.isFinite(metaValue) ? toKg(metaValue, weightUnit) : null,
-    });
+    }).catch(error => console.error('[profile-save]', error));
     setEditing(false);
   }
 
@@ -168,7 +169,18 @@ function ProfileSection() {
 
 export default function ConfiguracionScreen() {
   const { signOut } = useSession();
+  const C = useColors();
   const insets = useSafeAreaInsets();
+  const [signingOut, setSigningOut] = useState(false);
+
+  function handleSignOut() {
+    if (signingOut) return;
+    setSigningOut(true);
+    // SessionProvider clears local state synchronously. Leave this root-level
+    // screen now instead of waiting for remote cleanup to finish.
+    void signOut();
+    router.replace('/(auth)/login' as any);
+  }
 
   return (
     <ScrollView
@@ -199,11 +211,14 @@ export default function ConfiguracionScreen() {
         <View style={{ marginTop: 4 }}>
           <Label style={{ marginBottom: 9 }}>CUENTA</Label>
           <PressableScale
-            onPress={signOut}
+            onPress={handleSignOut}
+            disabled={signingOut}
             haptic="medium"
             style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: C.card, borderWidth: 1, borderColor: C.border, padding: 14, paddingHorizontal: 16 }}
           >
-            <Text style={{ fontFamily: F.interSemi, fontSize: 14, color: C.red }}>Cerrar sesión</Text>
+            <Text style={{ fontFamily: F.interSemi, fontSize: 14, color: C.red }}>
+              {signingOut ? 'Cerrando sesión…' : 'Cerrar sesión'}
+            </Text>
             <Text style={{ fontFamily: F.mono, fontSize: 12, color: C.red }}>→</Text>
           </PressableScale>
         </View>

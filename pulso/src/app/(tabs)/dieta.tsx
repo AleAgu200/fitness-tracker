@@ -4,7 +4,7 @@ import Animated, { Easing, FadeIn, FadeInDown, LinearTransition, useAnimatedStyl
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedBar, Card, Label, PressableScale } from '@/components/ui/kit';
-import { C, F } from '@/constants/colors';
+import { ColorTokens, F, useColors } from '@/constants/colors';
 import { Meal, MealStatus, useApp } from '@/context/app-state';
 import { usePreferences } from '@/context/preferences';
 
@@ -12,6 +12,7 @@ const WATER_MAX = 10;
 
 /** Horizontal canteen with a liquid fill; turns into an "energy drink" color once full. */
 function HydrationBottle({ level, max }: { level: number; max: number }) {
+  const C = useColors();
   const full = level >= max;
   const fill = useSharedValue(0);
 
@@ -37,7 +38,7 @@ function HydrationBottle({ level, max }: { level: number; max: number }) {
   );
 }
 
-function statusColor(s: MealStatus | undefined, accent: string) {
+function statusColor(s: MealStatus | undefined, accent: string, C: ColorTokens) {
   if (s === 'cumplido')   return accent;
   if (s === 'sustituido') return C.cyan;
   return C.textTertiary;
@@ -52,8 +53,9 @@ function statusLabel(s: MealStatus | undefined) {
 function MealCard({ m, index }: { m: Meal; index: number }) {
   const { state, setMeal, setMealNote, startEditMeal } = useApp();
   const { accent } = usePreferences();
+  const C = useColors();
   const s = state.mealStatus[m.id] as MealStatus | undefined;
-  const sc = statusColor(s, accent);
+  const sc = statusColor(s, accent, C);
   const sl = statusLabel(s);
   const note = state.mealNotes[m.id] || '';
 
@@ -119,6 +121,7 @@ function MealCard({ m, index }: { m: Meal; index: number }) {
 
 function MealForm() {
   const { state, cancelMealForm, setMealDraft, saveMealForm, deleteMeal } = useApp();
+  const C = useColors();
   const d = state.mealDraft;
   const editing = state.editingMealId != null;
 
@@ -200,6 +203,7 @@ function MealForm() {
 export default function DietaScreen() {
   const { state, setWater, startAddMeal } = useApp();
   const { accent } = usePreferences();
+  const C = useColors();
   const insets = useSafeAreaInsets();
 
   const hasPlan = state.meals.length > 0;

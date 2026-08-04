@@ -22,6 +22,20 @@
       "when": 1783362256736,
       "tag": "0002_lucky_supreme_intelligence",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1785861447785,
+      "tag": "0003_calm_shinko_yamashiro",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1785865479113,
+      "tag": "0004_cuddly_greymalkin",
+      "breakpoints": true
     }
   ]
 }

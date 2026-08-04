@@ -14,12 +14,19 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiFetch<T>(path: string, options?: { method?: 'GET' | 'POST'; body?: unknown; signal?: AbortSignal }): Promise<T> {
+export async function apiFetch<T>(path: string, options?: {
+  method?: 'GET' | 'POST';
+  body?: unknown;
+  signal?: AbortSignal;
+  /** Optional captured auth headers for requests that must survive local logout cleanup. */
+  headers?: Record<string, string>;
+}): Promise<T> {
   const res = await fetch(`${SERVER_URL}${path}`, {
     method: options?.method ?? 'GET',
     signal: options?.signal,
     headers: {
       ...getAuthHeaders(),
+      ...options?.headers,
       ...(options?.body !== undefined ? { 'content-type': 'application/json' } : {}),
     },
     body: options?.body !== undefined ? JSON.stringify(options.body) : undefined,

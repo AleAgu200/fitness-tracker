@@ -13,7 +13,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Polyline } from 'react-native-svg';
 
-import { C } from '@/constants/colors';
+import { BRAND } from '@/constants/colors';
 import { usePreferences } from '@/context/preferences';
 
 // Full-screen bolts in a normalized 0–100 space, stretched to the viewport.
@@ -31,11 +31,11 @@ function boltsFor(accent: string): BoltSpec[] {
     // top-left → bottom-right
     { points: '16,-5 30,20 23,27 44,52 37,59 62,86 55,105', color: accent, delay: 0, rest: 3600, peak: 0.65 },
     // top-right → bottom-left
-    { points: '84,-5 68,22 76,30 50,56 58,64 30,90 36,105', color: C.cyan, delay: 1400, rest: 4400, peak: 0.5 },
+    { points: '84,-5 68,22 76,30 50,56 58,64 30,90 36,105', color: BRAND.cyan, delay: 1400, rest: 4400, peak: 0.5 },
     // center, near-vertical
     { points: '46,-5 56,24 47,32 60,58 51,66 63,105', color: accent, delay: 2600, rest: 5200, peak: 0.45 },
     // far left, steep
-    { points: '4,-5 14,30 8,38 20,70 13,78 22,105', color: C.cyan, delay: 3400, rest: 4800, peak: 0.4 },
+    { points: '4,-5 14,30 8,38 20,70 13,78 22,105', color: BRAND.cyan, delay: 3400, rest: 4800, peak: 0.4 },
   ];
 }
 

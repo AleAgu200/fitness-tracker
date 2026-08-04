@@ -7,15 +7,15 @@ import Animated, { Easing, FadeIn, FadeInDown, useAnimatedStyle, useSharedValue,
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Card, GlowPulse, Label, PressableScale } from '@/components/ui/kit';
-import { C, F, withAlpha } from '@/constants/colors';
+import { BRAND, ColorTokens, F, useColors, withAlpha } from '@/constants/colors';
 import { MetricKey, useApp } from '@/context/app-state';
 import { usePreferences } from '@/context/preferences';
 import { displayWeight, formatWeight } from '@/lib/units';
 
 const METRICS: { key: MetricKey; label: string; unit: string; color: string }[] = [
-  { key: 'peso',    label: 'PESO',    unit: 'kg', color: C.yellow },
-  { key: 'grasa',   label: 'GRASA',   unit: '%',  color: C.red },
-  { key: 'musculo', label: 'MÚSCULO', unit: '%',  color: C.cyan },
+  { key: 'peso',    label: 'PESO',    unit: 'kg', color: BRAND.yellow },
+  { key: 'grasa',   label: 'GRASA',   unit: '%',  color: BRAND.red },
+  { key: 'musculo', label: 'MÚSCULO', unit: '%',  color: BRAND.cyan },
 ];
 
 const ALL_BADGES = [
@@ -28,6 +28,7 @@ const ALL_BADGES = [
 ];
 
 function EmptyChart({ label }: { label: string }) {
+  const C = useColors();
   return (
     <View style={{ height: 96, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.border, borderStyle: 'dashed' }}>
       <Text style={{ fontFamily: F.mono, fontSize: 10, color: C.textTertiary }}>
@@ -47,20 +48,21 @@ function VBar({ pct, color }: { pct: number; color: string }) {
   return <Animated.View style={[{ width: '100%', backgroundColor: color }, style]} />;
 }
 
-function heatColor(v: number, accent: string) {
+function heatColor(v: number, accent: string, C: ColorTokens) {
   if (v === 0) return C.bgEl;
   if (v === 1) return withAlpha(accent, 0.3);
   if (v === 2) return withAlpha(accent, 0.6);
   return accent;
 }
 
-function heatBorder(v: number) {
+function heatBorder(v: number, C: ColorTokens) {
   return v === 0 ? C.border : 'transparent';
 }
 
 export default function ProgresoScreen() {
   const { state, setMetric, incWeighIn, decWeighIn, registrarPeso, addProgressPhoto } = useApp();
   const { accent, weightUnit } = usePreferences();
+  const C = useColors();
   const insets = useSafeAreaInsets();
 
   const colorFor = (m: (typeof METRICS)[number]) => m.key === 'peso' ? accent : m.color;
@@ -319,8 +321,8 @@ export default function ProgresoScreen() {
                     key={di}
                     style={{
                       aspectRatio: 1,
-                      backgroundColor: heatColor(cell, accent),
-                      borderWidth: 1, borderColor: heatBorder(cell),
+                      backgroundColor: heatColor(cell, accent, C),
+                      borderWidth: 1, borderColor: heatBorder(cell, C),
                     }}
                   />
                 ))}
@@ -330,7 +332,7 @@ export default function ProgresoScreen() {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>
             <Label>menos</Label>
             {[0, 1, 2, 3].map(v => (
-              <View key={v} style={{ width: 11, height: 11, backgroundColor: heatColor(v, accent), borderWidth: 1, borderColor: heatBorder(v) }} />
+              <View key={v} style={{ width: 11, height: 11, backgroundColor: heatColor(v, accent, C), borderWidth: 1, borderColor: heatBorder(v, C) }} />
             ))}
             <Label>más</Label>
           </View>

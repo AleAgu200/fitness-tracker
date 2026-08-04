@@ -20,7 +20,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { LightningBackground, LightningHandle } from '@/components/ui/lightning-bg';
-import { C, F } from '@/constants/colors';
+import { F, useColors } from '@/constants/colors';
 import { usePreferences } from '@/context/preferences';
 import { useSession } from '@/context/session';
 import { signIn } from '@/lib/auth';
@@ -28,6 +28,7 @@ import { signIn } from '@/lib/auth';
 export default function LoginScreen() {
   const { refresh } = useSession();
   const { accent } = usePreferences();
+  const C = useColors();
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading]   = useState(false);
@@ -95,7 +96,7 @@ export default function LoginScreen() {
       lightningRef.current?.flashAll(accent, 300);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      timers.current.push(setTimeout(() => router.replace('/hoy' as any), 260));
+      timers.current.push(setTimeout(() => router.replace('/' as any), 260));
     } catch (e: unknown) {
       cancelAnimation(flicker);
       flicker.value = 1;

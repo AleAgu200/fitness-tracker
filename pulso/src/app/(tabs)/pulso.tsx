@@ -5,7 +5,7 @@ import { ScrollView, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedBar, Card, GlowPulse, Label, PressableScale } from '@/components/ui/kit';
-import { C, F, withAlpha } from '@/constants/colors';
+import { F, useColors, withAlpha } from '@/constants/colors';
 import { useApp } from '@/context/app-state';
 import { usePreferences } from '@/context/preferences';
 import { displayWeight } from '@/lib/units';
@@ -24,6 +24,7 @@ const TEAM_SHARE_KEY = 'pulso_team_progress_sharing';
 export default function PulsoScreen() {
   const { state } = useApp();
   const { accent, weightUnit } = usePreferences();
+  const C = useColors();
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<PulseTab>('core');
   const [shareWithTeam, setShareWithTeam] = useState(false);

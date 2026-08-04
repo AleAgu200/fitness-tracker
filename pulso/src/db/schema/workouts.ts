@@ -67,6 +67,9 @@ export const workoutTemplates = sqliteTable('workout_templates', {
                    enum: ['full_body', 'upper', 'lower', 'push', 'pull', 'legs'],
                  }),
   templateOrder: integer('template_order'),
+  // 1 = Monday .. 7 = Sunday; null = not tied to a specific day (legacy single-plan
+  // templates, and the pre-weekly-plan fallback shown until a day gets its own template)
+  weekday:       integer('weekday'),
   createdAt:     integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 });
 

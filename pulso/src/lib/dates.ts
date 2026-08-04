@@ -28,3 +28,20 @@ export function mondayOf(d: Date): Date {
   const dow = (c.getDay() + 6) % 7; // 0 = Monday
   return addDays(c, -dow);
 }
+
+/** 1 = Sunday .. 7 = Saturday — matches trainingDays in lib/notifications.ts and
+ *  workout_templates.weekday, so this is the one convention for "day of week" in the app. */
+export function weekdayOf(d: Date): number {
+  return d.getDay() + 1;
+}
+
+/** Monday-first display order using the weekdayOf() numbering above */
+export const WEEKDAY_DISPLAY_ORDER = [2, 3, 4, 5, 6, 7, 1];
+
+export const WEEKDAY_LABELS: Record<number, string> = {
+  1: 'DOM', 2: 'LUN', 3: 'MAR', 4: 'MIÉ', 5: 'JUE', 6: 'VIE', 7: 'SÁB',
+};
+
+export const WEEKDAY_SHORT_LABELS: Record<number, string> = {
+  1: 'D', 2: 'L', 3: 'M', 4: 'X', 5: 'J', 6: 'V', 7: 'S',
+};

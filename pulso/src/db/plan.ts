@@ -1,7 +1,7 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 
 import { nanoid } from '@/lib/id';
-import { todayStr } from '@/lib/dates';
+import { todayStr, WEEKDAY_LABELS } from '@/lib/dates';
 import { db } from './index';
 import {
   exercises,
@@ -24,18 +24,15 @@ export interface PlanExercise {
   muscleGroup: 'chest' | 'back' | 'legs' | 'shoulders' | 'arms' | 'core' | 'full' | null;
 }
 
-async function getOrCreateTemplate(athleteId: string): Promise<string> {
+async function getOrCreateActiveProgramId(athleteId: string): Promise<string> {
   const existing = await db
-    .select({ id: workoutTemplates.id })
-    .from(workoutTemplates)
-    .innerJoin(programs, eq(workoutTemplates.programId, programs.id))
+    .select({ id: programs.id })
+    .from(programs)
     .where(and(eq(programs.athleteId, athleteId), eq(programs.active, true)))
     .limit(1);
   if (existing[0]) return existing[0].id;
 
   const programId = nanoid();
-  const templateId = nanoid();
-  const now = new Date();
   await db.insert(programs).values({
     id: programId,
     athleteId,
@@ -43,23 +40,92 @@ async function getOrCreateTemplate(athleteId: string): Promise<string> {
     name: 'Plan personal',
     startDate: todayStr(),
     active: true,
-    createdAt: now,
+    createdAt: new Date(),
   });
+  return programId;
+}
+
+/**
+ * Resolves (creating if needed) the template for a given day of the week
+ * (1 = Sunday .. 7 = Saturday, see lib/dates.ts). The first time a day gets its
+ * own template, it's seeded from the legacy day-less template (weekday = null)
+ * if one exists, so upgrading from the old single-plan model doesn't lose
+ * anyone's exercises — each day then diverges independently from there.
+ */
+async function getOrCreateTemplate(athleteId: string, weekday: number): Promise<string> {
+  const programId = await getOrCreateActiveProgramId(athleteId);
+
+  const templates = await db
+    .select({ id: workoutTemplates.id, weekday: workoutTemplates.weekday })
+    .from(workoutTemplates)
+    .where(eq(workoutTemplates.programId, programId));
+
+  const forDay = templates.find(t => t.weekday === weekday);
+  if (forDay) return forDay.id;
+
+  const templateId = nanoid();
+  const label = WEEKDAY_LABELS[weekday] ?? 'SESIÓN';
   await db.insert(workoutTemplates).values({
     id: templateId,
     programId,
     coachId: null,
-    name: 'Sesión A',
-    sessionLabel: 'SESIÓN A · FULL BODY',
-    type: 'full_body',
-    templateOrder: 0,
-    createdAt: now,
+    name: label,
+    sessionLabel: label,
+    type: null,
+    templateOrder: weekday,
+    weekday,
+    createdAt: new Date(),
   });
+
+  const legacy = templates.find(t => t.weekday === null);
+  if (legacy) {
+    const slots = await db
+      .select()
+      .from(templateExerciseSlots)
+      .where(eq(templateExerciseSlots.templateId, legacy.id));
+    if (slots.length) {
+      await db.insert(templateExerciseSlots).values(
+        slots.map(s => ({ ...s, id: nanoid(), templateId })),
+      );
+    }
+  }
   return templateId;
 }
 
-export async function getPlan(athleteId: string): Promise<{ templateId: string; exercises: PlanExercise[] }> {
-  const templateId = await getOrCreateTemplate(athleteId);
+export interface WeekdaySummary {
+  weekday: number;
+  exerciseCount: number;
+}
+
+/** Exercise count per day of the week, for showing which days already have a plan. */
+export async function getWeekSummary(athleteId: string): Promise<WeekdaySummary[]> {
+  const programId = await getOrCreateActiveProgramId(athleteId);
+  const templates = await db
+    .select({ id: workoutTemplates.id, weekday: workoutTemplates.weekday })
+    .from(workoutTemplates)
+    .where(eq(workoutTemplates.programId, programId));
+
+  const templateIds = templates.map(t => t.id);
+  const countByTemplate = new Map<string, number>();
+  if (templateIds.length) {
+    const counts = await db
+      .select({ templateId: templateExerciseSlots.templateId, n: sql<number>`count(*)` })
+      .from(templateExerciseSlots)
+      .where(inArray(templateExerciseSlots.templateId, templateIds))
+      .groupBy(templateExerciseSlots.templateId);
+    for (const c of counts) countByTemplate.set(c.templateId, c.n);
+  }
+
+  const result: WeekdaySummary[] = [];
+  for (let weekday = 1; weekday <= 7; weekday++) {
+    const t = templates.find(x => x.weekday === weekday);
+    result.push({ weekday, exerciseCount: t ? countByTemplate.get(t.id) ?? 0 : 0 });
+  }
+  return result;
+}
+
+export async function getPlan(athleteId: string, weekday: number): Promise<{ templateId: string; exercises: PlanExercise[] }> {
+  const templateId = await getOrCreateTemplate(athleteId, weekday);
 
   const rows = await db
     .select({

@@ -5,6 +5,7 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 import { apiFetch } from './api';
+import { getAuthHeaders } from './auth-client';
 
 export interface NotificationPreferences {
   trainingEnabled: boolean;
@@ -394,11 +395,15 @@ export async function initializeNotifications(userId: string): Promise<void> {
 }
 
 export async function unregisterNotificationsForUser(userId: string): Promise<void> {
+  // Capture the authenticated cookie before sign-out clears local auth. Token
+  // lookup is asynchronous, so reading headers afterward would race logout.
+  const authHeaders = getAuthHeaders();
   const token = await SecureStore.getItemAsync(tokenKey);
   if (!token) return;
   await apiFetch('/api/notifications/device', {
     method: 'POST',
     body: { token, platform: process.env.EXPO_OS, enabled: false },
+    headers: authHeaders,
   });
 }
 

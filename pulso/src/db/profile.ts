@@ -45,16 +45,41 @@ export async function saveAthleteProfile(
     });
 }
 
-export async function saveInitialWeight(athleteId: string, weightKg: number) {
-  await db.insert(bodyMeasurements).values({
-    id: nanoid(),
-    athleteId,
-    measuredAt: new Date(),
-    weightKg,
-    bodyFatPct: null,
-    muscleMassPct: null,
-    notes: null,
-  });
+export interface WeightMeasurementRecord {
+  id: string;
+  measuredAt: Date;
+  weightKg: number;
+}
+
+export async function upsertWeightMeasurement(
+  athleteId: string,
+  measurement: WeightMeasurementRecord,
+): Promise<void> {
+  await db
+    .insert(bodyMeasurements)
+    .values({
+      id: measurement.id,
+      athleteId,
+      measuredAt: measurement.measuredAt,
+      weightKg: measurement.weightKg,
+      bodyFatPct: null,
+      muscleMassPct: null,
+      notes: null,
+    })
+    .onConflictDoUpdate({
+      target: bodyMeasurements.id,
+      set: {
+        athleteId,
+        measuredAt: measurement.measuredAt,
+        weightKg: measurement.weightKg,
+      },
+    });
+}
+
+export async function saveInitialWeight(athleteId: string, weightKg: number): Promise<string> {
+  const id = nanoid();
+  await upsertWeightMeasurement(athleteId, { id, measuredAt: new Date(), weightKg });
+  return id;
 }
 
 export async function getAthleteProfile(userId: string) {
@@ -66,12 +91,20 @@ export async function getAthleteProfile(userId: string) {
   return rows[0] ?? null;
 }
 
-export async function getLatestWeight(athleteId: string): Promise<number | null> {
+export async function getLatestWeightMeasurement(athleteId: string): Promise<WeightMeasurementRecord | null> {
   const rows = await db
-    .select({ weightKg: bodyMeasurements.weightKg })
+    .select({
+      id: bodyMeasurements.id,
+      measuredAt: bodyMeasurements.measuredAt,
+      weightKg: bodyMeasurements.weightKg,
+    })
     .from(bodyMeasurements)
     .where(eq(bodyMeasurements.athleteId, athleteId))
     .orderBy(desc(bodyMeasurements.measuredAt))
     .limit(1);
-  return rows[0]?.weightKg ?? null;
+  return rows[0] ?? null;
+}
+
+export async function getLatestWeight(athleteId: string): Promise<number | null> {
+  return (await getLatestWeightMeasurement(athleteId))?.weightKg ?? null;
 }

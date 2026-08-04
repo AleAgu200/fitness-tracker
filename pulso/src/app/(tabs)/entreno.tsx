@@ -1,51 +1,36 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import {
-  BodyGender,
-  BodySide,
-  getAvailableMuscles,
-  muscleDetailForSlug,
-  MuscleGroup,
-  PulsoBodyMap,
-} from '@/components/body-map/pulso-body-map';
+import { ExercisePlanForm, ExercisePlanValues, ExistingPlanExercise } from '@/components/exercise-plan-form';
 import { AnimatedBar, Card, GlowPulse, Label, PressableScale } from '@/components/ui/kit';
-import { WorkoutXSearch } from '@/components/workoutx-search';
-import { C, F, withAlpha } from '@/constants/colors';
+import { F, useColors, withAlpha } from '@/constants/colors';
 import { useApp } from '@/context/app-state';
 import { usePreferences } from '@/context/preferences';
-import { displayWeight, formatWeight, toKg } from '@/lib/units';
+import { useSession } from '@/context/session';
 import {
-  DETAILED_MUSCLE_LABELS,
-  DetailedMuscleKey,
-  exerciseTargetsMuscle,
-  inferExerciseMuscles,
-  POPULAR_EXERCISES,
-} from '@/lib/muscles';
+  addPlanExercise,
+  deletePlanExercise,
+  getPlan,
+  getWeekSummary,
+  PlanExercise,
+  updatePlanExercise,
+} from '@/db/plan';
+import { WEEKDAY_DISPLAY_ORDER, WEEKDAY_LABELS, WEEKDAY_SHORT_LABELS, weekdayOf } from '@/lib/dates';
 import {
   cancelRestTimerNotification,
   completeRestTimerNotification,
   loadRestTimerOverlayPreference,
   showRestTimerNotification,
 } from '@/lib/notifications';
+import { displayWeight, formatWeight } from '@/lib/units';
 import { syncWorkoutWidgets } from '@/lib/widget-bridge';
-import { WxSuggestion } from '@/lib/workoutx';
 
 const RPE_VALUES = [6, 7, 8, 9, 10];
 
-const MUSCLES: { key: MuscleGroup; label: string }[] = [
-  { key: 'chest', label: 'PECHO' },
-  { key: 'back', label: 'ESPALDA' },
-  { key: 'legs', label: 'PIERNAS' },
-  { key: 'shoulders', label: 'HOMBROS' },
-  { key: 'arms', label: 'BRAZOS' },
-  { key: 'core', label: 'CORE' },
-  { key: 'full', label: 'FULL BODY' },
-];
-
 function Stepper({ label, value, onInc, onDec }: { label: string; value: string | number; onInc: () => void; onDec: () => void }) {
+  const C = useColors();
   return (
     <View style={{ flex: 1, backgroundColor: C.card, padding: 12 }}>
       <Label style={{ textAlign: 'center', marginBottom: 9 }}>{label}</Label>
@@ -64,32 +49,210 @@ function Stepper({ label, value, onInc, onDec }: { label: string; value: string 
   );
 }
 
+/**
+ * Add/edit/delete editor for a single day's plan, entirely self-contained (own
+ * DB reads/writes) — deliberately does NOT touch the shared AppState, since
+ * that state is "today's plan" everywhere else in the app (Hoy, Pulso). Browsing
+ * or editing another day here must never leak into those dashboards. Uses the
+ * same WorkoutX search + muscle map as today's flow (via ExercisePlanForm).
+ */
+function OtherDayPlanEditor({ weekday, onChanged }: { weekday: number; onChanged: () => void }) {
+  const { userId } = useSession();
+  const { state } = useApp(); // read-only: profile sex for the map's default body
+  const { accent, weightUnit } = usePreferences();
+  const C = useColors();
+  const [loading, setLoading] = useState(true);
+  const [templateId, setTemplateId] = useState<string | null>(null);
+  const [exercises, setExercises] = useState<PlanExercise[]>([]);
+  const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!userId) return;
+    setLoading(true);
+    try {
+      const plan = await getPlan(userId, weekday);
+      setTemplateId(plan.templateId);
+      setExercises(plan.exercises);
+    } catch (e) {
+      console.error('[other-day-plan]', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [userId, weekday]);
+
+  useEffect(() => {
+    setEditingSlotId(null);
+    setAdding(false);
+    load();
+  }, [load]);
+
+  function cancel() {
+    setAdding(false);
+    setEditingSlotId(null);
+  }
+
+  async function save(values: ExercisePlanValues) {
+    if (!userId || !values.nombre.trim()) { cancel(); return; }
+    const data = { ...values, nombre: values.nombre.trim() };
+    try {
+      if (editingSlotId) {
+        await updatePlanExercise(userId, editingSlotId, data);
+      } else if (templateId) {
+        await addPlanExercise(userId, templateId, data);
+      }
+      cancel();
+      await load();
+      onChanged();
+    } catch (e) {
+      console.error('[other-day-plan-save]', e);
+    }
+  }
+
+  async function remove() {
+    if (!editingSlotId) return;
+    try {
+      await deletePlanExercise(editingSlotId);
+      cancel();
+      await load();
+      onChanged();
+    } catch (e) {
+      console.error('[other-day-plan-delete]', e);
+    }
+  }
+
+  async function addFromMap(exercise: { name: string; sets: number; reps: number; weight: number; step: number }) {
+    if (!userId || !templateId) return;
+    if (exercises.some(item => item.nombre.trim().toLocaleLowerCase('es') === exercise.name.trim().toLocaleLowerCase('es'))) return;
+    await addPlanExercise(userId, templateId, {
+      nombre: exercise.name, target: exercise.sets, reps: exercise.reps, peso: exercise.weight, step: exercise.step,
+    });
+    await load();
+    onChanged();
+  }
+
+  const editingExercise = editingSlotId ? exercises.find(e => e.slotId === editingSlotId) ?? null : null;
+  const formOpen = adding || editingExercise != null;
+  const existingExercises: ExistingPlanExercise[] = exercises.map(e => ({
+    id: e.slotId, nombre: e.nombre, muscleGroup: e.muscleGroup, target: e.target,
+  }));
+
+  if (loading) {
+    return (
+      <View style={{ padding: 30, alignItems: 'center' }}>
+        <ActivityIndicator color={C.textTertiary} />
+      </View>
+    );
+  }
+
+  return (
+    <>
+      {formOpen && (
+        <ExercisePlanForm
+          key={editingExercise ? `edit-${editingExercise.slotId}` : 'add'}
+          editing={editingExercise != null}
+          initial={editingExercise
+            ? { nombre: editingExercise.nombre, target: editingExercise.target, reps: editingExercise.reps, peso: editingExercise.peso, step: editingExercise.step }
+            : { nombre: '', target: 3, reps: 8, peso: 0, step: 2.5 }}
+          weightUnit={weightUnit}
+          accent={accent}
+          existingExercises={existingExercises}
+          profileSex={state.profileData?.sex}
+          onCancel={cancel}
+          onSave={save}
+          onDelete={editingExercise ? remove : undefined}
+          onAddFromMap={addFromMap}
+        />
+      )}
+
+      {!exercises.length && !formOpen && (
+        <Card index={0} style={{ padding: 22, marginBottom: 12, alignItems: 'center' }}>
+          <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 1.8, color: C.textTertiary, textTransform: 'uppercase', marginBottom: 10 }}>
+            SIN PLAN PARA {WEEKDAY_LABELS[weekday]}
+          </Text>
+          <Text style={{ fontFamily: F.inter, fontSize: 14, color: C.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 16 }}>
+            Armá los ejercicios de este día para tu plan semanal
+          </Text>
+          <PressableScale
+            onPress={() => { setAdding(true); setEditingSlotId(null); }}
+            style={{ borderWidth: 1, borderColor: accent, paddingVertical: 12, paddingHorizontal: 22, alignItems: 'center', alignSelf: 'stretch' }}
+          >
+            <Text style={{ fontFamily: F.monoBold, fontSize: 11, letterSpacing: 0.6, color: accent, textTransform: 'uppercase' }}>
+              + AGREGAR EJERCICIO
+            </Text>
+          </PressableScale>
+        </Card>
+      )}
+
+      {exercises.length > 0 && (
+        <>
+          <Label style={{ marginBottom: 9 }}>{`EJERCICIOS DE ${WEEKDAY_LABELS[weekday]}`}</Label>
+          {exercises.map(ex => (
+            <PressableScale
+              key={ex.slotId}
+              onPress={() => { setEditingSlotId(ex.slotId); setAdding(false); }}
+              style={{
+                flexDirection: 'row', alignItems: 'center', gap: 12,
+                backgroundColor: C.card, borderWidth: 1, borderColor: C.border,
+                padding: 12, paddingHorizontal: 14, marginBottom: 7,
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontFamily: F.interSemi, fontSize: 14, color: C.textPrimary }}>{ex.nombre}</Text>
+                <Text style={{ fontFamily: F.mono, fontSize: 10, color: C.textTertiary, marginTop: 2 }}>
+                  {ex.target}×{ex.reps} · {formatWeight(ex.peso, weightUnit)}
+                </Text>
+              </View>
+              <Text style={{ fontFamily: F.mono, fontSize: 10, color: C.textSecondary, textTransform: 'uppercase' }}>✎ EDITAR</Text>
+            </PressableScale>
+          ))}
+          {!formOpen && (
+            <PressableScale
+              onPress={() => { setAdding(true); setEditingSlotId(null); }}
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: '#3a3a40', borderStyle: 'dashed', backgroundColor: C.bgEl, padding: 14, marginTop: 3 }}
+            >
+              <Text style={{ fontFamily: F.monoBold, fontSize: 11, letterSpacing: 0.6, color: C.textSecondary, textTransform: 'uppercase' }}>
+                + AGREGAR EJERCICIO
+              </Text>
+            </PressableScale>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
 export default function EntrenoScreen() {
   const {
     state, selectEx, incPeso, decPeso, incReps, decReps, setRpe, guardarSet,
     finishWorkout, applySuggestedPlan,
-    startEditEx, startAddEx, cancelExForm, setDraft, saveEditEx, saveAddEx, deleteEx,
+    startEditEx, startAddEx, cancelExForm, saveEditEx, saveAddEx, deleteEx,
     addRest, skipRest, dismissPrFlash, addRecommendedExercise,
   } = useApp();
   const { accent, weightUnit } = usePreferences();
+  const { userId } = useSession();
+  const C = useColors();
   const insets = useSafeAreaInsets();
-  const { exercises, exIndex, log, curPeso, curReps, curRpe, restActive, restLeft, restTotal, prFlash, prMap, editingEx, addingEx, draft, sessionDone, assignedWorkoutBy } = state;
+  const { exercises, exIndex, log, curPeso, curReps, curRpe, restActive, restLeft, restTotal, prFlash, prMap, editingEx, addingEx, sessionDone, assignedWorkoutBy } = state;
   const isAssigned = assignedWorkoutBy != null;
-  const exerciseFormOpen = editingEx || addingEx;
+  const todayWeekday = weekdayOf(new Date());
+  // Day tabs are local to this screen: only today's plan feeds the shared
+  // AppState (used by Hoy/Pulso), so browsing another day here can't leak into
+  // those dashboards. See OtherDayPlanEditor below for the non-today branch.
+  const [selectedWeekday, setSelectedWeekday] = useState(todayWeekday);
+  const [weekPlanCounts, setWeekPlanCounts] = useState<Record<number, number>>({});
+  const isToday = selectedWeekday === todayWeekday;
+
+  const refreshWeekPlanCounts = useCallback(() => {
+    if (!userId) return;
+    getWeekSummary(userId)
+      .then(summary => setWeekPlanCounts(Object.fromEntries(summary.map(s => [s.weekday, s.exerciseCount]))))
+      .catch(e => console.error('[week-summary]', e));
+  }, [userId]);
+
+  useEffect(() => { refreshWeekPlanCounts(); }, [refreshWeekPlanCounts]);
   const activeEx = exercises[exIndex];
   const previousSession = activeEx ? state.previousSessions[activeEx.exerciseId] : null;
-  const [selectedWorkoutX, setSelectedWorkoutX] = useState<WxSuggestion | null>(null);
-  const [usingManualName, setUsingManualName] = useState(false);
-  const [addMode, setAddMode] = useState<'buscador' | 'mapa'>('buscador');
-  const [bodySide, setBodySide] = useState<BodySide>('front');
-  const [bodyGender, setBodyGender] = useState<BodyGender>(
-    state.profileData?.sex === 'F' ? 'female' : 'male',
-  );
-  const [muscle, setMuscle] = useState<MuscleGroup | null>(null);
-  const [muscleSlug, setMuscleSlug] = useState<string | null>(null);
-  const [muscleQuery, setMuscleQuery] = useState('');
-  const [addingSuggestion, setAddingSuggestion] = useState<string | null>(null);
-  const [mapAddError, setMapAddError] = useState<string | null>(null);
   const previousRestActive = useRef(false);
   const previousRestTotal = useRef(restTotal);
 
@@ -133,81 +296,6 @@ export default function EntrenoScreen() {
   useEffect(() => () => {
     if (!restActive) cancelRestTimerNotification().catch(() => {});
   }, [restActive]);
-
-  useEffect(() => {
-    if (!exerciseFormOpen) {
-      setSelectedWorkoutX(null);
-      setUsingManualName(false);
-      setAddMode('buscador');
-      setMuscle(null);
-      setMuscleSlug(null);
-      setMuscleQuery('');
-      setMapAddError(null);
-    }
-  }, [exerciseFormOpen]);
-
-  const canConfigureExercise = editingEx || selectedWorkoutX != null || usingManualName;
-
-  // ── mapa muscular · agregar ejercicio por músculo ───────────────────────────
-  const muscleStats = useMemo(() => MUSCLES.map(item => {
-    const exs = exercises.filter(exercise => exercise.muscleGroup === item.key);
-    const target = exs.reduce((total, exercise) => total + exercise.target, 0);
-    const done = exs.reduce((total, exercise) => total + (log[exercise.id]?.length ?? 0), 0);
-    return { ...item, exercises: exs, target, done, load: target ? Math.min(1, done / target) : 0 };
-  }), [exercises, log]);
-  const selectedMuscle = muscleStats.find(item => item.key === muscle);
-  const selectedMuscleDetail = muscleSlug ? muscleDetailForSlug(muscleSlug) : null;
-  const selectedPopularExercises = selectedMuscleDetail
-    ? POPULAR_EXERCISES[selectedMuscleDetail.key as DetailedMuscleKey] ?? []
-    : [];
-  const selectedExercises = selectedMuscle?.exercises.filter(exercise =>
-    !selectedMuscleDetail ||
-    exerciseTargetsMuscle(
-      inferExerciseMuscles(exercise.nombre, exercise.muscleGroup),
-      selectedMuscleDetail.key,
-    ),
-  ) ?? [];
-  const availableMuscles = useMemo(
-    () => getAvailableMuscles(bodyGender, bodySide),
-    [bodyGender, bodySide],
-  );
-  const searchableMuscles = useMemo(() => {
-    const all = [
-      ...getAvailableMuscles(bodyGender, 'front'),
-      ...getAvailableMuscles(bodyGender, 'back'),
-    ];
-    const byKey = new Map(all.map(detail => [detail.key, detail]));
-    const normalize = (value: string) => value
-      .normalize('NFD')
-      .replace(/\p{Diacritic}/gu, '')
-      .toLocaleLowerCase('es');
-    const query = normalize(muscleQuery.trim());
-    return [...byKey.values()]
-      .filter(detail => !query || normalize(detail.label).includes(query))
-      .slice(0, query ? 8 : 0);
-  }, [bodyGender, muscleQuery]);
-  const detailedLoads = useMemo(() => {
-    const result: Record<string, number> = {};
-    for (const detail of availableMuscles) {
-      const relevant = exercises.filter(exercise =>
-        exerciseTargetsMuscle(
-          inferExerciseMuscles(exercise.nombre, exercise.muscleGroup),
-          detail.key,
-        ));
-      const target = relevant.reduce((total, exercise) => total + exercise.target, 0);
-      const done = relevant.reduce(
-        (total, exercise) => total + (log[exercise.id]?.length ?? 0),
-        0,
-      );
-      result[detail.key] = target ? Math.min(1, done / target) : 0;
-    }
-    return result;
-  }, [availableMuscles, exercises, log]);
-  const selectedTarget = selectedExercises.reduce((total, exercise) => total + exercise.target, 0);
-  const selectedDone = selectedExercises.reduce(
-    (total, exercise) => total + (log[exercise.id]?.length ?? 0),
-    0,
-  );
 
   const doneSets = (log[activeEx?.id] || []).length;
   const totalSets = Object.values(log).reduce((a, sets) => a + sets.length, 0);
@@ -262,7 +350,9 @@ export default function EntrenoScreen() {
         {/* Header */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
           <View>
-            <Label style={{ marginBottom: 6 }}>{isAssigned ? `PLAN DE ${assignedWorkoutBy?.toUpperCase()}` : 'SESIÓN A · FULL BODY'}</Label>
+            <Label style={{ marginBottom: 6 }}>
+              {isAssigned ? `PLAN DE ${assignedWorkoutBy?.toUpperCase()}` : `${WEEKDAY_LABELS[selectedWeekday]}${isToday ? ' · HOY' : ''}`}
+            </Label>
             <Text style={{ fontFamily: F.grotesk, fontSize: 27, color: C.textPrimary }}>Entreno</Text>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
@@ -273,6 +363,38 @@ export default function EntrenoScreen() {
           </View>
         </View>
 
+        {/* DAY TABS — one plan per day of the week */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
+          {WEEKDAY_DISPLAY_ORDER.map(day => {
+            const selected = selectedWeekday === day;
+            const dayIsToday = day === todayWeekday;
+            const hasExercises = (weekPlanCounts[day] ?? 0) > 0;
+            return (
+              <PressableScale
+                key={day}
+                onPress={() => setSelectedWeekday(day)}
+                haptic="light"
+                style={{
+                  width: 40, height: 44, borderWidth: 1, gap: 4,
+                  borderColor: selected ? accent : dayIsToday ? C.textSecondary : C.border,
+                  backgroundColor: selected ? withAlpha(accent, 0.12) : C.card,
+                  alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <Text style={{ fontFamily: F.monoBold, fontSize: 12, color: selected ? accent : dayIsToday ? C.textPrimary : C.textTertiary }}>
+                  {WEEKDAY_SHORT_LABELS[day]}
+                </Text>
+                <View style={{
+                  width: 4, height: 4, borderRadius: 2,
+                  backgroundColor: hasExercises ? (selected ? accent : C.textTertiary) : 'transparent',
+                }} />
+              </PressableScale>
+            );
+          })}
+        </View>
+
+        {isToday ? (
+        <>
         {/* ASSIGNED PLAN BANNER */}
         {isAssigned && (
           <Animated.View entering={FadeInDown.duration(280)} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: C.cyan, backgroundColor: 'rgba(61,220,255,0.06)', padding: 12, marginBottom: 12 }}>
@@ -480,338 +602,25 @@ export default function EntrenoScreen() {
           </Card>
         )}
 
-        {/* EXERCISE FORM */}
+        {/* EXERCISE FORM — same WorkoutX search + muscle map as other days */}
         {(editingEx || addingEx) && (
-          <Animated.View entering={FadeInDown.duration(280)} style={{ backgroundColor: C.card, borderWidth: 1, borderColor: accent, padding: 14, marginBottom: 12 }}>
-            <Label style={{ color: accent, marginBottom: 12 }}>
-              {editingEx ? 'EDITAR EJERCICIO' : 'NUEVO EJERCICIO'}
-            </Label>
-
-            {addingEx && (
-              <View style={{ flexDirection: 'row', gap: 6, marginBottom: 13 }}>
-                {([['buscador', 'BUSCADOR'], ['mapa', 'MAPA']] as const).map(([key, label]) => {
-                  const sel = addMode === key;
-                  return (
-                    <PressableScale
-                      key={key}
-                      onPress={() => setAddMode(key)}
-                      style={{
-                        flex: 1, padding: 9, borderWidth: 1,
-                        borderColor: sel ? C.cyan : C.border,
-                        backgroundColor: sel ? 'rgba(61,220,255,0.08)' : C.bgEl,
-                        alignItems: 'center',
-                      }}
-                    >
-                      <Text style={{ fontFamily: F.monoBold, fontSize: 10, letterSpacing: 0.6, color: sel ? C.cyan : C.textTertiary }}>
-                        {label}
-                      </Text>
-                    </PressableScale>
-                  );
-                })}
-              </View>
-            )}
-
-            {(editingEx || addMode === 'buscador') && (
-              <>
-                <Label style={{ marginBottom: 6 }}>NOMBRE · BUSCAR EN WORKOUTX</Label>
-                <TextInput
-                  value={draft.nombre}
-                  onChangeText={v => {
-                    setSelectedWorkoutX(null);
-                    setUsingManualName(false);
-                    setDraft('nombre', v);
-                  }}
-                  placeholder="Ej: sentadilla, curl, press…"
-                  placeholderTextColor={C.textTertiary}
-                  style={{ backgroundColor: C.bgEl, borderWidth: 1, borderColor: C.border, padding: 10, color: C.textPrimary, fontFamily: F.inter, fontSize: 14, marginBottom: 10 }}
-                />
-
-                <WorkoutXSearch
-                  query={String(draft.nombre)}
-                  enabled={editingEx || addingEx}
-                  onSelect={suggestion => {
-                    setSelectedWorkoutX(suggestion);
-                    setUsingManualName(false);
-                    setDraft('nombre', suggestion.name);
-                  }}
-                />
-
-                {addingEx && !canConfigureExercise && String(draft.nombre).trim().length > 0 && (
-                  <PressableScale
-                    onPress={() => setUsingManualName(true)}
-                    style={{ borderWidth: 1, borderColor: C.border, backgroundColor: C.bgEl, padding: 10, marginBottom: 12, alignItems: 'center' }}
-                  >
-                    <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textSecondary, textTransform: 'uppercase', textAlign: 'center' }}>
-                      USAR “{String(draft.nombre).trim()}” COMO EJERCICIO MANUAL
-                    </Text>
-                  </PressableScale>
-                )}
-              </>
-            )}
-
-            {addingEx && addMode === 'mapa' && (
-              <>
-                <View style={{ flexDirection: 'row', gap: 6, marginBottom: 10 }}>
-                  {(['front', 'back'] as BodySide[]).map(side => (
-                    <PressableScale
-                      key={side}
-                      onPress={() => setBodySide(side)}
-                      style={{
-                        flex: 1,
-                        borderWidth: 1,
-                        borderColor: bodySide === side ? C.cyan : C.border,
-                        backgroundColor: bodySide === side ? 'rgba(61,220,255,0.07)' : C.bgEl,
-                        padding: 8,
-                        alignItems: 'center',
-                      }}
-                    >
-                      <Text style={{ fontFamily: F.monoBold, fontSize: 9, color: bodySide === side ? C.cyan : C.textTertiary }}>
-                        {side === 'front' ? 'FRONTAL' : 'POSTERIOR'}
-                      </Text>
-                    </PressableScale>
-                  ))}
-                  {(['male', 'female'] as BodyGender[]).map(gender => (
-                    <PressableScale
-                      key={gender}
-                      onPress={() => setBodyGender(gender)}
-                      style={{
-                        width: 42,
-                        borderWidth: 1,
-                        borderColor: bodyGender === gender ? accent : C.border,
-                        backgroundColor: C.bgEl,
-                        padding: 8,
-                        alignItems: 'center',
-                      }}
-                    >
-                      <Text style={{ fontFamily: F.monoBold, fontSize: 10, color: bodyGender === gender ? accent : C.textTertiary }}>
-                        {gender === 'male' ? 'M' : 'F'}
-                      </Text>
-                    </PressableScale>
-                  ))}
-                </View>
-
-                <View style={{ minHeight: 280, alignItems: 'center', justifyContent: 'center', backgroundColor: C.bgEl, borderWidth: 1, borderColor: C.border, marginBottom: 13 }}>
-                  <PulsoBodyMap
-                    gender={bodyGender}
-                    side={bodySide}
-                    scale={0.68}
-                    signals={muscleStats.map(item => ({
-                      group: item.key,
-                      load: item.load,
-                      selected: muscle === item.key && muscleSlug == null,
-                    }))}
-                    selectedSlugs={muscleSlug ? [muscleSlug] : []}
-                    detailedLoads={detailedLoads}
-                    onMusclePress={(group, slug) => {
-                      setMuscle(group);
-                      setMuscleSlug(current => current === slug ? null : slug);
-                      setMuscleQuery('');
-                    }}
-                  />
-                </View>
-
-                <Label style={{ marginBottom: 7 }}>BUSCAR MÚSCULO</Label>
-                <TextInput
-                  value={muscleQuery}
-                  onChangeText={setMuscleQuery}
-                  placeholder="Ej: cuádriceps, bíceps, glúteos…"
-                  placeholderTextColor={C.textTertiary}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  style={{
-                    borderWidth: 1,
-                    borderColor: C.border,
-                    backgroundColor: C.bgEl,
-                    color: C.textPrimary,
-                    fontFamily: F.inter,
-                    fontSize: 13,
-                    paddingHorizontal: 12,
-                    paddingVertical: 11,
-                  }}
-                />
-                {searchableMuscles.length > 0 && (
-                  <View style={{ borderWidth: 1, borderTopWidth: 0, borderColor: C.border, marginBottom: 13 }}>
-                    {searchableMuscles.map(detail => (
-                      <PressableScale
-                        key={detail.key}
-                        onPress={() => {
-                          setMuscle(detail.group);
-                          setMuscleSlug(detail.slug);
-                          setMuscleQuery('');
-                          if (detail.view) setBodySide(detail.view);
-                        }}
-                        style={{
-                          paddingHorizontal: 12,
-                          paddingVertical: 10,
-                          borderTopWidth: 1,
-                          borderTopColor: C.border,
-                          backgroundColor: muscleSlug === detail.slug ? withAlpha(accent, 0.08) : C.bgEl,
-                        }}
-                      >
-                        <Text style={{
-                          fontFamily: F.mono,
-                          fontSize: 9,
-                          color: muscleSlug === detail.slug ? accent : C.textSecondary,
-                        }}>
-                          {detail.label} · {detail.view === 'back' ? 'POSTERIOR' : 'FRONTAL'}
-                        </Text>
-                      </PressableScale>
-                    ))}
-                  </View>
-                )}
-
-                {selectedMuscle && (
-                  <View style={{ borderWidth: 1, borderColor: C.border, backgroundColor: C.bgEl, padding: 13, marginBottom: 13 }}>
-                    <Label style={{ color: C.cyan, marginBottom: 5 }}>
-                      {selectedMuscleDetail?.label ?? selectedMuscle.label}
-                      {selectedMuscleDetail?.side === 'left' ? ' · LADO IZQUIERDO' : ''}
-                      {selectedMuscleDetail?.side === 'right' ? ' · LADO DERECHO' : ''}
-                    </Label>
-                    {selectedMuscleDetail && (
-                      <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textTertiary, marginBottom: 10 }}>
-                        GRUPO {selectedMuscle.label} · {selectedDone}/{selectedTarget || '—'} SETS
-                      </Text>
-                    )}
-                    {selectedExercises.length ? selectedExercises.map(exercise => {
-                      const exerciseMuscles = inferExerciseMuscles(exercise.nombre, exercise.muscleGroup);
-                      return (
-                        <View key={exercise.id} style={{ borderTopWidth: 1, borderTopColor: C.border, paddingVertical: 10 }}>
-                          <Text style={{ fontFamily: F.interSemi, fontSize: 13, color: C.textPrimary }}>{exercise.nombre}</Text>
-                          <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textTertiary, marginTop: 3 }}>
-                            {log[exercise.id]?.length ?? 0}/{exercise.target} SETS
-                          </Text>
-                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 7 }}>
-                            {exerciseMuscles.map(key => (
-                              <Text
-                                key={key}
-                                style={{
-                                  fontFamily: F.mono,
-                                  fontSize: 7,
-                                  color: selectedMuscleDetail?.key === key ? accent : C.textTertiary,
-                                  borderWidth: 1,
-                                  borderColor: selectedMuscleDetail?.key === key ? accent : C.border,
-                                  paddingHorizontal: 5,
-                                  paddingVertical: 3,
-                                }}
-                              >
-                                {DETAILED_MUSCLE_LABELS[key]}
-                              </Text>
-                            ))}
-                          </View>
-                        </View>
-                      );
-                    }) : (
-                      <Text style={{ fontFamily: F.inter, fontSize: 12, color: C.textTertiary }}>
-                        No hay ejercicios asociados a este músculo en el plan actual.
-                      </Text>
-                    )}
-                    {selectedMuscleDetail && selectedPopularExercises.length > 0 && (
-                      <View style={{ borderTopWidth: 1, borderTopColor: C.border, marginTop: 12, paddingTop: 12 }}>
-                        <Label style={{ color: accent, marginBottom: 8 }}>EJERCICIOS POPULARES</Label>
-                        {selectedPopularExercises.map(exercise => {
-                          const exists = exercises.some(
-                            item => item.nombre.trim().toLocaleLowerCase('es') ===
-                              exercise.name.trim().toLocaleLowerCase('es'),
-                          );
-                          const loading = addingSuggestion === exercise.name;
-                          return (
-                            <View
-                              key={exercise.name}
-                              style={{
-                                borderWidth: 1,
-                                borderColor: C.border,
-                                backgroundColor: C.card,
-                                padding: 11,
-                                marginBottom: 7,
-                              }}
-                            >
-                              <Text style={{ fontFamily: F.interSemi, fontSize: 13, color: C.textPrimary }}>
-                                {exercise.name}
-                              </Text>
-                              <Text style={{ fontFamily: F.mono, fontSize: 8, color: C.textTertiary, marginTop: 4 }}>
-                                {exercise.sets} SETS × {exercise.reps} REPS · {formatWeight(exercise.weight, weightUnit).toUpperCase()} INICIAL
-                              </Text>
-                              <PressableScale
-                                disabled={exists || addingSuggestion != null}
-                                onPress={async () => {
-                                  setMapAddError(null);
-                                  setAddingSuggestion(exercise.name);
-                                  try {
-                                    await addRecommendedExercise(exercise);
-                                  } catch {
-                                    setMapAddError('No se pudo agregar el ejercicio. Intentá de nuevo.');
-                                  } finally {
-                                    setAddingSuggestion(null);
-                                  }
-                                }}
-                                style={{
-                                  borderWidth: 1,
-                                  borderColor: exists ? C.border : accent,
-                                  paddingVertical: 8,
-                                  alignItems: 'center',
-                                  marginTop: 9,
-                                  opacity: addingSuggestion != null && !loading ? 0.45 : 1,
-                                }}
-                              >
-                                <Text style={{
-                                  fontFamily: F.monoBold,
-                                  fontSize: 9,
-                                  color: exists ? C.textTertiary : accent,
-                                }}>
-                                  {exists ? 'AGREGADO' : loading ? 'AGREGANDO…' : '+ AGREGAR AL PLAN'}
-                                </Text>
-                              </PressableScale>
-                            </View>
-                          );
-                        })}
-                        {mapAddError && (
-                          <Text style={{ fontFamily: F.inter, fontSize: 11, color: C.red, marginTop: 3 }}>
-                            {mapAddError}
-                          </Text>
-                        )}
-                      </View>
-                    )}
-                  </View>
-                )}
-              </>
-            )}
-
-            {canConfigureExercise && (
-              <>
-                <Label style={{ color: accent, marginBottom: 8 }}>CONFIGURACIÓN DEL EJERCICIO</Label>
-                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 13 }}>
-                  {[{ label: 'SERIES', field: 'target' as const }, { label: 'REPS', field: 'reps' as const }, { label: `PESO ${weightUnit}`, field: 'peso' as const }].map(item => (
-                    <View key={item.field} style={{ flex: 1 }}>
-                      <Label style={{ marginBottom: 6 }}>{item.label}</Label>
-                      <TextInput
-                        keyboardType="numeric"
-                        value={item.field === 'peso' ? String(displayWeight(Number(draft.peso) || 0, weightUnit)) : String(draft[item.field])}
-                        onChangeText={v => setDraft(item.field, item.field === 'peso' ? toKg(Number(v) || 0, weightUnit) : v)}
-                        style={{ backgroundColor: C.bgEl, borderWidth: 1, borderColor: C.border, padding: 9, color: C.textPrimary, fontFamily: F.monoBold, fontSize: 15, textAlign: 'center' }}
-                      />
-                    </View>
-                  ))}
-                </View>
-              </>
-            )}
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <PressableScale onPress={cancelExForm} style={{ flex: 1, padding: 12, borderWidth: 1, borderColor: C.border, backgroundColor: C.bgEl, alignItems: 'center' }}>
-                <Text style={{ fontFamily: F.mono, fontSize: 11, letterSpacing: 0.4, color: C.textSecondary, textTransform: 'uppercase' }}>CANCELAR</Text>
-              </PressableScale>
-              {canConfigureExercise && editingEx && (
-                <PressableScale onPress={deleteEx} haptic="medium" style={{ paddingHorizontal: 13, padding: 12, borderWidth: 1, borderColor: C.red, backgroundColor: 'rgba(255,61,90,0.06)', alignItems: 'center' }}>
-                  <Text style={{ fontFamily: F.mono, fontSize: 11, color: C.red, textTransform: 'uppercase' }}>ELIMINAR</Text>
-                </PressableScale>
-              )}
-              {canConfigureExercise && (
-                <PressableScale onPress={editingEx ? saveEditEx : saveAddEx} haptic="medium" style={{ flex: 1.5, padding: 12, backgroundColor: accent, alignItems: 'center' }}>
-                  <Text style={{ fontFamily: F.monoXBold, fontSize: 11, letterSpacing: 0.6, color: C.bg, textTransform: 'uppercase' }}>
-                    {editingEx ? 'GUARDAR CAMBIOS' : 'AGREGAR AL PLAN'}
-                  </Text>
-                </PressableScale>
-              )}
-            </View>
-          </Animated.View>
+          <ExercisePlanForm
+            key={editingEx ? `edit-${activeEx?.id}` : 'add'}
+            editing={editingEx}
+            initial={editingEx && activeEx
+              ? { nombre: activeEx.nombre, target: activeEx.target, reps: activeEx.reps, peso: activeEx.peso, step: activeEx.step }
+              : { nombre: '', target: 3, reps: 8, peso: 0, step: 2.5 }}
+            weightUnit={weightUnit}
+            accent={accent}
+            existingExercises={exercises.map(e => ({
+              id: e.id, nombre: e.nombre, muscleGroup: e.muscleGroup, target: e.target, doneCount: log[e.id]?.length ?? 0,
+            }))}
+            profileSex={state.profileData?.sex}
+            onCancel={cancelExForm}
+            onSave={editingEx ? saveEditEx : saveAddEx}
+            onDelete={editingEx ? deleteEx : undefined}
+            onAddFromMap={addRecommendedExercise}
+          />
         )}
 
         {/* EXERCISE LIST */}
@@ -876,6 +685,10 @@ export default function EntrenoScreen() {
               </Animated.View>
             )}
           </>
+        )}
+        </>
+        ) : (
+          <OtherDayPlanEditor weekday={selectedWeekday} onChanged={refreshWeekPlanCounts} />
         )}
       </View>
     </ScrollView>

@@ -1,9 +1,9 @@
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
 import { useState } from 'react';
-import { Platform, Text } from 'react-native';
+import { Platform, Text, useColorScheme } from 'react-native';
 
 import { PressableScale } from '@/components/ui/kit';
-import { C, F } from '@/constants/colors';
+import { BRAND, F, useColors } from '@/constants/colors';
 
 function timeStringToDate(value: string): Date {
   const [hour, minute] = value.split(':').map(Number);
@@ -22,11 +22,13 @@ function dateToTimeString(date: Date): string {
  * a dialog that opens the instant it mounts, so there we show a small chip
  * and mount the dialog on demand, unmounting on selection/dismiss.
  */
-export function TimePickerField({ value, onChange, accentColor = C.yellow }: {
+export function TimePickerField({ value, onChange, accentColor = BRAND.yellow }: {
   value: string;
   onChange: (value: string) => void;
   accentColor?: string;
 }) {
+  const C = useColors();
+  const scheme = useColorScheme();
   const [pickerOpen, setPickerOpen] = useState(false);
   const date = timeStringToDate(value);
 
@@ -37,7 +39,7 @@ export function TimePickerField({ value, onChange, accentColor = C.yellow }: {
         mode="time"
         display="compact"
         accentColor={accentColor}
-        themeVariant="dark"
+        themeVariant={scheme === 'light' ? 'light' : 'dark'}
         onValueChange={(_, newDate) => onChange(dateToTimeString(newDate))}
       />
     );
