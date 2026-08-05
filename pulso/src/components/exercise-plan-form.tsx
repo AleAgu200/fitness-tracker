@@ -40,6 +40,8 @@ export interface ExercisePlanValues {
   reps: number;
   peso: number; // kg
   step: number;
+  /** WorkoutX id, for the demo animation — undefined on initial values means "unknown/new" */
+  wxId?: string | null;
 }
 
 /** An exercise already in whichever day's plan is being edited, for the muscle
@@ -153,12 +155,21 @@ export function ExercisePlanForm({
   const selectedDone = selectedExercises.reduce((sum, exercise) => sum + (exercise.doneCount ?? 0), 0);
 
   function save() {
+    // Keep the original WorkoutX link when editing without touching the name/search
+    // (selectedWorkoutX is null until the user re-searches); drop it if the name changed
+    // without picking a new match, since it'd no longer point at the right animation.
+    const wxId = selectedWorkoutX
+      ? selectedWorkoutX.id
+      : nombre.trim() === initial.nombre.trim()
+        ? initial.wxId ?? null
+        : null;
     onSave({
       nombre: nombre.trim(),
       target: Math.max(1, +target || 1),
       reps: Math.max(1, +reps || 1),
       peso: toKg(Math.max(0, +peso || 0), weightUnit),
       step: +step || 2.5,
+      wxId,
     });
   }
 

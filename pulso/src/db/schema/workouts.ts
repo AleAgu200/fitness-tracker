@@ -39,6 +39,9 @@ export const exercises = sqliteTable('exercises', {
                    }),
   isCustom:        integer('is_custom', { mode: 'boolean' }).notNull().default(false),
   createdByUserId: text('created_by_user_id'),
+  // WorkoutX exercise id — lets already-saved exercises show their demo GIF
+  // without re-searching. Null for custom exercises or ones added before this existed.
+  wxId:            text('wx_id'),
 });
 
 export const personalRecords = sqliteTable('personal_records', {

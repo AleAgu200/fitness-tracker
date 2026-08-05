@@ -22,6 +22,14 @@ export const mealSlots = sqliteTable('meal_slots', {
   mealPlanId:     text('meal_plan_id')
                     .notNull()
                     .references(() => mealPlans.id, { onDelete: 'cascade' }),
+  // Uses lib/dates weekdayOf(): 1 = Sunday .. 7 = Saturday, the same numbering
+  // as workout_templates.weekday — NOT the server's 1 = Monday, which
+  // results.tsx converts on the way in.
+  //
+  // Plans used to be a single daily template shared by every day; existing rows
+  // land on the default and are expanded across the week on first read, so a
+  // device upgrading mid-week keeps showing its meals.
+  weekday:        integer('weekday').notNull().default(1),
   name:           text('name').notNull(),
   scheduledTime:  text('scheduled_time'),
   slotOrder:      integer('slot_order').notNull(),

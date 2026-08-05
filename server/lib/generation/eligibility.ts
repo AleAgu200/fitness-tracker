@@ -93,10 +93,22 @@ const LIMITATION_MAPPING_RULES: readonly LimitationMappingRule[] = [
 // text against these keyword lists. This is a v1 approximation — a proper
 // per-food dietary-tag column would replace it once the catalog grows past
 // the current curated seed list.
-const MEAT_KEYWORDS = ['pollo', 'carne', 'cerdo', 'res', 'nalga'];
-const FISH_KEYWORDS = ['merluza', 'atún', 'pescado'];
-const EGG_KEYWORDS = ['huevo'];
-const DAIRY_KEYWORDS = ['yogur', 'queso', 'leche'];
+// Matched as whole words, not substrings: 'res' would otherwise mark "Fresa"
+// as red meat and hide it from every vegetarian plan. Plurals are listed
+// explicitly because whole-word matching does not stem.
+const MEAT_KEYWORDS = [
+  'pollo', 'pollos', 'carne', 'carnes', 'cerdo', 'res', 'nalga', 'chuleta', 'chuletas',
+  'jamón', 'chorizo', 'pavo', 'costilla', 'costillas', 'hígado', 'bistec', 'lomo',
+];
+const FISH_KEYWORDS = [
+  'merluza', 'atún', 'pescado', 'pescados', 'tilapia', 'camarón', 'camarones',
+  'salmón', 'marisco', 'mariscos', 'langosta', 'sardina', 'sardinas',
+];
+const EGG_KEYWORDS = ['huevo', 'huevos', 'clara', 'claras'];
+const DAIRY_KEYWORDS = [
+  'yogur', 'queso', 'quesillo', 'leche', 'crema', 'cuajada', 'requesón',
+  'mantequilla', 'cottage',
+];
 const WHEY_KEYWORDS = ['whey'];
 
 function normalize(value: string): string {
@@ -130,23 +142,34 @@ export function mapLimitationsToExcludedMuscleGroups(
   return PULSO_MUSCLE_GROUP_ORDER.filter((group) => excluded.has(group));
 }
 
+/** Substring matching, for the wizard's free text (allergies, disliked foods)
+ *  where a partial word is usually what the user meant. */
 function matchesAny(haystack: string, needles: string[]): boolean {
   if (!needles.length) return false;
   const normalized = normalize(haystack);
   return needles.some(needle => normalized.includes(normalize(needle)));
 }
 
+/** Whole-word matching, for the curated dietary vocabularies above. Substring
+ *  matching silently misclassifies foods whose names happen to contain a
+ *  keyword, and a misclassification here removes a food from the plan without
+ *  any trace. */
+function matchesAnyWord(haystack: string, needles: string[]): boolean {
+  const normalized = normalizeWords(haystack);
+  return needles.some(needle => containsWholeTerm(normalized, needle));
+}
+
 function excludedByDietaryStyle(food: Food, style: DietaryStyle | undefined): boolean {
   if (!style || style === 'omnivoro') return false;
   if (style === 'vegano') {
     return food.category === 'lácteo' ||
-      matchesAny(food.name, [...MEAT_KEYWORDS, ...FISH_KEYWORDS, ...EGG_KEYWORDS, ...DAIRY_KEYWORDS, ...WHEY_KEYWORDS]);
+      matchesAnyWord(food.name, [...MEAT_KEYWORDS, ...FISH_KEYWORDS, ...EGG_KEYWORDS, ...DAIRY_KEYWORDS, ...WHEY_KEYWORDS]);
   }
   if (style === 'vegetariano') {
-    return matchesAny(food.name, [...MEAT_KEYWORDS, ...FISH_KEYWORDS]);
+    return matchesAnyWord(food.name, [...MEAT_KEYWORDS, ...FISH_KEYWORDS]);
   }
   if (style === 'pescetariano') {
-    return matchesAny(food.name, MEAT_KEYWORDS);
+    return matchesAnyWord(food.name, MEAT_KEYWORDS);
   }
   return false;
 }

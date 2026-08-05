@@ -1,0 +1,1 @@
+ALTER TABLE `exercises` ADD `wx_id` text;

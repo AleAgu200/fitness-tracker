@@ -1,8 +1,11 @@
+import { repairModelOutput, type ResolvedMealItem } from "./repair";
 import {
   CALORIE_TOLERANCE,
+  MEAL_OPTIONS_PER_SLOT,
   PROTEIN_TOLERANCE,
   PROGRAM_DURATION_WEEKS,
   SCHEMA_VERSION,
+  buildModelOutputSchema,
   computedMealItemSchema,
   generatedPlanSchema,
   generationInputSchema,
@@ -11,7 +14,7 @@ import {
   type ComputedMealSlot,
   type GeneratedPlan,
   type GenerationInput,
-  type MealItemInput,
+  type MealDay,
   type ModelOutput,
   type NutritionTotals,
 } from "./schema";
@@ -20,7 +23,12 @@ const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const REQUEST_TIMEOUT_MS = 90_000;
 export const MAX_UPSTREAM_CALLS = 2;
 const MAX_OUTPUT_TOKENS = 6_000;
-const PROMPT_VERSION = "plan-gen-v2";
+const PROMPT_VERSION = "plan-gen-v3";
+
+/** The wger catalog runs to thousands of entries, which pushed the prompt past
+ *  19k tokens and buried the instructions. The model only ever picks a handful,
+ *  so it is shown a bounded slice spread across muscle groups instead. */
+const MAX_MODEL_EXERCISES = 120;
 
 export class GenerationValidationError extends Error {
   issues: string[];
@@ -141,30 +149,80 @@ function requireZeroDataRetention(): boolean {
   return process.env.OPENROUTER_ZDR !== "false";
 }
 
-function buildSystemPrompt(): string {
+function buildSystemPrompt(foodCount: number, exerciseCount: number): string {
   return [
     "Eres el motor de generación de planes de PULSO, una app de entrenamiento y nutrición en español (Honduras/Latinoamérica).",
-    "Debes proponer ÚNICAMENTE estructura: qué ejercicio/alimento del catálogo permitido, cuánto, y en qué día. Nunca calcules ni inventes calorías o macronutrientes: el servidor los calcula a partir de los gramos.",
+    "Propones ÚNICAMENTE estructura: qué ejercicio/alimento elegir, en qué día y en qué proporción. El servidor calcula todo lo numérico.",
     "Reglas obligatorias:",
-    "- Usa solo los `id` presentes en `eligibleFoods` y `eligibleExercises` del mensaje del usuario. Nunca inventes IDs.",
+    `- Elige alimentos y ejercicios por su número \`ref\`. Usa solo refs de 1 a ${foodCount} para \`foods\` y de 1 a ${exerciseCount} para \`exercises\`. Nunca inventes un ref fuera de ese rango.`,
     `- El programa de entrenamiento dura ${PROGRAM_DURATION_WEEKS} semanas y repite el mismo horario semanal (un solo bloque de días, no 4 semanas distintas).`,
-    "- El plan de comidas es una plantilla diaria única (no 7 días distintos).",
-    "- El número de días de entrenamiento debe coincidir exactamente con `profile.daysPerWeek`.",
-    "- Si `profile.preferredMealTimes` tiene horarios, úsalos en orden para las comidas propuestas.",
+    "- `workout.days` debe tener exactamente `profile.daysPerWeek` elementos, en el orden en que se entrenan. No repitas un mismo ejercicio dentro de un día.",
+    "- `meals` debe tener exactamente `profile.mealsPerDay` elementos, en orden cronológico.",
+    `- Cada comida lleva \`options\`: ${MEAL_OPTIONS_PER_SLOT} versiones intercambiables de esa misma comida (por ejemplo, tres desayunos distintos). El servidor las rota para armar los 7 días de la semana, así que deben ser equivalentes en función y parecidas en tamaño, pero con alimentos distintos entre sí.`,
+    "- No armes los 7 días tú: entrega solo las comidas con sus opciones.",
+    "- Los `grams` son una porción razonable y realista para cada alimento. El servidor los reajusta después para cuadrar con los objetivos calóricos, así que prioriza proporciones sensatas por encima de sumas exactas.",
+    "- No calcules ni menciones calorías ni macronutrientes: no hay campo para ellos.",
+    "- No asignes horarios de comida ni días de la semana: el servidor los asigna.",
     "- Cuando estén presentes, trata `trainingLocation`, `cookingTimeBudget`, `budgetLevel` y `hondurasLatinPreference` como preferencias obligatorias dentro del catálogo permitido.",
     "- No prescribas peso inicial (no hay campo para eso); usa progressionIncrementKg para la progresión futura.",
-    "- Respeta los rangos seguros de sets, reps, RIR y descanso que ya están limitados por el esquema de salida.",
     "- Devuelve `assumptions` (supuestos que hiciste) y `safetyNotes` (advertencias o límites que el usuario debería conocer) siempre, aunque estén vacíos.",
     "- Responde siempre en español.",
   ].join("\n");
 }
 
+/** Round-robin over muscle groups so a truncated catalog still covers the whole
+ *  body, and keep PULSO's own curated entries ahead of the imported ones. */
+function selectModelExercises(exercises: GenerationInput["eligibleExercises"]) {
+  if (exercises.length <= MAX_MODEL_EXERCISES) return exercises;
+
+  const byGroup = new Map<string, GenerationInput["eligibleExercises"]>();
+  for (const exercise of exercises) {
+    const group = byGroup.get(exercise.muscleGroup) ?? [];
+    group.push(exercise);
+    byGroup.set(exercise.muscleGroup, group);
+  }
+  for (const group of byGroup.values()) {
+    group.sort((a, b) => Number(a.source !== "pulso") - Number(b.source !== "pulso"));
+  }
+
+  const groups = [...byGroup.values()];
+  const selected: GenerationInput["eligibleExercises"] = [];
+  for (let round = 0; selected.length < MAX_MODEL_EXERCISES; round++) {
+    let tookAny = false;
+    for (const group of groups) {
+      const exercise = group[round];
+      if (!exercise) continue;
+      selected.push(exercise);
+      tookAny = true;
+      if (selected.length >= MAX_MODEL_EXERCISES) break;
+    }
+    if (!tookAny) break;
+  }
+  return selected;
+}
+
+/** The catalog the model actually sees: 1-based `ref` in place of the opaque
+ *  24-hex catalog ids it could not transcribe correctly, and short keys so the
+ *  list stays cheap. `ref` is the index into `input.eligibleFoods` /
+ *  `input.eligibleExercises`, which is what repair.ts resolves against. */
 function buildUserPayload(input: GenerationInput) {
   return {
     targets: input.targets,
     profile: input.profile,
-    eligibleFoods: input.eligibleFoods,
-    eligibleExercises: input.eligibleExercises,
+    foods: input.eligibleFoods.map((food, index) => ({
+      ref: index + 1,
+      name: food.name,
+      kcal: food.kcal,
+      p: food.proteinG,
+      c: food.carbsG,
+      f: food.fatG,
+    })),
+    exercises: input.eligibleExercises.map((exercise, index) => ({
+      ref: index + 1,
+      name: exercise.name,
+      muscle: exercise.muscleGroup,
+      equipment: exercise.equipment,
+    })),
   };
 }
 
@@ -188,7 +246,10 @@ async function callOnce(
   const startedAt = Date.now();
 
   const messages: { role: string; content: string }[] = [
-    { role: "system", content: buildSystemPrompt() },
+    {
+      role: "system",
+      content: buildSystemPrompt(input.eligibleFoods.length, input.eligibleExercises.length),
+    },
     { role: "user", content: JSON.stringify(buildUserPayload(input)) },
   ];
   if (priorIssues?.length) {
@@ -229,7 +290,9 @@ async function callOnce(
           json_schema: {
             name: "pulso_generated_plan",
             strict: true,
-            schema: toJSONSchema(modelOutputSchema),
+            schema: toJSONSchema(
+              buildModelOutputSchema(input.eligibleFoods.length, input.eligibleExercises.length),
+            ),
           },
         },
         provider: {
@@ -369,82 +432,75 @@ function sumNutrition(items: { kcal: number; proteinGrams: number; carbsGrams: n
 
 type EnrichedPlan = Omit<GeneratedPlan, "schemaVersion" | "model" | "promptVersion">;
 
-/** Cross-check the model's proposal against the catalog it was given, and
- *  recompute every nutrient from grams — the model's own numbers (it isn't
- *  asked for any) are never involved. Returns validation issues in Spanish so
- *  they can be fed straight back to the model as correction instructions. */
+function toComputedItems(items: ResolvedMealItem[]): ComputedMealItem[] {
+  return items.map((item) =>
+    computedMealItemSchema.parse({
+      foodId: item.food.id,
+      source: item.food.source,
+      grams: item.grams,
+      ...computeItemNutrition(item.food, item.grams),
+    }),
+  );
+}
+
+/** Turn the model's proposal into a stored plan: repair everything the server
+ *  can decide on its own (see repair.ts), then recompute every nutrient from the
+ *  fitted grams. The model's own numbers — it isn't asked for any — are never
+ *  involved. Remaining issues are phrased in Spanish so they can be fed straight
+ *  back as correction instructions. */
 function validateAndEnrich(input: GenerationInput, output: ModelOutput): { ok: true; plan: EnrichedPlan } | { ok: false; issues: string[] } {
-  const issues: string[] = [];
-  const foodMap = new Map(input.eligibleFoods.map((f) => [f.id, f]));
-  const exerciseIds = new Set(input.eligibleExercises.map((e) => e.id));
+  const repaired = repairModelOutput(input, output);
+  if (!repaired.ok) return { ok: false, issues: repaired.issues };
 
-  if (output.workout.days.length !== input.profile.daysPerWeek) {
-    issues.push(`workout.days debe tener ${input.profile.daysPerWeek} días (profile.daysPerWeek), tiene ${output.workout.days.length}`);
-  }
-  const weekdaysSeen = new Set<number>();
-  for (const day of output.workout.days) {
-    if (weekdaysSeen.has(day.weekday)) issues.push(`weekday duplicado: ${day.weekday}`);
-    weekdaysSeen.add(day.weekday);
-    for (const ex of day.exercises) {
-      if (!exerciseIds.has(ex.exerciseId)) issues.push(`exerciseId fuera del catálogo permitido: ${ex.exerciseId}`);
-      if (ex.repsMin > ex.repsMax) issues.push(`repsMin > repsMax en exerciseId ${ex.exerciseId}`);
-      if (ex.rirMin > ex.rirMax) issues.push(`rirMin > rirMax en exerciseId ${ex.exerciseId}`);
-    }
-  }
-
-  if (output.meals.length !== input.profile.mealsPerDay) {
-    issues.push(`meals debe tener ${input.profile.mealsPerDay} comidas, tiene ${output.meals.length}`);
-  }
-  for (const [index, preferredTime] of (input.profile.preferredMealTimes ?? []).entries()) {
-    const meal = output.meals[index];
-    if (meal && meal.time !== preferredTime) {
-      issues.push(`meals.${index}.time debe ser ${preferredTime}, tiene ${meal.time}`);
-    }
-  }
-
-  const resolveItems = (items: MealItemInput[]): ComputedMealItem[] => {
-    const resolved: ComputedMealItem[] = [];
-    for (const item of items) {
-      const food = foodMap.get(item.foodId);
-      if (!food || food.source !== item.source) {
-        issues.push(`foodId fuera del catálogo permitido: ${item.foodId}`);
-        continue;
-      }
-      resolved.push(computedMealItemSchema.parse({ ...item, ...computeItemNutrition(food, item.grams) }));
-    }
-    return resolved;
-  };
-
-  const meals: ComputedMealSlot[] = output.meals.map((meal) => {
-    const items = resolveItems(meal.items);
-    const substitutions = resolveItems(meal.substitutions);
-    return { label: meal.label, time: meal.time, items, substitutions, totals: sumNutrition(items) };
+  const week: MealDay[] = repaired.plan.week.map((day) => {
+    const meals: ComputedMealSlot[] = day.meals.map((meal) => {
+      const items = toComputedItems(meal.items);
+      return { label: meal.label, time: meal.time, items, totals: sumNutrition(items) };
+    });
+    return {
+      weekday: day.weekday,
+      meals,
+      dailyTotals: sumNutrition(meals.flatMap((m) => m.items)),
+    };
   });
 
-  const dailyTotals = sumNutrition(meals.flatMap((m) => m.items));
+  // The fitter targets these directly, so a miss here means it hit a bound (a
+  // catalog with no protein-dense food, say) rather than a model mistake. Ask
+  // for a different food mix rather than for arithmetic.
+  //
+  // Every day is checked: options differ in calorie density, so one rotation
+  // can land outside tolerance while the rest are fine. Only the worst day is
+  // reported — seven near-identical complaints would crowd out the rest of the
+  // correction instructions.
+  const worstKcal = week.reduce((worst, day) =>
+    Math.abs(day.dailyTotals.kcal - input.targets.dailyCalories)
+    > Math.abs(worst.dailyTotals.kcal - input.targets.dailyCalories) ? day : worst);
+  const worstProtein = week.reduce((worst, day) =>
+    Math.abs(day.dailyTotals.proteinGrams - input.targets.proteinGrams)
+    > Math.abs(worst.dailyTotals.proteinGrams - input.targets.proteinGrams) ? day : worst);
 
-  const kcalDelta = Math.abs(dailyTotals.kcal - input.targets.dailyCalories) / input.targets.dailyCalories;
+  const issues: string[] = [];
+  const kcalDelta = Math.abs(worstKcal.dailyTotals.kcal - input.targets.dailyCalories) / input.targets.dailyCalories;
   if (kcalDelta > CALORIE_TOLERANCE) {
     issues.push(
-      `calorías totales ${Math.round(dailyTotals.kcal)} fuera de ±${CALORIE_TOLERANCE * 100}% del objetivo (${input.targets.dailyCalories})`,
+      `no fue posible ajustar las porciones a ${input.targets.dailyCalories} kcal (un día quedó en ${Math.round(worstKcal.dailyTotals.kcal)}). Propon opciones de comida con distinta densidad calórica.`,
     );
   }
-  const proteinDelta = Math.abs(dailyTotals.proteinGrams - input.targets.proteinGrams) / input.targets.proteinGrams;
+  const proteinDelta = Math.abs(worstProtein.dailyTotals.proteinGrams - input.targets.proteinGrams) / input.targets.proteinGrams;
   if (proteinDelta > PROTEIN_TOLERANCE) {
     issues.push(
-      `proteína total ${Math.round(dailyTotals.proteinGrams)}g fuera de ±${PROTEIN_TOLERANCE * 100}% del objetivo (${input.targets.proteinGrams}g)`,
+      `no fue posible ajustar las porciones a ${input.targets.proteinGrams}g de proteína (un día quedó en ${Math.round(worstProtein.dailyTotals.proteinGrams)}g). Incluye más alimentos ricos en proteína en todas las opciones.`,
     );
   }
-
   if (issues.length > 0) return { ok: false, issues };
+
   return {
     ok: true,
     plan: {
       assumptions: output.assumptions,
       safetyNotes: output.safetyNotes,
-      workout: output.workout,
-      meals,
-      dailyTotals,
+      workout: { durationWeeks: PROGRAM_DURATION_WEEKS, days: repaired.plan.days },
+      week,
     },
   };
 }
@@ -456,7 +512,13 @@ export async function generatePlan(
   rawInput: GenerationInput,
   options: GeneratePlanOptions = {},
 ): Promise<GeneratedPlan> {
-  const input = generationInputSchema.parse(rawInput);
+  const parsedInput = generationInputSchema.parse(rawInput);
+  // Truncate before anything else: `ref` is an index into these arrays, so the
+  // prompt, the JSON schema bounds, and repair.ts must all see the same list.
+  const input: GenerationInput = {
+    ...parsedInput,
+    eligibleExercises: selectModelExercises(parsedInput.eligibleExercises),
+  };
   const models = requireModels();
 
   let issues: string[] | undefined;

@@ -106,12 +106,20 @@ export interface GeneratedMeal {
   label: string;
   time: string;
   items: GeneratedMealItem[];
-  substitutions: GeneratedMealItem[];
   totals: NutritionTotals;
 }
 
+/** One weekday of meals. Server numbering, 1 = Monday — results.tsx converts to
+ *  the app's 1 = Sunday before touching the database. */
+export interface GeneratedMealDay {
+  weekday: number;
+  meals: GeneratedMeal[];
+  dailyTotals: NutritionTotals;
+}
+
 export interface GeneratedPlan {
-  schemaVersion: 1;
+  // 2: `meals` (one daily template) became `week` (seven days).
+  schemaVersion: 2;
   model: string;
   promptVersion: string;
   assumptions: string[];
@@ -120,8 +128,7 @@ export interface GeneratedPlan {
     durationWeeks: 4;
     days: GeneratedWorkoutDay[];
   };
-  meals: GeneratedMeal[];
-  dailyTotals: NutritionTotals;
+  week: GeneratedMealDay[];
 }
 
 export interface PrepareGenerationSuccess {

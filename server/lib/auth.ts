@@ -28,10 +28,11 @@ export const auth = betterAuth({
   session: {
     expiresIn: 60 * 60 * 24 * 30,        // 30 days
     updateAge: 60 * 60 * 24,             // refresh token if older than 1 day
-    cookieCache: {
-      enabled: true,
-      maxAge: 60 * 5,
-    },
+    // cookieCache stays off: it makes Better Auth set a second, short-lived
+    // (5 min) cookie alongside the real session cookie. The mobile client
+    // only captures a single Set-Cookie value (no real cookie jar), so once
+    // that second cookie won the capture it made every request 401 after
+    // 5 minutes with no way to fall back to the real session token.
   },
 
   user: {

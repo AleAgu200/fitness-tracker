@@ -93,6 +93,7 @@ export interface Exercise {
   step: number;
   basePR: number;
   muscleGroup: 'chest' | 'back' | 'legs' | 'shoulders' | 'arms' | 'core' | 'full' | null;
+  wxId: string | null;
 }
 
 export interface Meal {
@@ -241,7 +242,7 @@ interface AppContextValue {
   startEditMeal: (id: string) => void;
   cancelMealForm: () => void;
   setMealDraft: (f: keyof MealDraftUI, v: string) => void;
-  saveMealForm: () => void;
+  saveMealForm: (override?: MealDraftUI) => void;
   deleteMeal: () => void;
   // workout
   selectEx: (i: number) => void;
@@ -321,7 +322,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         const todayWeekday = weekdayOf(new Date());
         // Plan/meal-plan first: assignments from coach/nutritionist may replace them
-        let [plan, mealPlan] = await Promise.all([getPlan(userId, todayWeekday), getMealPlan(userId)]);
+        let [plan, mealPlan] = await Promise.all([getPlan(userId, todayWeekday), getMealPlan(userId, todayWeekday)]);
         let assignedWorkoutBy: string | null = null;
         let assignedMealsBy: string | null = null;
         try {
@@ -329,7 +330,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           assignedWorkoutBy = sync.workoutBy;
           assignedMealsBy = sync.mealsBy;
           if (sync.workoutChanged) plan = await getPlan(userId, todayWeekday);
-          if (sync.mealsChanged) mealPlan = await getMealPlan(userId);
+          if (sync.mealsChanged) mealPlan = await getMealPlan(userId, todayWeekday);
         } catch {
           // Offline — keep last-known assignment authors for attribution banners
           const meta = await getStoredAssignmentMeta(userId);
@@ -371,6 +372,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           step: e.step,
           basePR: e.basePR,
           muscleGroup: e.muscleGroup,
+          wxId: e.wxId,
         }));
         const prMap: Record<string, number> = {};
         for (const e of exercises) prMap[e.id] = e.basePR;
@@ -522,6 +524,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         step: e.step,
         basePR: e.basePR,
         muscleGroup: e.muscleGroup,
+        wxId: e.wxId,
       }));
       const prMap: Record<string, number> = {};
       for (const e of exercises) prMap[e.id] = Math.max(e.basePR, s.prMap[e.id] ?? 0);
@@ -546,7 +549,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const reloadMeals = useCallback(async () => {
     const uid = userRef.current;
     if (!uid) return;
-    const mealPlan = await getMealPlan(uid);
+    // Meal plans now cover the whole week; the diet tab shows the day the
+    // athlete is actually logging.
+    const mealPlan = await getMealPlan(uid, weekdayOf(new Date()));
     mealPlanIdRef.current = mealPlan.mealPlanId;
     setState(s => ({ ...s, meals: mealPlan.meals }));
   }, []);
@@ -691,11 +696,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const setMealDraft = useCallback((f: keyof MealDraftUI, v: string) =>
     setState(s => ({ ...s, mealDraft: { ...s.mealDraft, [f]: v } })), []);
 
-  const saveMealForm = useCallback(() => {
+  const saveMealForm = useCallback((override?: MealDraftUI) => {
     const s = stateRef.current;
     const planId = mealPlanIdRef.current;
     if (!planId) return;
-    const d = s.mealDraft;
+    const d = override ?? s.mealDraft;
     if (!d.label.trim() || !d.n.trim()) return;
     const draft = {
       label: d.label.trim().toUpperCase(),
@@ -709,7 +714,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState(st => ({ ...st, addingMeal: false, editingMealId: null }));
     const op = s.editingMealId
       ? updateMealSlot(planId, s.editingMealId, draft)
-      : addMealSlot(planId, draft).then(() => undefined);
+      : addMealSlot(planId, weekdayOf(new Date()), draft).then(() => undefined);
     op.then(() => reloadMeals())
       .then(() => syncCheckIn())
       .catch(e => console.error('[meal-save]', e));
@@ -908,6 +913,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       reps: Math.max(1, values.reps || 1),
       peso: Math.max(0, values.peso || 0),
       step: values.step || 2.5,
+      wxId: values.wxId,
     };
     setState(st => ({ ...st, editingEx: false }));
     updatePlanExercise(uid, cur.id, data)
@@ -929,6 +935,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       reps: Math.max(1, values.reps || 1),
       peso: Math.max(0, values.peso || 0),
       step: values.step || 2.5,
+      wxId: values.wxId,
     };
     setState(st => ({ ...st, addingEx: false }));
     addPlanExercise(uid, templateId, data)

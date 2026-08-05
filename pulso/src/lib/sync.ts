@@ -4,7 +4,7 @@
 
 import * as SecureStore from 'expo-secure-store';
 
-import { replaceMealSlots } from '@/db/nutrition';
+import { DAYS_PER_WEEK, replaceWeekMealSlots } from '@/db/nutrition';
 import { AssignedExercise, replacePlanExercises } from '@/db/plan';
 import { apiFetch } from './api';
 
@@ -78,7 +78,10 @@ export async function syncAssignments(
     result.mealsBy = res.mealPlan.payload.nutritionistName || 'tu nutricionista';
     const applied = Number(await kv.get(k.mVersion)) || 0;
     if (res.mealPlan.version > applied) {
-      await replaceMealSlots(mealPlanId, res.mealPlan.payload.meals.map(m => ({
+      // A nutritionist still assigns a single daily template. Applying it to
+      // every weekday keeps that meaning intact now that plans are per-day,
+      // instead of leaving six days empty.
+      const assigned = res.mealPlan.payload.meals.map(m => ({
         label: m.label,
         time: m.time,
         n: m.n,
@@ -86,7 +89,11 @@ export async function syncAssignments(
         p: m.p,
         c: m.c,
         g: m.g,
-      })));
+      }));
+      await replaceWeekMealSlots(
+        mealPlanId,
+        Array.from({ length: DAYS_PER_WEEK }, (_, i) => ({ weekday: i + 1, meals: assigned })),
+      );
       await kv.set(k.mVersion, String(res.mealPlan.version));
       result.mealsChanged = true;
     }

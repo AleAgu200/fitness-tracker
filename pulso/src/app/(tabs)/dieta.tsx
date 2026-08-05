@@ -1,12 +1,23 @@
-import { useEffect } from 'react';
-import { ScrollView, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeInDown, LinearTransition, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { MealPlanForm, MealPlanFormValues } from '@/components/meal-plan-form';
 import { AnimatedBar, Card, Label, PressableScale } from '@/components/ui/kit';
-import { ColorTokens, F, useColors } from '@/constants/colors';
+import { ColorTokens, F, useColors, withAlpha } from '@/constants/colors';
 import { Meal, MealStatus, useApp } from '@/context/app-state';
 import { usePreferences } from '@/context/preferences';
+import { useSession } from '@/context/session';
+import {
+  addMealSlot,
+  deleteMealSlot,
+  getMealPlan,
+  getMealWeekSummary,
+  MealSlotUI,
+  updateMealSlot,
+} from '@/db/nutrition';
+import { WEEKDAY_DISPLAY_ORDER, WEEKDAY_LABELS, WEEKDAY_SHORT_LABELS, weekdayOf } from '@/lib/dates';
 
 const WATER_MAX = 10;
 
@@ -119,92 +130,208 @@ function MealCard({ m, index }: { m: Meal; index: number }) {
   );
 }
 
-function MealForm() {
-  const { state, cancelMealForm, setMealDraft, saveMealForm, deleteMeal } = useApp();
-  const C = useColors();
+function TodayMealForm() {
+  const { state, cancelMealForm, saveMealForm, deleteMeal } = useApp();
   const d = state.mealDraft;
   const editing = state.editingMealId != null;
 
-  const inputStyle = {
-    backgroundColor: C.bgEl, borderWidth: 1, borderColor: C.border,
-    padding: 10, color: C.textPrimary, fontFamily: F.inter, fontSize: 14,
-  } as const;
+  return (
+    <MealPlanForm
+      editing={editing}
+      initial={{
+        label: d.label, time: d.time, n: d.n,
+        kcal: Number(d.kcal) || 0, p: Number(d.p) || 0, c: Number(d.c) || 0, g: Number(d.g) || 0,
+      }}
+      onCancel={cancelMealForm}
+      onSave={values => saveMealForm({
+        label: values.label, time: values.time, n: values.n,
+        kcal: String(values.kcal), p: String(values.p), c: String(values.c), g: String(values.g),
+      })}
+      onDelete={editing ? deleteMeal : undefined}
+    />
+  );
+}
+
+/**
+ * Add/edit/delete editor for a single day's meal plan, entirely self-contained
+ * (own DB reads/writes) — deliberately does NOT touch the shared AppState,
+ * since that state is "today's plan" everywhere else in the app (Hoy, Pulso).
+ * Browsing or editing another day here must never leak into those dashboards.
+ * Mirrors OtherDayPlanEditor in entreno.tsx. Consumption status (cumplido/
+ * sustituido) is a per-date log, not part of the plan, so it has no place here.
+ */
+function OtherDayMealEditor({ weekday, onChanged }: { weekday: number; onChanged: () => void }) {
+  const { userId } = useSession();
+  const C = useColors();
+  const [loading, setLoading] = useState(true);
+  const [mealPlanId, setMealPlanId] = useState<string | null>(null);
+  const [meals, setMeals] = useState<MealSlotUI[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!userId) return;
+    setLoading(true);
+    try {
+      const plan = await getMealPlan(userId, weekday);
+      setMealPlanId(plan.mealPlanId);
+      setMeals(plan.meals);
+    } catch (e) {
+      console.error('[other-day-meals]', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [userId, weekday]);
+
+  useEffect(() => {
+    setEditingId(null);
+    setAdding(false);
+    load();
+  }, [load]);
+
+  function cancel() {
+    setAdding(false);
+    setEditingId(null);
+  }
+
+  async function save(values: MealPlanFormValues) {
+    if (!mealPlanId) { cancel(); return; }
+    try {
+      if (editingId) {
+        await updateMealSlot(mealPlanId, editingId, values);
+      } else {
+        await addMealSlot(mealPlanId, weekday, values);
+      }
+      cancel();
+      await load();
+      onChanged();
+    } catch (e) {
+      console.error('[other-day-meal-save]', e);
+    }
+  }
+
+  async function remove() {
+    if (!mealPlanId || !editingId) return;
+    try {
+      await deleteMealSlot(mealPlanId, editingId);
+      cancel();
+      await load();
+      onChanged();
+    } catch (e) {
+      console.error('[other-day-meal-delete]', e);
+    }
+  }
+
+  const editingMeal = editingId ? meals.find(m => m.id === editingId) ?? null : null;
+  const formOpen = adding || editingMeal != null;
+
+  if (loading) {
+    return (
+      <View style={{ padding: 30, alignItems: 'center' }}>
+        <ActivityIndicator color={C.textTertiary} />
+      </View>
+    );
+  }
 
   return (
-    <Animated.View entering={FadeInDown.duration(280)} style={{ backgroundColor: C.card, borderWidth: 1, borderColor: C.cyan, padding: 14, marginBottom: 12 }}>
-      <Label style={{ color: C.cyan, marginBottom: 12 }}>
-        {editing ? 'EDITAR COMIDA' : 'NUEVA COMIDA'}
-      </Label>
-      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
-        <View style={{ flex: 1.4 }}>
-          <Label style={{ marginBottom: 6 }}>NOMBRE (ej: DESAYUNO)</Label>
-          <TextInput
-            value={d.label}
-            onChangeText={v => setMealDraft('label', v)}
-            placeholder="DESAYUNO"
-            autoCapitalize="characters"
-            placeholderTextColor={C.textTertiary}
-            style={inputStyle}
-          />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Label style={{ marginBottom: 6 }}>HORA</Label>
-          <TextInput
-            value={d.time}
-            onChangeText={v => setMealDraft('time', v)}
-            placeholder="07:30"
-            placeholderTextColor={C.textTertiary}
-            style={inputStyle}
-          />
-        </View>
-      </View>
-      <Label style={{ marginBottom: 6 }}>DESCRIPCIÓN</Label>
-      <TextInput
-        value={d.n}
-        onChangeText={v => setMealDraft('n', v)}
-        placeholder="Avena con banana y huevos"
-        placeholderTextColor={C.textTertiary}
-        style={{ ...inputStyle, marginBottom: 10 }}
-      />
-      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 13 }}>
-        {([['KCAL', 'kcal'], ['P g', 'p'], ['C g', 'c'], ['G g', 'g']] as const).map(([label, field]) => (
-          <View key={field} style={{ flex: 1 }}>
-            <Label style={{ marginBottom: 6 }}>{label}</Label>
-            <TextInput
-              keyboardType="numeric"
-              value={d[field]}
-              onChangeText={v => setMealDraft(field, v)}
-              placeholder="0"
-              placeholderTextColor={C.textTertiary}
-              style={{ backgroundColor: C.bgEl, borderWidth: 1, borderColor: C.border, padding: 9, color: C.textPrimary, fontFamily: F.monoBold, fontSize: 14, textAlign: 'center' }}
-            />
-          </View>
-        ))}
-      </View>
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        <PressableScale onPress={cancelMealForm} style={{ flex: 1, padding: 12, borderWidth: 1, borderColor: C.border, backgroundColor: C.bgEl, alignItems: 'center' }}>
-          <Text style={{ fontFamily: F.mono, fontSize: 11, letterSpacing: 0.4, color: C.textSecondary, textTransform: 'uppercase' }}>CANCELAR</Text>
-        </PressableScale>
-        {editing && (
-          <PressableScale onPress={deleteMeal} haptic="medium" style={{ paddingHorizontal: 13, padding: 12, borderWidth: 1, borderColor: C.red, backgroundColor: 'rgba(255,61,90,0.06)', alignItems: 'center' }}>
-            <Text style={{ fontFamily: F.mono, fontSize: 11, color: C.red, textTransform: 'uppercase' }}>ELIMINAR</Text>
-          </PressableScale>
-        )}
-        <PressableScale onPress={saveMealForm} haptic="medium" style={{ flex: 1.5, padding: 12, backgroundColor: C.cyan, alignItems: 'center' }}>
-          <Text style={{ fontFamily: F.monoXBold, fontSize: 11, letterSpacing: 0.6, color: C.bg, textTransform: 'uppercase' }}>
-            {editing ? 'GUARDAR' : 'AGREGAR'}
+    <>
+      {formOpen && (
+        <MealPlanForm
+          key={editingMeal ? `edit-${editingMeal.id}` : 'add'}
+          editing={editingMeal != null}
+          initial={editingMeal
+            ? { label: editingMeal.label, time: editingMeal.time, n: editingMeal.n, kcal: editingMeal.kcal, p: editingMeal.p, c: editingMeal.c, g: editingMeal.g }
+            : { label: '', time: '', n: '', kcal: 0, p: 0, c: 0, g: 0 }}
+          onCancel={cancel}
+          onSave={save}
+          onDelete={editingMeal ? remove : undefined}
+        />
+      )}
+
+      {!meals.length && !formOpen && (
+        <Card index={0} style={{ padding: 22, marginBottom: 12, alignItems: 'center' }}>
+          <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 1.8, color: C.textTertiary, textTransform: 'uppercase', marginBottom: 10 }}>
+            SIN PLAN PARA {WEEKDAY_LABELS[weekday]}
           </Text>
-        </PressableScale>
-      </View>
-    </Animated.View>
+          <Text style={{ fontFamily: F.inter, fontSize: 14, color: C.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 16 }}>
+            Armá las comidas de este día para tu plan semanal
+          </Text>
+          <PressableScale
+            onPress={() => { setAdding(true); setEditingId(null); }}
+            style={{ backgroundColor: C.cyan, paddingVertical: 12, paddingHorizontal: 22, alignItems: 'center', alignSelf: 'stretch' }}
+          >
+            <Text style={{ fontFamily: F.monoXBold, fontSize: 11, letterSpacing: 0.6, color: C.bg, textTransform: 'uppercase' }}>
+              + CREAR COMIDA
+            </Text>
+          </PressableScale>
+        </Card>
+      )}
+
+      {meals.length > 0 && (
+        <>
+          <Label style={{ marginBottom: 9 }}>{`COMIDAS DE ${WEEKDAY_LABELS[weekday]}`}</Label>
+          {meals.map(m => (
+            <PressableScale
+              key={m.id}
+              onPress={() => { setEditingId(m.id); setAdding(false); }}
+              style={{
+                flexDirection: 'row', alignItems: 'center', gap: 12,
+                backgroundColor: C.card, borderWidth: 1, borderColor: C.border,
+                padding: 12, paddingHorizontal: 14, marginBottom: 7,
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontFamily: F.interSemi, fontSize: 14, color: C.textPrimary }}>
+                  {m.label}{m.time ? ` · ${m.time}` : ''}
+                </Text>
+                <Text style={{ fontFamily: F.mono, fontSize: 10, color: C.textTertiary, marginTop: 2 }} numberOfLines={1}>
+                  {m.n} · {m.kcal} kcal
+                </Text>
+              </View>
+              <Text style={{ fontFamily: F.mono, fontSize: 10, color: C.textSecondary, textTransform: 'uppercase' }}>✎ EDITAR</Text>
+            </PressableScale>
+          ))}
+          {!formOpen && (
+            <PressableScale
+              onPress={() => { setAdding(true); setEditingId(null); }}
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: '#3a3a40', borderStyle: 'dashed', backgroundColor: C.bgEl, padding: 14, marginTop: 3 }}
+            >
+              <Text style={{ fontFamily: F.monoBold, fontSize: 11, letterSpacing: 0.6, color: C.textSecondary, textTransform: 'uppercase' }}>
+                + AGREGAR COMIDA
+              </Text>
+            </PressableScale>
+          )}
+        </>
+      )}
+    </>
   );
 }
 
 export default function DietaScreen() {
   const { state, setWater, startAddMeal } = useApp();
   const { accent } = usePreferences();
+  const { userId } = useSession();
   const C = useColors();
   const insets = useSafeAreaInsets();
+
+  const todayWeekday = weekdayOf(new Date());
+  // Day tabs are local to this screen: only today's plan feeds the shared
+  // AppState (used by Hoy/Pulso), so browsing another day here can't leak into
+  // those dashboards. See OtherDayMealEditor above for the non-today branch.
+  const [selectedWeekday, setSelectedWeekday] = useState(todayWeekday);
+  const [weekMealCounts, setWeekMealCounts] = useState<Record<number, number>>({});
+  const isToday = selectedWeekday === todayWeekday;
+
+  const refreshWeekMealCounts = useCallback(() => {
+    if (!userId) return;
+    getMealWeekSummary(userId)
+      .then(summary => setWeekMealCounts(Object.fromEntries(summary.map(s => [s.weekday, s.mealCount]))))
+      .catch(e => console.error('[meal-week-summary]', e));
+  }, [userId]);
+
+  // Also re-derives when today's own meal count changes, so the dot under
+  // today's tab updates without waiting for a manual refresh.
+  useEffect(() => { refreshWeekMealCounts(); }, [refreshWeekMealCounts, state.meals.length]);
 
   const hasPlan = state.meals.length > 0;
   const isAssigned = state.assignedMealsBy != null;
@@ -241,8 +368,47 @@ export default function DietaScreen() {
     >
       <View style={{ paddingTop: insets.top + 16, paddingHorizontal: 16 }}>
         <Label style={{ marginBottom: 6 }}>{isAssigned ? `PLAN DE ${state.assignedMealsBy?.toUpperCase()}` : 'PLAN NUTRICIONAL'}</Label>
-        <Text style={{ fontFamily: F.grotesk, fontSize: 27, color: C.textPrimary, marginBottom: 16 }}>Nutrición</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 9, marginBottom: 16 }}>
+          <Text style={{ fontFamily: F.grotesk, fontSize: 27, color: C.textPrimary }}>Nutrición</Text>
+          {/* Meals differ from one weekday to the next now. Without naming the
+              day, a plan that changed overnight reads as a bug. */}
+          <Text style={{ fontFamily: F.monoBold, fontSize: 11, letterSpacing: 1, color: C.textTertiary }}>
+            {WEEKDAY_LABELS[selectedWeekday]}{isToday ? ' · HOY' : ''}
+          </Text>
+        </View>
 
+        {/* DAY TABS — one meal plan per day of the week */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
+          {WEEKDAY_DISPLAY_ORDER.map(day => {
+            const selected = selectedWeekday === day;
+            const dayIsToday = day === todayWeekday;
+            const hasMeals = (weekMealCounts[day] ?? 0) > 0;
+            return (
+              <PressableScale
+                key={day}
+                onPress={() => setSelectedWeekday(day)}
+                haptic="light"
+                style={{
+                  width: 40, height: 44, borderWidth: 1, gap: 4,
+                  borderColor: selected ? accent : dayIsToday ? C.textSecondary : C.border,
+                  backgroundColor: selected ? withAlpha(accent, 0.12) : C.card,
+                  alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <Text style={{ fontFamily: F.monoBold, fontSize: 12, color: selected ? accent : dayIsToday ? C.textPrimary : C.textTertiary }}>
+                  {WEEKDAY_SHORT_LABELS[day]}
+                </Text>
+                <View style={{
+                  width: 4, height: 4, borderRadius: 2,
+                  backgroundColor: hasMeals ? (selected ? accent : C.textTertiary) : 'transparent',
+                }} />
+              </PressableScale>
+            );
+          })}
+        </View>
+
+        {isToday ? (
+        <>
         {/* ASSIGNED PLAN BANNER */}
         {isAssigned && (
           <Animated.View entering={FadeInDown.duration(280)} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: C.cyan, backgroundColor: 'rgba(61,220,255,0.06)', padding: 12, marginBottom: 12 }}>
@@ -253,7 +419,10 @@ export default function DietaScreen() {
           </Animated.View>
         )}
 
-        {formOpen && <MealForm />}
+        {/* Keyed by the meal being edited so switching meals (or moving from
+            editing to adding) remounts the form and drops the previous meal's
+            picked foods, instead of clearing them from an effect. */}
+        {formOpen && <TodayMealForm key={state.editingMealId ?? 'new'} />}
 
         {hasPlan ? (
           <>
@@ -312,7 +481,7 @@ export default function DietaScreen() {
           </PressableScale>
         )}
 
-        {/* AGUA — always visible */}
+        {/* AGUA — tied to today's date, not the day being browsed */}
         <Card index={hasPlan ? 2 : 1} style={{ padding: 14 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 1.8, color: state.water >= WATER_MAX ? C.orange : C.cyan, textTransform: 'uppercase' }}>
@@ -339,6 +508,10 @@ export default function DietaScreen() {
             </Text>
           </PressableScale>
         </Card>
+        </>
+        ) : (
+          <OtherDayMealEditor weekday={selectedWeekday} onChanged={refreshWeekMealCounts} />
+        )}
       </View>
     </ScrollView>
   );

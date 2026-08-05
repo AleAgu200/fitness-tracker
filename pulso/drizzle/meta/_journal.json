@@ -36,6 +36,20 @@
       "when": 1785865479113,
       "tag": "0004_cuddly_greymalkin",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1785954730679,
+      "tag": "0005_add_weekday_to_meal_slots",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1785963538327,
+      "tag": "0006_true_slipstream",
+      "breakpoints": true
     }
   ]
 }

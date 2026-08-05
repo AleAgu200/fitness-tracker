@@ -22,6 +22,12 @@ export async function searchWorkoutX(q: string, signal?: AbortSignal): Promise<W
   return res.exercises;
 }
 
+/** Relative gif path for a known WorkoutX id — mirrors the server's search response shape,
+ *  so an already-saved exercise can show its demo without re-searching. */
+export function workoutXGifUrlFromId(id: string): string {
+  return `/api/workoutx/gifs/${encodeURIComponent(id)}.gif`;
+}
+
 /** Absolute, authenticated source for expo-image. */
 export function workoutXGifSource(gifUrl: string) {
   const uri = gifUrl.startsWith('http')

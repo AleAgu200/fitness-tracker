@@ -13,6 +13,9 @@ import {
 
 export type MealStatusDb = 'completed' | 'substituted' | 'pending';
 
+/** Weekdays a meal plan covers, 1 = Monday. */
+export const DAYS_PER_WEEK = 7;
+
 export interface MealSlotUI {
   id: string;
   label: string;
@@ -58,22 +61,37 @@ async function getOrCreateMealPlan(athleteId: string): Promise<string> {
   return id;
 }
 
+/** The plan's targets describe a *day*, not the week, so the per-slot figures
+ *  are averaged over the days that actually have meals. Summing every slot
+ *  outright would report seven times the daily calorie goal. */
 async function syncPlanTargets(mealPlanId: string): Promise<void> {
   const slots = await db.select().from(mealSlots).where(eq(mealSlots.mealPlanId, mealPlanId));
+  const dayCount = new Set(slots.map(s => s.weekday)).size || 1;
+  const perDay = (pick: (s: typeof slots[number]) => number | null) =>
+    Math.round(slots.reduce((a, s) => a + (pick(s) ?? 0), 0) / dayCount);
+
   await db.update(mealPlans).set({
-    targetKcal:     slots.reduce((a, s) => a + (s.targetKcal ?? 0), 0),
-    targetProteinG: slots.reduce((a, s) => a + (s.targetProteinG ?? 0), 0),
-    targetCarbsG:   slots.reduce((a, s) => a + (s.targetCarbsG ?? 0), 0),
-    targetFatG:     slots.reduce((a, s) => a + (s.targetFatG ?? 0), 0),
+    targetKcal:     perDay(s => s.targetKcal),
+    targetProteinG: perDay(s => s.targetProteinG),
+    targetCarbsG:   perDay(s => s.targetCarbsG),
+    targetFatG:     perDay(s => s.targetFatG),
   }).where(eq(mealPlans.id, mealPlanId));
 }
 
-export async function getMealPlan(athleteId: string): Promise<{ mealPlanId: string; meals: MealSlotUI[] }> {
+export async function getMealPlan(
+  athleteId: string,
+  weekday: number,
+): Promise<{ mealPlanId: string; meals: MealSlotUI[] }> {
+  // Plans written before meals had a weekday are spread across the week by
+  // migration 0005, not here: doing it lazily on read cannot tell those rows
+  // apart from a new plan whose only meal happens to fall on the default day,
+  // and would silently copy that one meal onto all seven.
   const mealPlanId = await getOrCreateMealPlan(athleteId);
+
   const slots = await db
     .select()
     .from(mealSlots)
-    .where(eq(mealSlots.mealPlanId, mealPlanId))
+    .where(and(eq(mealSlots.mealPlanId, mealPlanId), eq(mealSlots.weekday, weekday)))
     .orderBy(asc(mealSlots.slotOrder));
   return {
     mealPlanId,
@@ -90,15 +108,43 @@ export async function getMealPlan(athleteId: string): Promise<{ mealPlanId: stri
   };
 }
 
-export async function addMealSlot(mealPlanId: string, draft: MealDraft): Promise<string> {
+export interface MealWeekdaySummary {
+  weekday: number;
+  mealCount: number;
+}
+
+/** Meal count per day of the week, for showing which days already have a plan. */
+export async function getMealWeekSummary(athleteId: string): Promise<MealWeekdaySummary[]> {
+  const mealPlanId = await getOrCreateMealPlan(athleteId);
+  const slots = await db
+    .select({ weekday: mealSlots.weekday })
+    .from(mealSlots)
+    .where(eq(mealSlots.mealPlanId, mealPlanId));
+
+  const countByWeekday = new Map<number, number>();
+  for (const s of slots) countByWeekday.set(s.weekday, (countByWeekday.get(s.weekday) ?? 0) + 1);
+
+  const result: MealWeekdaySummary[] = [];
+  for (let weekday = 1; weekday <= DAYS_PER_WEEK; weekday++) {
+    result.push({ weekday, mealCount: countByWeekday.get(weekday) ?? 0 });
+  }
+  return result;
+}
+
+export async function addMealSlot(
+  mealPlanId: string,
+  weekday: number,
+  draft: MealDraft,
+): Promise<string> {
   const existing = await db
     .select({ id: mealSlots.id })
     .from(mealSlots)
-    .where(eq(mealSlots.mealPlanId, mealPlanId));
+    .where(and(eq(mealSlots.mealPlanId, mealPlanId), eq(mealSlots.weekday, weekday)));
   const id = nanoid();
   await db.insert(mealSlots).values({
     id,
     mealPlanId,
+    weekday,
     name: draft.label,
     scheduledTime: draft.time || null,
     slotOrder: existing.length,
@@ -132,22 +178,28 @@ export async function deleteMealSlot(mealPlanId: string, slotId: string): Promis
   await syncPlanTargets(mealPlanId);
 }
 
-/** Replace the whole plan with a nutritionist-assigned one. Today's per-slot statuses reset. */
-export async function replaceMealSlots(mealPlanId: string, meals: MealDraft[]): Promise<void> {
-  const slots = await db
-    .select({ id: mealSlots.id })
-    .from(mealSlots)
-    .where(eq(mealSlots.mealPlanId, mealPlanId));
+/** Replace one weekday's meals. Only that day's logged statuses reset — the
+ *  other six keep theirs, which matters now that a replacement touches seven
+ *  days instead of one. */
+export async function replaceMealSlots(
+  mealPlanId: string,
+  weekday: number,
+  meals: MealDraft[],
+): Promise<void> {
+  const where = and(eq(mealSlots.mealPlanId, mealPlanId), eq(mealSlots.weekday, weekday));
+  const slots = await db.select({ id: mealSlots.id }).from(mealSlots).where(where);
   for (const s of slots) {
+    // Entries reference slots with onDelete: restrict — clear them first.
     await db.delete(mealLogEntries).where(eq(mealLogEntries.slotId, s.id));
   }
-  await db.delete(mealSlots).where(eq(mealSlots.mealPlanId, mealPlanId));
+  await db.delete(mealSlots).where(where);
 
   if (meals.length > 0) {
     await db.insert(mealSlots).values(
       meals.map((m, i) => ({
         id: nanoid(),
         mealPlanId,
+        weekday,
         name: m.label,
         scheduledTime: m.time || null,
         slotOrder: i,
@@ -160,6 +212,19 @@ export async function replaceMealSlots(mealPlanId: string, meals: MealDraft[]): 
     );
   }
   await syncPlanTargets(mealPlanId);
+}
+
+/** Replace the full week in one pass, for an assigned or generated plan.
+ *  Days missing from `week` are cleared, so a plan with fewer days cannot leave
+ *  meals from a previous plan stranded on the untouched weekdays. */
+export async function replaceWeekMealSlots(
+  mealPlanId: string,
+  week: { weekday: number; meals: MealDraft[] }[],
+): Promise<void> {
+  const byWeekday = new Map(week.map(day => [day.weekday, day.meals]));
+  for (let weekday = 1; weekday <= DAYS_PER_WEEK; weekday++) {
+    await replaceMealSlots(mealPlanId, weekday, byWeekday.get(weekday) ?? []);
+  }
 }
 
 async function getOrCreateDailyLog(athleteId: string, mealPlanId: string): Promise<string> {

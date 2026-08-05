@@ -13,8 +13,9 @@ import {
   completeOnboarding,
   setOnboardingStepIfInProgress,
 } from '@/db/onboarding';
-import { MealDraft, getMealPlan, replaceMealSlots } from '@/db/nutrition';
+import { MealDraft, getMealPlan, replaceWeekMealSlots } from '@/db/nutrition';
 import { AssignedExercise, getPlan, replacePlanExercises } from '@/db/plan';
+import { weekdayOf } from '@/lib/dates';
 
 function catalogKey(source: string, id: string): string {
   return `${source}:${id}`;
@@ -81,24 +82,22 @@ export default function ResultsScreen() {
         exercisesByWeekday.set(mobileWeekday, items);
       }
 
-      const meals: MealDraft[] = result.plan.meals.map(meal => {
-        const primaryNames = meal.items
-          .map(item => `${requireFoodName(foodMap, item.source, item.foodId)} (${Math.round(item.grams)} g)`);
-        const substitutionNames = meal.substitutions
-          .map(item => `${requireFoodName(foodMap, item.source, item.foodId)} (${Math.round(item.grams)} g)`);
-        const alternatives = substitutionNames.length
-          ? ` · Opciones: ${substitutionNames.join(', ')}`
-          : '';
-        return {
+      // The plan now carries a full week of meals, each day already fitted to
+      // the same daily targets.
+      const week = result.plan.week.map(day => ({
+        weekday: toMobileWeekday(day.weekday),
+        meals: day.meals.map<MealDraft>(meal => ({
           label: meal.label,
           time: meal.time,
-          n: `${primaryNames.join(', ')}${alternatives}`,
+          n: meal.items
+            .map(item => `${requireFoodName(foodMap, item.source, item.foodId)} (${Math.round(item.grams)} g)`)
+            .join(', '),
           kcal: Math.round(meal.totals.kcal),
           p: Math.round(meal.totals.proteinGrams),
           c: Math.round(meal.totals.carbsGrams),
           g: Math.round(meal.totals.fatGrams),
-        };
-      });
+        })),
+      }));
 
       // Replace all seven days so a rest day cannot retain exercises from a
       // previous or interrupted attempt. Each replacement is retry-safe.
@@ -111,8 +110,8 @@ export default function ResultsScreen() {
         );
       }
 
-      const { mealPlanId } = await getMealPlan(userId);
-      await replaceMealSlots(mealPlanId, meals);
+      const { mealPlanId } = await getMealPlan(userId, weekdayOf(new Date()));
+      await replaceWeekMealSlots(mealPlanId, week);
 
       await reloadAll();
       await clearGenerationProfile(userId);
@@ -173,6 +172,9 @@ export default function ResultsScreen() {
   }
 
   const { plan } = result;
+  // Every day is fitted to the same targets, so the first day represents the
+  // week's daily goal; meal count is identical across days.
+  const sampleDay = plan.week[0];
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: C.bg }}
@@ -204,7 +206,7 @@ export default function ResultsScreen() {
         <Card style={{ flex: 1, padding: 14, gap: 5 }} index={1}>
           <Label>NUTRICIÓN</Label>
           <Text style={{ color: C.cyan, fontFamily: F.monoXBold, fontSize: 25 }}>
-            {plan.meals.length}
+            {sampleDay?.meals.length ?? 0}
           </Text>
           <Text style={{ color: C.textSecondary, fontFamily: F.inter, fontSize: 12 }}>comidas al día</Text>
         </Card>
@@ -214,14 +216,14 @@ export default function ResultsScreen() {
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <Label>OBJETIVO DIARIO</Label>
           <Text style={{ color: C.textPrimary, fontFamily: F.monoBold, fontSize: 18 }}>
-            {Math.round(plan.dailyTotals.kcal)} kcal
+            {Math.round(sampleDay?.dailyTotals.kcal ?? 0)} kcal
           </Text>
         </View>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {[
-            ['PROT', plan.dailyTotals.proteinGrams, C.yellow],
-            ['CARB', plan.dailyTotals.carbsGrams, C.cyan],
-            ['GRASA', plan.dailyTotals.fatGrams, C.orange],
+            ['PROT', sampleDay?.dailyTotals.proteinGrams ?? 0, C.yellow],
+            ['CARB', sampleDay?.dailyTotals.carbsGrams ?? 0, C.cyan],
+            ['GRASA', sampleDay?.dailyTotals.fatGrams ?? 0, C.orange],
           ].map(([label, value, color]) => (
             <View
               key={String(label)}

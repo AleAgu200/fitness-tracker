@@ -105,18 +105,23 @@ function fireHaptic(kind: HapticKind) {
   }
 }
 
-export function PressableScale({ children, onPress, style, haptic = 'light', disabled }: {
+export function PressableScale({ children, onPress, style, haptic = 'light', disabled, accessibilityLabel }: {
   children: React.ReactNode;
   onPress?: () => void;
   style?: ViewStyle;
   haptic?: HapticKind;
   disabled?: boolean;
+  /** Needed wherever the label is an icon or glyph ("✕", "✎") that a screen
+   *  reader would otherwise announce as meaningless punctuation. */
+  accessibilityLabel?: string;
 }) {
   const scale = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       onPressIn={() => { scale.value = withSpring(0.96, { damping: 20, stiffness: 400 }); }}
       onPressOut={() => { scale.value = withSpring(1, { damping: 16, stiffness: 300 }); }}
       onPress={() => {

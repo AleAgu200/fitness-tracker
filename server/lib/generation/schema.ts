@@ -6,8 +6,17 @@ import { z } from "zod";
 // which day) — it never emits numbers we could get wrong silently (calories,
 // macros); those are always computed server-side from the catalog data below.
 
-export const SCHEMA_VERSION = 1;
+// Bumped from 1: `meals` (a single daily template) became `week` (seven days).
+export const SCHEMA_VERSION = 2;
 export const PROGRAM_DURATION_WEEKS = 4;
+
+/** Days in a meal week. Fixed at 7 — the rotation covers every weekday. */
+export const DAYS_PER_MEAL_WEEK = 7;
+
+/** How many interchangeable versions of each meal the model is asked for. Three
+ *  gives every weekday a different combination without a seventh of them
+ *  repeating twice in a row. */
+export const MEAL_OPTIONS_PER_SLOT = 3;
 
 export const SAFE_RANGES = {
   sets: { min: 1, max: 6 },
@@ -75,9 +84,7 @@ export const generationInputSchema = z.object({
 });
 export type GenerationInput = z.infer<typeof generationInputSchema>;
 
-// ── model output: the only shape the LLM is asked to produce ──
-// No nutrient numbers, no schemaVersion/model/promptVersion — those are
-// stamped/computed by the server after validation, never trusted from the model.
+// ── stored plan shapes: catalog ids, server-assigned times/weekdays ──
 
 export const exerciseSlotSchema = z.object({
   exerciseId: z.string(),
@@ -109,26 +116,103 @@ export const mealItemInputSchema = z.object({
 });
 export type MealItemInput = z.infer<typeof mealItemInputSchema>;
 
-export const mealSlotInputSchema = z.object({
-  label: z.string(),
-  time: z.string(), // "HH:MM"
-  items: z.array(mealItemInputSchema).min(1).max(12),
-  // Required (possibly empty) rather than optional: OpenAI-style strict JSON
-  // schema mode requires every property to be listed in `required`.
-  substitutions: z.array(mealItemInputSchema).max(12),
+// ── model output: the only shape the LLM is asked to produce ──
+// Deliberately smaller than the stored plan. The model proposes *structure*
+// only — which catalog entry, roughly how much, in what order. Everything it
+// has repeatedly gotten wrong is now computed server-side instead of asked for:
+//
+//   catalog ids  → 1-based `ref` into the catalog it was shown. Opaque 24-hex
+//                  ids were transcribed wrong on nearly every meal item.
+//   meal times   → assigned from profile.preferredMealTimes.
+//   weekdays     → assigned from a canonical spread for profile.daysPerWeek.
+//   grams        → treated as a *proposal* and rescaled to hit the macro
+//                  targets exactly (see fitMacros); an LLM cannot pick grams
+//                  that sum to within ±5% of a calorie target.
+//   durationWeeks→ stamped as PROGRAM_DURATION_WEEKS.
+
+export const modelExerciseSlotSchema = z.object({
+  exerciseRef: z.number().int().min(1),
+  sets: z.number().int().min(SAFE_RANGES.sets.min).max(SAFE_RANGES.sets.max),
+  repsMin: z.number().int().min(SAFE_RANGES.reps.min).max(SAFE_RANGES.reps.max),
+  repsMax: z.number().int().min(SAFE_RANGES.reps.min).max(SAFE_RANGES.reps.max),
+  rirMin: z.number().int().min(SAFE_RANGES.rir.min).max(SAFE_RANGES.rir.max),
+  rirMax: z.number().int().min(SAFE_RANGES.rir.min).max(SAFE_RANGES.rir.max),
+  restSeconds: z.number().int().min(SAFE_RANGES.restSeconds.min).max(SAFE_RANGES.restSeconds.max),
+  progressionIncrementKg: z
+    .number()
+    .min(SAFE_RANGES.progressionIncrementKg.min)
+    .max(SAFE_RANGES.progressionIncrementKg.max),
 });
-export type MealSlotInput = z.infer<typeof mealSlotInputSchema>;
+export type ModelExerciseSlot = z.infer<typeof modelExerciseSlotSchema>;
+
+export const modelWorkoutDaySchema = z.object({
+  name: z.string(),
+  exercises: z.array(modelExerciseSlotSchema).min(1).max(12),
+});
+export type ModelWorkoutDay = z.infer<typeof modelWorkoutDaySchema>;
+
+export const modelMealItemSchema = z.object({
+  foodRef: z.number().int().min(1),
+  grams: z.number().positive(),
+});
+export type ModelMealItem = z.infer<typeof modelMealItemSchema>;
+
+export const modelMealOptionSchema = z.object({
+  items: z.array(modelMealItemSchema).min(1).max(12),
+});
+export type ModelMealOption = z.infer<typeof modelMealOptionSchema>;
+
+export const modelMealSlotSchema = z.object({
+  label: z.string(),
+  // Interchangeable versions of the same meal. The server rotates them across
+  // the week (see composeWeek), which buys seven distinct days for roughly the
+  // output of three — asking the model for seven full days instead costs ~4.8k
+  // completion tokens against a 6k cap and pushes latency past the 90 s
+  // request timeout.
+  options: z.array(modelMealOptionSchema).min(1).max(MEAL_OPTIONS_PER_SLOT),
+});
+export type ModelMealSlot = z.infer<typeof modelMealSlotSchema>;
 
 export const modelOutputSchema = z.object({
   assumptions: z.array(z.string()).max(12),
   safetyNotes: z.array(z.string()).max(12),
   workout: z.object({
-    durationWeeks: z.literal(PROGRAM_DURATION_WEEKS),
-    days: z.array(workoutDaySchema).min(1).max(7),
+    days: z.array(modelWorkoutDaySchema).min(1).max(7),
   }),
-  meals: z.array(mealSlotInputSchema).min(1).max(8),
+  meals: z.array(modelMealSlotSchema).min(1).max(8),
 });
 export type ModelOutput = z.infer<typeof modelOutputSchema>;
+
+/** The same shape, with the ref bounds narrowed to the catalog this request
+ *  actually showed the model. Providers enforcing `strict` JSON schema can then
+ *  reject an out-of-range ref during decoding rather than after the fact. */
+export function buildModelOutputSchema(foodCount: number, exerciseCount: number) {
+  const exerciseSlot = modelExerciseSlotSchema.extend({
+    exerciseRef: z.number().int().min(1).max(Math.max(1, exerciseCount)),
+  });
+  const mealItem = modelMealItemSchema.extend({
+    foodRef: z.number().int().min(1).max(Math.max(1, foodCount)),
+  });
+  return modelOutputSchema.extend({
+    workout: z.object({
+      days: z
+        .array(modelWorkoutDaySchema.extend({ exercises: z.array(exerciseSlot).min(1).max(12) }))
+        .min(1)
+        .max(7),
+    }),
+    meals: z
+      .array(
+        modelMealSlotSchema.extend({
+          options: z
+            .array(z.object({ items: z.array(mealItem).min(1).max(12) }))
+            .min(1)
+            .max(MEAL_OPTIONS_PER_SLOT),
+        }),
+      )
+      .min(1)
+      .max(8),
+  });
+}
 
 // ── final stored/returned shape: model output + server-computed nutrition ──
 
@@ -152,10 +236,19 @@ export const computedMealSlotSchema = z.object({
   label: z.string(),
   time: z.string(),
   items: z.array(computedMealItemSchema).min(1),
-  substitutions: z.array(computedMealItemSchema),
   totals: nutritionTotalsSchema,
 });
 export type ComputedMealSlot = z.infer<typeof computedMealSlotSchema>;
+
+/** One weekday's meals. Every day is fitted to the same daily targets on its
+ *  own, so `dailyTotals` is per day rather than a single figure for a template
+ *  that no longer exists. */
+export const mealDaySchema = z.object({
+  weekday: z.number().int().min(1).max(7), // 1 = Monday
+  meals: z.array(computedMealSlotSchema).min(1),
+  dailyTotals: nutritionTotalsSchema,
+});
+export type MealDay = z.infer<typeof mealDaySchema>;
 
 export const generatedPlanSchema = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION),
@@ -167,7 +260,6 @@ export const generatedPlanSchema = z.object({
     durationWeeks: z.literal(PROGRAM_DURATION_WEEKS),
     days: z.array(workoutDaySchema).min(1),
   }),
-  meals: z.array(computedMealSlotSchema).min(1),
-  dailyTotals: nutritionTotalsSchema,
+  week: z.array(mealDaySchema).length(DAYS_PER_MEAL_WEEK),
 });
 export type GeneratedPlan = z.infer<typeof generatedPlanSchema>;

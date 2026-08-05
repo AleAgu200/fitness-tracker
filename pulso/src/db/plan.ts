@@ -22,6 +22,7 @@ export interface PlanExercise {
   restSeconds: number;
   basePR: number;
   muscleGroup: 'chest' | 'back' | 'legs' | 'shoulders' | 'arms' | 'core' | 'full' | null;
+  wxId: string | null; // WorkoutX id, for showing the exercise's demo animation
 }
 
 async function getOrCreateActiveProgramId(athleteId: string): Promise<string> {
@@ -138,6 +139,7 @@ export async function getPlan(athleteId: string, weekday: number): Promise<{ tem
       step: templateExerciseSlots.stepKg,
       restSeconds: templateExerciseSlots.restSeconds,
       muscleGroup: exercises.muscleGroup,
+      wxId: exercises.wxId,
     })
     .from(templateExerciseSlots)
     .innerJoin(exercises, eq(templateExerciseSlots.exerciseId, exercises.id))
@@ -163,15 +165,24 @@ export async function getPlan(athleteId: string, weekday: number): Promise<{ tem
       restSeconds: r.restSeconds,
       basePR: prByExercise.get(r.exerciseId) ?? r.peso ?? 0,
       muscleGroup: r.muscleGroup,
+      wxId: r.wxId,
     })),
   };
 }
 
-/** Reuse a catalog exercise when the name matches, otherwise create a custom one */
-async function resolveExerciseId(athleteId: string, nombre: string): Promise<string> {
-  const all = await db.select({ id: exercises.id, name: exercises.name }).from(exercises);
+/** Reuse a catalog exercise when the name matches, otherwise create a custom one.
+ *  When a WorkoutX id is given, it's also backfilled onto an existing name match
+ *  that doesn't have one yet, so re-picking the same exercise from search later
+ *  unlocks its demo animation. */
+async function resolveExerciseId(athleteId: string, nombre: string, wxId?: string | null): Promise<string> {
+  const all = await db.select({ id: exercises.id, name: exercises.name, wxId: exercises.wxId }).from(exercises);
   const match = all.find(e => e.name.trim().toLowerCase() === nombre.trim().toLowerCase());
-  if (match) return match.id;
+  if (match) {
+    if (wxId && !match.wxId) {
+      await db.update(exercises).set({ wxId }).where(eq(exercises.id, match.id));
+    }
+    return match.id;
+  }
 
   const id = nanoid();
   await db.insert(exercises).values({
@@ -181,6 +192,7 @@ async function resolveExerciseId(athleteId: string, nombre: string): Promise<str
     equipment: null,
     isCustom: true,
     createdByUserId: athleteId,
+    wxId: wxId ?? null,
   });
   return id;
 }
@@ -188,9 +200,9 @@ async function resolveExerciseId(athleteId: string, nombre: string): Promise<str
 export async function addPlanExercise(
   athleteId: string,
   templateId: string,
-  data: { nombre: string; target: number; reps: number; peso: number; step: number },
+  data: { nombre: string; target: number; reps: number; peso: number; step: number; wxId?: string | null },
 ): Promise<void> {
-  const exerciseId = await resolveExerciseId(athleteId, data.nombre);
+  const exerciseId = await resolveExerciseId(athleteId, data.nombre, data.wxId);
   const existing = await db
     .select({ id: templateExerciseSlots.id })
     .from(templateExerciseSlots)
@@ -212,9 +224,9 @@ export async function addPlanExercise(
 export async function updatePlanExercise(
   athleteId: string,
   slotId: string,
-  data: { nombre: string; target: number; reps: number; peso: number; step: number },
+  data: { nombre: string; target: number; reps: number; peso: number; step: number; wxId?: string | null },
 ): Promise<void> {
-  const exerciseId = await resolveExerciseId(athleteId, data.nombre);
+  const exerciseId = await resolveExerciseId(athleteId, data.nombre, data.wxId);
   await db
     .update(templateExerciseSlots)
     .set({

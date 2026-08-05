@@ -3,6 +3,7 @@ import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ExerciseAnimationModal } from '@/components/exercise-animation-modal';
 import { ExercisePlanForm, ExercisePlanValues, ExistingPlanExercise } from '@/components/exercise-plan-form';
 import { AnimatedBar, Card, GlowPulse, Label, PressableScale } from '@/components/ui/kit';
 import { F, useColors, withAlpha } from '@/constants/colors';
@@ -66,6 +67,7 @@ function OtherDayPlanEditor({ weekday, onChanged }: { weekday: number; onChanged
   const [exercises, setExercises] = useState<PlanExercise[]>([]);
   const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [viewingAnimation, setViewingAnimation] = useState<{ nombre: string; wxId: string } | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -152,8 +154,8 @@ function OtherDayPlanEditor({ weekday, onChanged }: { weekday: number; onChanged
           key={editingExercise ? `edit-${editingExercise.slotId}` : 'add'}
           editing={editingExercise != null}
           initial={editingExercise
-            ? { nombre: editingExercise.nombre, target: editingExercise.target, reps: editingExercise.reps, peso: editingExercise.peso, step: editingExercise.step }
-            : { nombre: '', target: 3, reps: 8, peso: 0, step: 2.5 }}
+            ? { nombre: editingExercise.nombre, target: editingExercise.target, reps: editingExercise.reps, peso: editingExercise.peso, step: editingExercise.step, wxId: editingExercise.wxId }
+            : { nombre: '', target: 3, reps: 8, peso: 0, step: 2.5, wxId: null }}
           weightUnit={weightUnit}
           accent={accent}
           existingExercises={existingExercises}
@@ -203,6 +205,16 @@ function OtherDayPlanEditor({ weekday, onChanged }: { weekday: number; onChanged
                   {ex.target}×{ex.reps} · {formatWeight(ex.peso, weightUnit)}
                 </Text>
               </View>
+              {ex.wxId && (
+                <PressableScale
+                  haptic="light"
+                  onPress={() => setViewingAnimation({ nombre: ex.nombre, wxId: ex.wxId! })}
+                  accessibilityLabel={`Ver animación de ${ex.nombre}`}
+                  style={{ paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1, borderColor: C.border, backgroundColor: C.bgEl }}
+                >
+                  <Text style={{ fontFamily: F.mono, fontSize: 10, color: C.textSecondary }}>▶</Text>
+                </PressableScale>
+              )}
               <Text style={{ fontFamily: F.mono, fontSize: 10, color: C.textSecondary, textTransform: 'uppercase' }}>✎ EDITAR</Text>
             </PressableScale>
           ))}
@@ -217,6 +229,14 @@ function OtherDayPlanEditor({ weekday, onChanged }: { weekday: number; onChanged
             </PressableScale>
           )}
         </>
+      )}
+
+      {viewingAnimation && (
+        <ExerciseAnimationModal
+          nombre={viewingAnimation.nombre}
+          wxId={viewingAnimation.wxId}
+          onClose={() => setViewingAnimation(null)}
+        />
       )}
     </>
   );
@@ -241,6 +261,7 @@ export default function EntrenoScreen() {
   // those dashboards. See OtherDayPlanEditor below for the non-today branch.
   const [selectedWeekday, setSelectedWeekday] = useState(todayWeekday);
   const [weekPlanCounts, setWeekPlanCounts] = useState<Record<number, number>>({});
+  const [viewingAnimation, setViewingAnimation] = useState<{ nombre: string; wxId: string } | null>(null);
   const isToday = selectedWeekday === todayWeekday;
 
   const refreshWeekPlanCounts = useCallback(() => {
@@ -321,6 +342,7 @@ export default function EntrenoScreen() {
     : null;
 
   return (
+    <>
     <ScrollView
       style={{ flex: 1, backgroundColor: C.bg }}
       contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
@@ -484,6 +506,16 @@ export default function EntrenoScreen() {
                 </Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+                {activeEx.wxId && (
+                  <PressableScale
+                    haptic="light"
+                    onPress={() => setViewingAnimation({ nombre: activeEx.nombre, wxId: activeEx.wxId! })}
+                    accessibilityLabel={`Ver animación de ${activeEx.nombre}`}
+                    style={{ paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1, borderColor: C.border, backgroundColor: C.bgEl }}
+                  >
+                    <Text style={{ fontFamily: F.mono, fontSize: 10, color: C.textSecondary }}>▶</Text>
+                  </PressableScale>
+                )}
                 <PressableScale onPress={startEditEx} style={{ paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1, borderColor: C.border, backgroundColor: C.bgEl }}>
                   <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 0.4, color: C.textSecondary, textTransform: 'uppercase' }}>✎ EDITAR</Text>
                 </PressableScale>
@@ -608,8 +640,8 @@ export default function EntrenoScreen() {
             key={editingEx ? `edit-${activeEx?.id}` : 'add'}
             editing={editingEx}
             initial={editingEx && activeEx
-              ? { nombre: activeEx.nombre, target: activeEx.target, reps: activeEx.reps, peso: activeEx.peso, step: activeEx.step }
-              : { nombre: '', target: 3, reps: 8, peso: 0, step: 2.5 }}
+              ? { nombre: activeEx.nombre, target: activeEx.target, reps: activeEx.reps, peso: activeEx.peso, step: activeEx.step, wxId: activeEx.wxId }
+              : { nombre: '', target: 3, reps: 8, peso: 0, step: 2.5, wxId: null }}
             weightUnit={weightUnit}
             accent={accent}
             existingExercises={exercises.map(e => ({
@@ -652,6 +684,16 @@ export default function EntrenoScreen() {
                         {e.sub} · {formatWeight(ton, weightUnit)}
                       </Text>
                     </View>
+                    {e.wxId && (
+                      <PressableScale
+                        haptic="light"
+                        onPress={() => setViewingAnimation({ nombre: e.nombre, wxId: e.wxId! })}
+                        accessibilityLabel={`Ver animación de ${e.nombre}`}
+                        style={{ paddingHorizontal: 8, paddingVertical: 5, borderWidth: 1, borderColor: C.border, backgroundColor: C.bgEl }}
+                      >
+                        <Text style={{ fontFamily: F.mono, fontSize: 10, color: C.textSecondary }}>▶</Text>
+                      </PressableScale>
+                    )}
                     <Text style={{ fontFamily: F.monoBold, fontSize: 13, color: complete ? accent : isActive ? C.cyan : C.textSecondary }}>
                       {done}/{e.target}
                     </Text>
@@ -692,5 +734,13 @@ export default function EntrenoScreen() {
         )}
       </View>
     </ScrollView>
+    {viewingAnimation && (
+      <ExerciseAnimationModal
+        nombre={viewingAnimation.nombre}
+        wxId={viewingAnimation.wxId}
+        onClose={() => setViewingAnimation(null)}
+      />
+    )}
+    </>
   );
 }
