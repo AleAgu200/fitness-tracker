@@ -31,14 +31,18 @@ function widget(): NativeModule | null {
 
 export function setWidgetWorkout(state: {
   workoutActive: boolean;
+  sessionDone: boolean;
   currentExercise: string | null;
+  currentSlotId: string | null;
   nextExercise: string | null;
   setDetail: string | null;
   accent: string;
 }): void {
   widget()?.setWorkout(
     state.workoutActive,
+    state.sessionDone,
     state.currentExercise,
+    state.currentSlotId,
     state.nextExercise,
     state.setDetail,
     state.accent,

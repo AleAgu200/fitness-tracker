@@ -57,6 +57,7 @@ import { addWidgetRestListener } from '@/modules/pulso-widget';
 import { getStoredAssignmentMeta, syncAssignments } from '@/lib/sync';
 import { pushAthleteProfile, syncAthleteProfile } from '@/lib/profile-sync';
 import { formatWeight } from '@/lib/units';
+import { EMPTY_WIDGET_DATA, syncWorkoutWidgets } from '@/lib/widget-bridge';
 import { usePreferences } from './preferences';
 import { useSession } from './session';
 
@@ -251,7 +252,10 @@ interface AppContextValue {
   incReps: () => void;
   decReps: () => void;
   setRpe: (v: number) => void;
-  guardarSet: () => void;
+  /** `override` logs against a specific plan slot instead of the selected exercise, using
+   *  the exercise's plan target weight/reps (RPE defaulted) rather than the live steppers —
+   *  used by the widget's "done" quick-log, which auto-advances once the target is hit. */
+  guardarSet: (override?: { slotId: string }) => void;
   finishWorkout: () => void;
   applySuggestedPlan: () => void;
   startEditEx: () => void;
@@ -307,6 +311,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!userId) {
       templateIdRef.current = null;
       mealPlanIdRef.current = null;
+      // The rest timer interval and its deadline ref belong to whoever was logged in —
+      // left running, they'd keep reasserting the previous account's "resting" state
+      // (and repainting the widget with it) on top of whichever account logs in next,
+      // in the same app process. The widget/rest-timer native stores are also
+      // account-agnostic, so the next login would otherwise see this account's leftovers.
+      if (restTimer.current) clearInterval(restTimer.current);
+      restTimer.current = null;
+      restEndAtRef.current = null;
+      saveRestTimerState(CLEARED_REST_STATE).catch(() => {});
+      syncWorkoutWidgets(EMPTY_WIDGET_DATA);
       setState(initialState);
       return;
     }
@@ -837,19 +851,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const setRpe = useCallback((v: number) =>
     setState(s => ({ ...s, curRpe: v })), []);
 
-  const guardarSet = useCallback(() => {
+  const guardarSet = useCallback((override?: { slotId: string }) => {
     const s = stateRef.current;
     const uid = userRef.current;
-    const ex = s.exercises[s.exIndex];
+    const idx = override ? s.exercises.findIndex(e => e.id === override.slotId) : s.exIndex;
+    const ex = idx >= 0 ? s.exercises[idx] : undefined;
     if (!ex || !uid) return;
-    const set: ExerciseSet = { reps: s.curReps, peso: s.curPeso, rpe: s.curRpe, pr: false };
+    // Widget quick-log has no access to the live steppers, so it logs the plan's target
+    // weight/reps instead (RPE defaulted) — fine-tuning still means opening the app.
+    const peso = override ? ex.peso : s.curPeso;
+    const reps = override ? ex.reps : s.curReps;
+    const rpe = override ? 8 : s.curRpe;
+    const set: ExerciseSet = { reps, peso, rpe, pr: false };
 
-    // Optimistic append; PR flag arrives from the DB write
-    setState(st => ({
-      ...st,
-      log: { ...st.log, [ex.id]: [...(st.log[ex.id] || []), set] },
-      sessionDone: false,
-    }));
+    // Optimistic append; PR flag arrives from the DB write. Auto-advancing past a
+    // completed exercise is scoped to the widget quick-log path (`override`) — manual
+    // in-app "GUARDAR SET" taps keep staying on the same exercise, as today.
+    setState(st => {
+      const log = { ...st.log, [ex.id]: [...(st.log[ex.id] || []), set] };
+      const advance = override != null && log[ex.id].length >= ex.target && idx < st.exercises.length - 1;
+      const nextIndex = advance ? idx + 1 : idx;
+      const nextEx = st.exercises[nextIndex];
+      return {
+        ...st,
+        log,
+        exIndex: nextIndex,
+        curPeso: advance ? nextEx.peso : peso,
+        curReps: advance ? nextEx.reps : reps,
+        curRpe: advance ? 8 : rpe,
+        sessionDone: false,
+      };
+    });
     startRest(REST_DEFAULT);
 
     logSet(uid, templateIdRef.current, { slotId: ex.id, exerciseId: ex.exerciseId }, set)

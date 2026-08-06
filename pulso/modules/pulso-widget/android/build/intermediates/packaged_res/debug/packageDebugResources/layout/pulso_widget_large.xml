@@ -20,17 +20,39 @@
         android:layout_weight="1"
         android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/pulso_eyebrow"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="ENTRENO ACTUAL"
-            android:textSize="9sp"
-            android:textStyle="bold"
-            android:letterSpacing="0.14"
-            android:textColor="#E8FF59"
-            android:maxLines="1"
-            android:ellipsize="end" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/pulso_eyebrow"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="ENTRENO ACTUAL"
+                android:textSize="9sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.14"
+                android:textColor="#E8FF59"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/pulso_btn_finish"
+                android:layout_width="wrap_content"
+                android:layout_height="22dp"
+                android:layout_marginStart="6dp"
+                android:paddingHorizontal="7dp"
+                android:gravity="center"
+                android:background="@drawable/pulso_widget_button"
+                android:text="■ FIN"
+                android:textSize="8sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.08"
+                android:textColor="#8A8A93" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/pulso_current"
@@ -73,12 +95,16 @@
         <TextView
             android:id="@+id/pulso_rest_idle"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="LISTO"
-            android:textSize="13sp"
+            android:layout_height="28dp"
+            android:minWidth="72dp"
+            android:paddingHorizontal="8dp"
+            android:gravity="center"
+            android:background="@drawable/pulso_widget_button"
+            android:text="✓ LISTO"
+            android:textSize="11sp"
             android:textStyle="bold"
-            android:letterSpacing="0.12"
-            android:textColor="#5A5A62"
+            android:letterSpacing="0.08"
+            android:textColor="#E8FF59"
             android:includeFontPadding="false"
             android:visibility="gone" />
 

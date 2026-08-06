@@ -141,10 +141,10 @@ export default function HoyScreen() {
         </Animated.View>
 
         {generationJob && generationStatus && (
-          <Card index={0} style={{ padding: 16, marginBottom: 14, gap: 9, borderColor: C.yellow }}>
+          <Card index={0} style={{ padding: 16, marginBottom: 14, gap: 9, borderColor: C.cyan }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Label>PLAN CON IA</Label>
-              <Text style={{ color: C.yellow, fontFamily: F.monoBold, fontSize: 12 }}>
+              <Text style={{ color: C.cyan, fontFamily: F.monoBold, fontSize: 12 }}>
                 {generationActive ? formatElapsed(generationElapsed) : generationJob.id.slice(0, 8).toUpperCase()}
               </Text>
             </View>
@@ -161,9 +161,9 @@ export default function HoyScreen() {
             )}
             <PressableScale
               onPress={() => router.push(generationStatus.route as never)}
-              style={{ marginTop: 3, borderWidth: 1, borderColor: C.yellow, paddingVertical: 10, alignItems: 'center' }}
+              style={{ marginTop: 3, borderWidth: 1, borderColor: C.cyan, paddingVertical: 10, alignItems: 'center' }}
             >
-              <Text style={{ color: C.yellow, fontFamily: F.monoBold, fontSize: 10, letterSpacing: 0.5 }}>
+              <Text style={{ color: C.cyan, fontFamily: F.monoBold, fontSize: 10, letterSpacing: 0.5 }}>
                 {generationStatus.action}
               </Text>
             </PressableScale>

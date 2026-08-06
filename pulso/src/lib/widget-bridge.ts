@@ -11,7 +11,9 @@ export type { WorkoutWidgetData } from '@/widgets/workout-widget-types';
 
 interface AndroidWidgetPush {
   workoutActive: boolean;
+  sessionDone: boolean;
   currentExercise: string | null;
+  currentSlotId: string | null;
   nextExercise: string | null;
   setDetail: string | null;
   accent: string;
@@ -24,7 +26,9 @@ function androidPush(data: WorkoutWidgetData): AndroidWidgetPush {
 
   return {
     workoutActive: data.workoutActive,
+    sessionDone: data.sessionDone,
     currentExercise: data.currentExercise,
+    currentSlotId: data.currentSlotId,
     nextExercise: data.nextExercise,
     setDetail,
     accent: data.accent,
@@ -36,7 +40,9 @@ let lastAndroidPush: AndroidWidgetPush | null = null;
 function isSamePush(a: AndroidWidgetPush | null, b: AndroidWidgetPush): boolean {
   return a != null &&
     a.workoutActive === b.workoutActive &&
+    a.sessionDone === b.sessionDone &&
     a.currentExercise === b.currentExercise &&
+    a.currentSlotId === b.currentSlotId &&
     a.nextExercise === b.nextExercise &&
     a.setDetail === b.setDetail &&
     a.accent === b.accent;

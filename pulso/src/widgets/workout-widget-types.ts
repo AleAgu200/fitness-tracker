@@ -1,6 +1,13 @@
 export interface WorkoutWidgetData {
+  /** True once the athlete has logged at least one set today — gates the "begin your
+   *  training" CTA vs the active-exercise card. */
   workoutActive: boolean;
+  /** True once the session is finished — takes priority over `workoutActive` in the widget. */
+  sessionDone: boolean;
   currentExercise: string | null;
+  /** Plan-slot id of the active exercise, so the "done" widget button can deep-link
+   *  straight to logging it. */
+  currentSlotId: string | null;
   nextExercise: string | null;
   weight: number | null;
   reps: number | null;
@@ -15,7 +22,9 @@ export interface WorkoutWidgetData {
 
 export const EMPTY_WIDGET_DATA: WorkoutWidgetData = {
   workoutActive: false,
+  sessionDone: false,
   currentExercise: null,
+  currentSlotId: null,
   nextExercise: null,
   weight: null,
   reps: null,

@@ -6,7 +6,9 @@ declare class PulsoWidgetModule extends NativeModule<PulsoWidgetEvents> {
   /** `setDetail` arrives pre-formatted (e.g. `"60.0 kg × 8"`); the widget does no formatting. */
   setWorkout(
     workoutActive: boolean,
+    sessionDone: boolean,
     currentExercise: string | null,
+    currentSlotId: string | null,
     nextExercise: string | null,
     setDetail: string | null,
     accent: string | null,

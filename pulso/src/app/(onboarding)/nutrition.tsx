@@ -166,7 +166,7 @@ export default function OnboardingNutritionScreen() {
       stepIndex={5}
       title="Comidas que encajen con vos"
       subtitle="Usaremos estas respuestas para filtrar alimentos antes de crear cualquier sugerencia."
-      onBack={() => router.back()}
+      onBack={() => (router.canGoBack() ? router.back() : router.replace('/(onboarding)/training' as never))}
       onNext={saveAndContinue}
       canProceed={loaded && complete && Boolean(userId)}
       busy={saving}

@@ -85,7 +85,7 @@ export default function OnboardingGoalScreen() {
       stepIndex={3}
       title="¿Qué querés conseguir?"
       subtitle="Tu objetivo define el enfoque del entrenamiento y las estimaciones de energía."
-      onBack={() => router.back()}
+      onBack={() => (router.canGoBack() ? router.back() : router.replace('/(onboarding)/body' as never))}
       onNext={saveAndContinue}
       canProceed={loaded && Boolean(goal && pace && userId)}
       busy={saving}

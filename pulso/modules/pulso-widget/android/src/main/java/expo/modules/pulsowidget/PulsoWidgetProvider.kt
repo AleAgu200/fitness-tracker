@@ -7,6 +7,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
 import android.view.View
@@ -108,6 +109,12 @@ abstract class PulsoWidgetProvider(private val variant: PulsoWidgetVariant) : Ap
     ): RemoteViews {
       val views = RemoteViews(context.packageName, variant.layout)
       views.setOnClickPendingIntent(R.id.pulso_widget_root, openAppIntent(context))
+      if (variant.hasControls) views.setViewVisibility(R.id.pulso_btn_finish, View.GONE)
+
+      if (snapshot.sessionDone) {
+        renderComplete(views, snapshot, variant)
+        return views
+      }
 
       if (!snapshot.workoutActive || snapshot.currentExercise.isNullOrBlank()) {
         renderEmpty(views, snapshot, variant)
@@ -126,7 +133,7 @@ abstract class PulsoWidgetProvider(private val variant: PulsoWidgetVariant) : Ap
       } else {
         snapshot.currentExercise
       }
-      // Reset explicitly: the 1x1 empty state tints this row with the accent, and
+      // Reset explicitly: the empty/complete states tint this row with the accent, and
       // RemoteViews carries that over into the next repaint otherwise.
       views.setTextColor(R.id.pulso_current, TITLE_COLOR)
       views.setTextViewText(R.id.pulso_current, title)
@@ -137,22 +144,47 @@ abstract class PulsoWidgetProvider(private val variant: PulsoWidgetVariant) : Ap
         if (snapshot.nextExercise.isNullOrBlank()) View.GONE else View.VISIBLE,
       )
 
+      if (variant.hasControls) {
+        views.setViewVisibility(R.id.pulso_btn_finish, View.VISIBLE)
+        views.setOnClickPendingIntent(R.id.pulso_btn_finish, openAppIntent(context, "entreno?action=finish"))
+      }
+
       renderRest(context, views, snapshot, variant)
       return views
     }
 
     private fun renderEmpty(views: RemoteViews, snapshot: WidgetSnapshot, variant: PulsoWidgetVariant) {
       if (variant.eyebrow != null) {
-        views.setTextViewText(R.id.pulso_eyebrow, "PULSO")
+        views.setTextViewText(R.id.pulso_eyebrow, "⚡ PULSO")
         views.setTextColor(R.id.pulso_eyebrow, snapshot.accent)
         views.setViewVisibility(R.id.pulso_eyebrow, View.VISIBLE)
-        views.setTextViewText(R.id.pulso_current, "Sin entreno activo")
+        views.setTextViewText(R.id.pulso_current, "Comenzá tu entreno")
         views.setViewVisibility(R.id.pulso_next, View.GONE)
       } else {
         // The 1x1 has no eyebrow, so the title row carries the branding instead.
-        views.setTextViewText(R.id.pulso_current, "PULSO")
+        views.setTextViewText(R.id.pulso_current, "⚡ PULSO")
         views.setTextColor(R.id.pulso_current, snapshot.accent)
-        views.setTextViewText(R.id.pulso_next, "Sin entreno")
+        views.setTextViewText(R.id.pulso_next, "Comenzá tu entreno")
+        views.setViewVisibility(R.id.pulso_next, View.VISIBLE)
+      }
+
+      views.setViewVisibility(R.id.pulso_chronometer, View.GONE)
+      views.setViewVisibility(R.id.pulso_rest_idle, View.GONE)
+      if (variant.hasControls) views.setViewVisibility(R.id.pulso_rest_actions, View.GONE)
+    }
+
+    /** Shown once the session is finished — same slots as [renderEmpty], different copy. */
+    private fun renderComplete(views: RemoteViews, snapshot: WidgetSnapshot, variant: PulsoWidgetVariant) {
+      if (variant.eyebrow != null) {
+        views.setTextViewText(R.id.pulso_eyebrow, "⚡ PULSO")
+        views.setTextColor(R.id.pulso_eyebrow, snapshot.accent)
+        views.setViewVisibility(R.id.pulso_eyebrow, View.VISIBLE)
+        views.setTextViewText(R.id.pulso_current, "¡Buen trabajo!")
+        views.setViewVisibility(R.id.pulso_next, View.GONE)
+      } else {
+        views.setTextViewText(R.id.pulso_current, "⚡ ¡Buen trabajo!")
+        views.setTextColor(R.id.pulso_current, snapshot.accent)
+        views.setTextViewText(R.id.pulso_next, "Sesión completada")
         views.setViewVisibility(R.id.pulso_next, View.VISIBLE)
       }
 
@@ -171,7 +203,19 @@ abstract class PulsoWidgetProvider(private val variant: PulsoWidgetVariant) : Ap
         views.setChronometer(R.id.pulso_chronometer, SystemClock.elapsedRealtime(), null, false)
         views.setViewVisibility(R.id.pulso_chronometer, View.GONE)
         views.setViewVisibility(R.id.pulso_rest_idle, View.VISIBLE)
-        if (variant.hasControls) views.setViewVisibility(R.id.pulso_rest_actions, View.GONE)
+        if (variant.hasControls) {
+          views.setViewVisibility(R.id.pulso_rest_actions, View.GONE)
+          // "✓ LISTO" quick-logs the displayed exercise — the widget can't write to the
+          // app's database itself, so this just opens the app, which performs the log the
+          // instant it mounts (see the `action=done` deep-link handling in entreno.tsx).
+          val slotId = snapshot.currentSlotId
+          if (slotId != null) {
+            views.setOnClickPendingIntent(
+              R.id.pulso_rest_idle,
+              openAppIntent(context, "entreno?action=done&slotId=${Uri.encode(slotId)}"),
+            )
+          }
+        }
         return
       }
 
@@ -193,10 +237,17 @@ abstract class PulsoWidgetProvider(private val variant: PulsoWidgetVariant) : Ap
       views.setOnClickPendingIntent(R.id.pulso_btn_add, broadcast(context, ACTION_REST_ADD))
     }
 
-    private fun openAppIntent(context: Context): PendingIntent {
-      val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
-        ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-      return PendingIntent.getActivity(context, 0, launch ?: Intent(), pendingIntentFlags())
+    /**
+     * Deep-links straight into the Entreno tab (`pulso://<path>`) instead of just launching
+     * the app — `path` can carry an `action=done|finish` query so the app auto-performs it
+     * on mount (see the matching effect in `entreno.tsx`), since nothing native here can
+     * touch the app's database directly. Each distinct path needs its own request code so
+     * the body tap / "✓ LISTO" / "■ FIN" pending intents don't collide.
+     */
+    private fun openAppIntent(context: Context, path: String = "entreno"): PendingIntent {
+      val intent = Intent(Intent.ACTION_VIEW, Uri.parse("pulso://$path"))
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+      return PendingIntent.getActivity(context, path.hashCode(), intent, pendingIntentFlags())
     }
 
     private fun broadcast(context: Context, action: String): PendingIntent {

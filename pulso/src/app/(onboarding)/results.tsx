@@ -161,9 +161,9 @@ export default function ResultsScreen() {
         </Text>
         <PressableScale
           onPress={() => router.replace('/(onboarding)/generating' as never)}
-          style={{ paddingVertical: 15, alignItems: 'center', borderWidth: 1, borderColor: C.yellow }}
+          style={{ paddingVertical: 15, alignItems: 'center', borderWidth: 1, borderColor: C.cyan }}
         >
-          <Text style={{ color: C.yellow, fontFamily: F.monoBold, fontSize: 11 }}>
+          <Text style={{ color: C.cyan, fontFamily: F.monoBold, fontSize: 11 }}>
             VER ESTADO DE GENERACIÓN
           </Text>
         </PressableScale>
@@ -198,7 +198,7 @@ export default function ResultsScreen() {
       <View style={{ flexDirection: 'row', gap: 10 }}>
         <Card style={{ flex: 1, padding: 14, gap: 5 }} index={0}>
           <Label>ENTRENO</Label>
-          <Text style={{ color: C.yellow, fontFamily: F.monoXBold, fontSize: 25 }}>
+          <Text style={{ color: C.red, fontFamily: F.monoXBold, fontSize: 25 }}>
             {plan.workout.days.length}
           </Text>
           <Text style={{ color: C.textSecondary, fontFamily: F.inter, fontSize: 12 }}>días por semana</Text>
@@ -221,7 +221,7 @@ export default function ResultsScreen() {
         </View>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {[
-            ['PROT', sampleDay?.dailyTotals.proteinGrams ?? 0, C.yellow],
+            ['PROT', sampleDay?.dailyTotals.proteinGrams ?? 0, C.red],
             ['CARB', sampleDay?.dailyTotals.carbsGrams ?? 0, C.cyan],
             ['GRASA', sampleDay?.dailyTotals.fatGrams ?? 0, C.orange],
           ].map(([label, value, color]) => (
@@ -251,12 +251,12 @@ export default function ResultsScreen() {
                   height: 31,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  backgroundColor: withAlpha(C.yellow, 0.12),
+                  backgroundColor: withAlpha(C.red, 0.12),
                   borderWidth: 1,
-                  borderColor: withAlpha(C.yellow, 0.35),
+                  borderColor: withAlpha(C.red, 0.35),
                 }}
               >
-                <Text style={{ color: C.yellow, fontFamily: F.monoBold, fontSize: 11 }}>{day.weekday}</Text>
+                <Text style={{ color: C.red, fontFamily: F.monoBold, fontSize: 11 }}>{day.weekday}</Text>
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: C.textPrimary, fontFamily: F.interSemi, fontSize: 13 }}>{day.name}</Text>

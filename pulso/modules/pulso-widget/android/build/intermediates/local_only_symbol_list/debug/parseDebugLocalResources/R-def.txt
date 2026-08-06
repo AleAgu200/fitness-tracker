@@ -3,6 +3,7 @@ local
 drawable pulso_widget_button
 drawable pulso_widget_card
 id pulso_btn_add
+id pulso_btn_finish
 id pulso_btn_reduce
 id pulso_btn_skip
 id pulso_chronometer

@@ -188,7 +188,7 @@ export default function OnboardingBodyScreen() {
       stepIndex={2}
       title="Conozcamos tu cuerpo"
       subtitle="Estos datos se usan para estimar energía y detectar cuándo una recomendación necesita revisión profesional."
-      onBack={() => router.back()}
+      onBack={() => (router.canGoBack() ? router.back() : router.replace('/(onboarding)/account' as never))}
       onNext={saveAndContinue}
       canProceed={loaded && Boolean(userId)}
       busy={saving}

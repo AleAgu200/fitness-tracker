@@ -1,3 +1,4 @@
+import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated';
@@ -264,6 +265,25 @@ export default function EntrenoScreen() {
   const [viewingAnimation, setViewingAnimation] = useState<{ nombre: string; wxId: string } | null>(null);
   const isToday = selectedWeekday === todayWeekday;
 
+  // Widget "✓ LISTO" / "■ FIN" buttons deep-link here (pulso://entreno?action=...) instead
+  // of mutating anything natively — the widget can't touch the app's database, so it just
+  // opens the app and this effect performs the action the instant the plan has loaded.
+  const params = useLocalSearchParams<{ action?: string; slotId?: string }>();
+  const handledAction = useRef(false);
+  useEffect(() => {
+    if (handledAction.current || !state.ready || !params.action) return;
+    handledAction.current = true;
+    if (params.action === 'done' && params.slotId) {
+      guardarSet({ slotId: params.slotId });
+    } else if (params.action === 'finish') {
+      finishWorkout();
+    }
+    router.setParams({ action: undefined, slotId: undefined });
+  }, [state.ready, params.action, params.slotId, guardarSet, finishWorkout]);
+  useEffect(() => {
+    if (!params.action) handledAction.current = false;
+  }, [params.action]);
+
   const refreshWeekPlanCounts = useCallback(() => {
     if (!userId) return;
     getWeekSummary(userId)
@@ -298,10 +318,18 @@ export default function EntrenoScreen() {
     previousRestTotal.current = restTotal;
   }, [activeEx?.nombre, restActive, restLeft, restTotal]);
 
+  const totalSets = Object.values(log).reduce((a, sets) => a + sets.length, 0);
+
   useEffect(() => {
+    // "Started" (vs the widget's "begin your training" CTA) means at least one set has
+    // been logged today — a plan existing isn't enough, so the CTA still shows up until
+    // the athlete actually taps in.
+    const started = totalSets > 0;
     syncWorkoutWidgets({
-      workoutActive: activeEx != null,
+      workoutActive: started && activeEx != null,
+      sessionDone,
       currentExercise: activeEx?.nombre ?? null,
+      currentSlotId: activeEx?.id ?? null,
       nextExercise: exercises[exIndex + 1]?.nombre ?? null,
       weight: activeEx ? curPeso : null,
       reps: activeEx ? curReps : null,
@@ -312,14 +340,13 @@ export default function EntrenoScreen() {
       restTotal,
       accent,
     });
-  }, [activeEx, exercises, exIndex, curPeso, curReps, weightUnit, restActive, restLeft, restTotal, accent]);
+  }, [activeEx, exercises, exIndex, curPeso, curReps, weightUnit, restActive, restLeft, restTotal, accent, sessionDone, totalSets]);
 
   useEffect(() => () => {
     if (!restActive) cancelRestTimerNotification().catch(() => {});
   }, [restActive]);
 
   const doneSets = (log[activeEx?.id] || []).length;
-  const totalSets = Object.values(log).reduce((a, sets) => a + sets.length, 0);
   const totalTonelaje = exercises.reduce((a, e) => {
     const sets = log[e.id] || [];
     return a + sets.reduce((b, s) => b + s.peso * s.reps, 0);

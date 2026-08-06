@@ -273,7 +273,7 @@ export default function OnboardingReviewScreen() {
       stepIndex={7}
       title="Revisá antes de generar"
       subtitle="Confirmá que todo esté correcto. Podés editar cualquier sección sin perder el resto de tus respuestas."
-      onBack={() => router.back()}
+      onBack={() => (router.canGoBack() ? router.back() : router.replace('/(onboarding)/safety' as never))}
       onNext={generatePlan}
       canProceed={loaded && missing.length === 0 && Boolean(userId)}
       nextLabel="GENERAR PLAN"

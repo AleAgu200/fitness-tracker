@@ -13,7 +13,10 @@ import org.json.JSONObject
  */
 data class WidgetSnapshot(
   val workoutActive: Boolean,
+  val sessionDone: Boolean,
   val currentExercise: String?,
+  /** Plan-slot id of the active exercise — carried into the "✓ LISTO" deep link. */
+  val currentSlotId: String?,
   val nextExercise: String?,
   val setDetail: String?,
   val accent: Int,
@@ -25,7 +28,9 @@ data class WidgetSnapshot(
 
   fun toJson(): JSONObject = JSONObject().apply {
     put("workoutActive", workoutActive)
+    put("sessionDone", sessionDone)
     put("currentExercise", currentExercise ?: JSONObject.NULL)
+    put("currentSlotId", currentSlotId ?: JSONObject.NULL)
     put("nextExercise", nextExercise ?: JSONObject.NULL)
     put("setDetail", setDetail ?: JSONObject.NULL)
     put("restEndAt", if (restEndAt > 0) restEndAt else JSONObject.NULL)
@@ -36,7 +41,9 @@ data class WidgetSnapshot(
 object PulsoWidgetStore {
   private const val PREFS = "pulso_widget_store"
   private const val KEY_ACTIVE = "workout_active"
+  private const val KEY_SESSION_DONE = "session_done"
   private const val KEY_CURRENT = "current_exercise"
+  private const val KEY_SLOT_ID = "current_slot_id"
   private const val KEY_NEXT = "next_exercise"
   private const val KEY_DETAIL = "set_detail"
   private const val KEY_ACCENT = "accent"
@@ -57,7 +64,9 @@ object PulsoWidgetStore {
     }
     return WidgetSnapshot(
       workoutActive = p.getBoolean(KEY_ACTIVE, false),
+      sessionDone = p.getBoolean(KEY_SESSION_DONE, false),
       currentExercise = p.getString(KEY_CURRENT, null),
+      currentSlotId = p.getString(KEY_SLOT_ID, null),
       nextExercise = p.getString(KEY_NEXT, null),
       setDetail = p.getString(KEY_DETAIL, null),
       accent = accent,
@@ -70,14 +79,18 @@ object PulsoWidgetStore {
   fun writeWorkout(
     context: Context,
     workoutActive: Boolean,
+    sessionDone: Boolean,
     currentExercise: String?,
+    currentSlotId: String?,
     nextExercise: String?,
     setDetail: String?,
     accent: String?,
   ) {
     prefs(context).edit()
       .putBoolean(KEY_ACTIVE, workoutActive)
+      .putBoolean(KEY_SESSION_DONE, sessionDone)
       .putString(KEY_CURRENT, currentExercise)
+      .putString(KEY_SLOT_ID, currentSlotId)
       .putString(KEY_NEXT, nextExercise)
       .putString(KEY_DETAIL, setDetail)
       .putString(KEY_ACCENT, accent ?: DEFAULT_ACCENT)

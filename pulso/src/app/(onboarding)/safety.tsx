@@ -126,7 +126,7 @@ export default function OnboardingSafetyScreen() {
       stepIndex={6}
       title="Tu seguridad va primero"
       subtitle="Estas respuestas solo determinan si el plan puede generarse automáticamente o necesita revisión profesional."
-      onBack={() => router.back()}
+      onBack={() => (router.canGoBack() ? router.back() : router.replace('/(onboarding)/nutrition' as never))}
       onNext={saveAndContinue}
       canProceed={loaded && answered && consent && !consentSaving && Boolean(userId)}
       busy={saving}

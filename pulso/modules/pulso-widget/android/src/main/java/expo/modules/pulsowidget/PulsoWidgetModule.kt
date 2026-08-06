@@ -18,11 +18,15 @@ class PulsoWidgetModule : Module() {
     OnDestroy { live = null }
 
     Function("setWorkout") { workoutActive: Boolean,
+                             sessionDone: Boolean,
                              currentExercise: String?,
+                             currentSlotId: String?,
                              nextExercise: String?,
                              setDetail: String?,
                              accent: String? ->
-      PulsoWidgetStore.writeWorkout(context, workoutActive, currentExercise, nextExercise, setDetail, accent)
+      PulsoWidgetStore.writeWorkout(
+        context, workoutActive, sessionDone, currentExercise, currentSlotId, nextExercise, setDetail, accent,
+      )
       PulsoWidgetProvider.renderAll(context)
     }
 

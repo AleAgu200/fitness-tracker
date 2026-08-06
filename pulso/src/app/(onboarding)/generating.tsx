@@ -313,14 +313,14 @@ export default function GeneratingScreen() {
                 justifyContent: 'center',
               }}
             >
-              <Text style={{ color: C.yellow, fontFamily: F.monoXBold, fontSize: 34 }}>P</Text>
+              <Text style={{ color: C.cyan, fontFamily: F.monoXBold, fontSize: 34 }}>P</Text>
             </GlowPulse>
             <View style={{ gap: 8, alignItems: 'center' }}>
               <Label>GENERACIÓN EN SEGUNDO PLANO</Label>
               <Text style={{ color: C.textPrimary, fontFamily: F.grotesk, fontSize: 29, textAlign: 'center' }}>
                 {phaseLabel(job)}
               </Text>
-              <Text style={{ color: C.yellow, fontFamily: F.monoXBold, fontSize: 25 }}>
+              <Text style={{ color: C.cyan, fontFamily: F.monoXBold, fontSize: 25 }}>
                 {formatElapsed(elapsedMs)}
               </Text>
               <Text style={{ color: C.textSecondary, fontFamily: F.inter, fontSize: 13, lineHeight: 20, textAlign: 'center' }}>
@@ -340,7 +340,7 @@ export default function GeneratingScreen() {
               const current = index === rank;
               return (
                 <View key={label} style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-                  <Text style={{ color: done ? C.cyan : current ? C.yellow : C.textTertiary, fontFamily: F.monoBold }}>
+                  <Text style={{ color: done || current ? C.cyan : C.textTertiary, fontFamily: F.monoBold }}>
                     {done ? '✓' : current ? '●' : '○'}
                   </Text>
                   <Text style={{ flex: 1, color: current ? C.textPrimary : C.textSecondary, fontFamily: F.inter, fontSize: 12 }}>
@@ -366,9 +366,9 @@ export default function GeneratingScreen() {
             <PressableScale
               disabled={leaving}
               onPress={() => void continueInBackground()}
-              style={{ paddingVertical: 15, alignItems: 'center', borderWidth: 1, borderColor: C.yellow }}
+              style={{ paddingVertical: 15, alignItems: 'center', borderWidth: 1, borderColor: C.cyan }}
             >
-              <Text style={{ color: C.yellow, fontFamily: F.monoBold, fontSize: 11, letterSpacing: 0.7 }}>
+              <Text style={{ color: C.cyan, fontFamily: F.monoBold, fontSize: 11, letterSpacing: 0.7 }}>
                 {leaving ? 'ABRIENDO PULSO…' : 'SEGUIR USANDO PULSO'}
               </Text>
             </PressableScale>

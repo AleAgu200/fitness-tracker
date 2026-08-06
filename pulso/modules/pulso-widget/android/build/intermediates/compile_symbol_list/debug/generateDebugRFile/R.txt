@@ -1,6 +1,7 @@
 int drawable pulso_widget_button 0x0
 int drawable pulso_widget_card 0x0
 int id pulso_btn_add 0x0
+int id pulso_btn_finish 0x0
 int id pulso_btn_reduce 0x0
 int id pulso_btn_skip 0x0
 int id pulso_chronometer 0x0

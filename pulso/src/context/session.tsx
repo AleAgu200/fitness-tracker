@@ -32,6 +32,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     const userId = state.userId;
     // Let route guards and screens react before any network cleanup. Logout
     // must be immediate even when the server is slow or unavailable.
+    // AppProvider reacts to userId flipping to null by stopping the rest timer and
+    // clearing the widget/rest-timer native stores (see app-state.tsx) — the
+    // account-agnostic device state cleanup lives there, not here.
     setState({ userId: null, sessionId: null, loading: false });
 
     const cleanups: Promise<void>[] = [];

@@ -179,7 +179,7 @@ export default function OnboardingTrainingScreen() {
       stepIndex={4}
       title="Diseñemos tu entrenamiento"
       subtitle="Contanos cuánto tiempo tenés, tu experiencia y con qué podés entrenar."
-      onBack={() => router.back()}
+      onBack={() => (router.canGoBack() ? router.back() : router.replace('/(onboarding)/goal' as never))}
       onNext={saveAndContinue}
       canProceed={loaded && complete && Boolean(userId)}
       busy={saving}
