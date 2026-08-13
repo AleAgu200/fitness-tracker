@@ -40,7 +40,10 @@ function Stepper({ label, value, onInc, onDec }: { label: string; value: string 
         <PressableScale onPress={onDec} style={{ width: 30, height: 30, borderWidth: 1, borderColor: C.border, backgroundColor: C.bgEl, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ fontFamily: F.mono, fontSize: 18, color: C.textPrimary }}>−</Text>
         </PressableScale>
-        <Text style={{ fontFamily: F.monoXBold, fontSize: 22, color: C.textPrimary, width: 54, textAlign: 'center', fontVariant: ['tabular-nums'] as any }}>
+        <Text
+          numberOfLines={1}
+          style={{ fontFamily: F.monoXBold, fontSize: 22, color: C.textPrimary, minWidth: 54, textAlign: 'center', fontVariant: ['tabular-nums'] as any }}
+        >
           {value}
         </Text>
         <PressableScale onPress={onInc} style={{ width: 30, height: 30, borderWidth: 1, borderColor: C.border, backgroundColor: C.bgEl, alignItems: 'center', justifyContent: 'center' }}>
