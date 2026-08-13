@@ -140,8 +140,8 @@ export async function assembleAndGenerate(
     pace: input.pace,
   });
 
-  const pulsoFoods = listFoods();
-  const pulsoExercises = listExercises();
+  const pulsoFoods = await listFoods();
+  const pulsoExercises = await listExercises();
   const wgerExercises = await listAllWgerExercises();
 
   const eligibleFoods: EligibleFood[] = filterEligibleFoods(pulsoFoods, {

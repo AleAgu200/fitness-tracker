@@ -9,6 +9,6 @@ export async function POST(request: Request) {
   const kind = roleToKind(user.role);
   if (!kind) return forbidden();
 
-  const code = createInvite(user.id, kind);
+  const code = await createInvite(user.id, kind);
   return Response.json({ code, kind });
 }

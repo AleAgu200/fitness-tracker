@@ -27,7 +27,7 @@ export async function GET(
   if (!user) return unauthorized();
 
   const { id } = await params;
-  const lookup = getGenerationJob(user.id, id);
+  const lookup = await getGenerationJob(user.id, id);
   // Return the same response for a missing job and a different owner's job.
   if (!lookup.job) {
     return Response.json({ error: "generation_job_not_found" }, { status: 404 });

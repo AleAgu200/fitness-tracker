@@ -14,14 +14,14 @@ export async function GET(request: Request) {
   let athleteId = user.id;
   const requested = new URL(request.url).searchParams.get("athleteId");
   if (requested && requested !== user.id) {
-    if (!roleToKind(user.role) || !areLinked(user.id, requested)) {
+    if (!roleToKind(user.role) || !(await areLinked(user.id, requested))) {
       return Response.json({ error: "not_linked" }, { status: 403 });
     }
     athleteId = requested;
   }
 
   return Response.json({
-    workout: getActiveWorkout(athleteId),
-    mealPlan: getActiveMealPlan(athleteId),
+    workout: await getActiveWorkout(athleteId),
+    mealPlan: await getActiveMealPlan(athleteId),
   });
 }

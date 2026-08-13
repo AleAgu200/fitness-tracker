@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   if (body.meals.length > MAX_MEALS) {
     return Response.json({ error: "too_many_meals" }, { status: 400 });
   }
-  if (!areLinked(user.id, athleteId)) return Response.json({ error: "not_linked" }, { status: 403 });
+  if (!(await areLinked(user.id, athleteId))) return Response.json({ error: "not_linked" }, { status: 403 });
 
   const meals: MealPlanPayload["meals"] = [];
   for (const raw of body.meals as Record<string, unknown>[]) {
@@ -51,6 +51,6 @@ export async function POST(request: Request) {
     });
   }
 
-  const version = assignMealPlan(user.id, athleteId, { nutritionistName: user.name, meals });
+  const version = await assignMealPlan(user.id, athleteId, { nutritionistName: user.name, meals });
   return Response.json({ ok: true, version });
 }

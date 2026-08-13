@@ -18,7 +18,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const equipment = typeof body.equipment === "string" ? body.equipment : "otro";
   if (!name) return Response.json({ error: "invalid_body" }, { status: 400 });
 
-  const ok = updateExercise(user.id, id, { name, muscleGroup, equipment });
+  const ok = await updateExercise(user.id, id, { name, muscleGroup, equipment });
   if (!ok) return Response.json({ error: "not_editable" }, { status: 403 });
   return Response.json({ ok: true });
 }
@@ -29,7 +29,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   if (user.role !== "coach") return forbidden();
   const { id } = await params;
 
-  const ok = deleteExercise(user.id, id);
+  const ok = await deleteExercise(user.id, id);
   if (!ok) return Response.json({ error: "not_editable" }, { status: 403 });
   return Response.json({ ok: true });
 }

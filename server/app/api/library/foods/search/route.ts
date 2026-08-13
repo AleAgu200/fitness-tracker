@@ -69,7 +69,7 @@ export async function GET(request: Request) {
   const q = (new URL(request.url).searchParams.get("q") ?? "").trim();
   if (q.length < 2) return Response.json({ foods: [] });
 
-  const local: FoodSearchResult[] = listFoods(q).map((food) => ({
+  const local: FoodSearchResult[] = (await listFoods(q)).map((food) => ({
     id: food.id,
     source: "pulso",
     name: food.name,

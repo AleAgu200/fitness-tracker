@@ -1,30 +1,9 @@
-import Database from "better-sqlite3";
 import { randomBytes } from "crypto";
 
-// Same DB as auth/supervision/messages
-const db = new Database("./data/auth.db");
+import { and, asc, eq, ilike } from "drizzle-orm";
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS "library_foods" (
-    "id"        TEXT NOT NULL PRIMARY KEY,
-    "name"      TEXT NOT NULL,
-    "category"  TEXT NOT NULL,
-    "kcal"      REAL NOT NULL,
-    "proteinG"  REAL NOT NULL,
-    "carbsG"    REAL NOT NULL,
-    "fatG"      REAL NOT NULL,
-    "createdBy" TEXT,
-    "createdAt" INTEGER NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS "library_exercises" (
-    "id"          TEXT NOT NULL PRIMARY KEY,
-    "name"        TEXT NOT NULL,
-    "muscleGroup" TEXT NOT NULL,
-    "equipment"   TEXT NOT NULL,
-    "createdBy"   TEXT,
-    "createdAt"   INTEGER NOT NULL
-  );
-`);
+import { db } from "@/db";
+import { libraryExercises, libraryFoods } from "@/db/schema";
 
 export interface Food {
   id: string;
@@ -172,93 +151,88 @@ const SEED_EXERCISES: Omit<LibraryExercise, "id" | "createdBy" | "createdAt">[] 
 // added, and an all-or-nothing seed would never reach them. Entries a
 // nutritionist edited or created keep their own values — only names absent from
 // the table are inserted.
-function seed() {
-  const existingFoods = new Set(
-    (db.prepare(`SELECT "name" FROM "library_foods"`).all() as { name: string }[])
-      .map(f => f.name),
-  );
-  const insFood = db.prepare(
-    `INSERT INTO "library_foods" ("id","name","category","kcal","proteinG","carbsG","fatG","createdBy","createdAt")
-     VALUES (?,?,?,?,?,?,?,NULL,?)`,
-  );
-  for (const f of SEED_FOODS) {
-    if (existingFoods.has(f.name)) continue;
-    insFood.run(newId(), f.name, f.category, f.kcal, f.proteinG, f.carbsG, f.fatG, Date.now());
+let seedPromise: Promise<void> | null = null;
+
+async function seed(): Promise<void> {
+  const existingFoods = await db.select({ name: libraryFoods.name }).from(libraryFoods);
+  const existingFoodNames = new Set(existingFoods.map(f => f.name));
+  const newFoods = SEED_FOODS.filter(f => !existingFoodNames.has(f.name));
+  if (newFoods.length) {
+    const now = Date.now();
+    await db.insert(libraryFoods).values(
+      newFoods.map(f => ({ id: newId(), ...f, createdBy: null, createdAt: now })),
+    );
   }
 
-  const existingExercises = new Set(
-    (db.prepare(`SELECT "name" FROM "library_exercises"`).all() as { name: string }[])
-      .map(e => e.name),
-  );
-  const insExercise = db.prepare(
-    `INSERT INTO "library_exercises" ("id","name","muscleGroup","equipment","createdBy","createdAt")
-     VALUES (?,?,?,?,NULL,?)`,
-  );
-  for (const e of SEED_EXERCISES) {
-    if (existingExercises.has(e.name)) continue;
-    insExercise.run(newId(), e.name, e.muscleGroup, e.equipment, Date.now());
+  const existingExercises = await db.select({ name: libraryExercises.name }).from(libraryExercises);
+  const existingExerciseNames = new Set(existingExercises.map(e => e.name));
+  const newExercises = SEED_EXERCISES.filter(e => !existingExerciseNames.has(e.name));
+  if (newExercises.length) {
+    const now = Date.now();
+    await db.insert(libraryExercises).values(
+      newExercises.map(e => ({ id: newId(), ...e, createdBy: null, createdAt: now })),
+    );
   }
 }
-seed();
+
+function ensureSeeded(): Promise<void> {
+  if (!seedPromise) seedPromise = seed();
+  return seedPromise;
+}
 
 // ── foods CRUD ───────────────────────────────────────────────────────────────
 
-export function listFoods(q = ""): Food[] {
-  return db.prepare(
-    `SELECT * FROM "library_foods"
-     WHERE "name" LIKE ? ORDER BY "category", "name"`,
-  ).all(`%${q}%`) as Food[];
+export async function listFoods(q = ""): Promise<Food[]> {
+  await ensureSeeded();
+  return db.select().from(libraryFoods)
+    .where(ilike(libraryFoods.name, `%${q}%`))
+    .orderBy(asc(libraryFoods.category), asc(libraryFoods.name));
 }
 
-export function createFood(userId: string, f: { name: string; category: string; kcal: number; proteinG: number; carbsG: number; fatG: number }): Food {
+export async function createFood(userId: string, f: { name: string; category: string; kcal: number; proteinG: number; carbsG: number; fatG: number }): Promise<Food> {
+  await ensureSeeded();
   const food: Food = { id: newId(), ...f, createdBy: userId, createdAt: Date.now() };
-  db.prepare(
-    `INSERT INTO "library_foods" ("id","name","category","kcal","proteinG","carbsG","fatG","createdBy","createdAt")
-     VALUES (?,?,?,?,?,?,?,?,?)`,
-  ).run(food.id, food.name, food.category, food.kcal, food.proteinG, food.carbsG, food.fatG, food.createdBy, food.createdAt);
+  await db.insert(libraryFoods).values(food);
   return food;
 }
 
 /** Only the creator can modify custom items; seeded items are read-only */
-export function updateFood(userId: string, id: string, f: { name: string; category: string; kcal: number; proteinG: number; carbsG: number; fatG: number }): boolean {
-  const r = db.prepare(
-    `UPDATE "library_foods" SET "name"=?, "category"=?, "kcal"=?, "proteinG"=?, "carbsG"=?, "fatG"=?
-     WHERE "id"=? AND "createdBy"=?`,
-  ).run(f.name, f.category, f.kcal, f.proteinG, f.carbsG, f.fatG, id, userId);
-  return r.changes > 0;
+export async function updateFood(userId: string, id: string, f: { name: string; category: string; kcal: number; proteinG: number; carbsG: number; fatG: number }): Promise<boolean> {
+  const result = await db.update(libraryFoods)
+    .set(f)
+    .where(and(eq(libraryFoods.id, id), eq(libraryFoods.createdBy, userId)));
+  return (result.count ?? 0) > 0;
 }
 
-export function deleteFood(userId: string, id: string): boolean {
-  const r = db.prepare(`DELETE FROM "library_foods" WHERE "id"=? AND "createdBy"=?`).run(id, userId);
-  return r.changes > 0;
+export async function deleteFood(userId: string, id: string): Promise<boolean> {
+  const result = await db.delete(libraryFoods).where(and(eq(libraryFoods.id, id), eq(libraryFoods.createdBy, userId)));
+  return (result.count ?? 0) > 0;
 }
 
 // ── exercises CRUD ───────────────────────────────────────────────────────────
 
-export function listExercises(q = ""): LibraryExercise[] {
-  return db.prepare(
-    `SELECT * FROM "library_exercises"
-     WHERE "name" LIKE ? ORDER BY "muscleGroup", "name"`,
-  ).all(`%${q}%`) as LibraryExercise[];
+export async function listExercises(q = ""): Promise<LibraryExercise[]> {
+  await ensureSeeded();
+  return db.select().from(libraryExercises)
+    .where(ilike(libraryExercises.name, `%${q}%`))
+    .orderBy(asc(libraryExercises.muscleGroup), asc(libraryExercises.name));
 }
 
-export function createExercise(userId: string, e: { name: string; muscleGroup: string; equipment: string }): LibraryExercise {
+export async function createExercise(userId: string, e: { name: string; muscleGroup: string; equipment: string }): Promise<LibraryExercise> {
+  await ensureSeeded();
   const ex: LibraryExercise = { id: newId(), ...e, createdBy: userId, createdAt: Date.now() };
-  db.prepare(
-    `INSERT INTO "library_exercises" ("id","name","muscleGroup","equipment","createdBy","createdAt")
-     VALUES (?,?,?,?,?,?)`,
-  ).run(ex.id, ex.name, ex.muscleGroup, ex.equipment, ex.createdBy, ex.createdAt);
+  await db.insert(libraryExercises).values(ex);
   return ex;
 }
 
-export function updateExercise(userId: string, id: string, e: { name: string; muscleGroup: string; equipment: string }): boolean {
-  const r = db.prepare(
-    `UPDATE "library_exercises" SET "name"=?, "muscleGroup"=?, "equipment"=? WHERE "id"=? AND "createdBy"=?`,
-  ).run(e.name, e.muscleGroup, e.equipment, id, userId);
-  return r.changes > 0;
+export async function updateExercise(userId: string, id: string, e: { name: string; muscleGroup: string; equipment: string }): Promise<boolean> {
+  const result = await db.update(libraryExercises)
+    .set(e)
+    .where(and(eq(libraryExercises.id, id), eq(libraryExercises.createdBy, userId)));
+  return (result.count ?? 0) > 0;
 }
 
-export function deleteExercise(userId: string, id: string): boolean {
-  const r = db.prepare(`DELETE FROM "library_exercises" WHERE "id"=? AND "createdBy"=?`).run(id, userId);
-  return r.changes > 0;
+export async function deleteExercise(userId: string, id: string): Promise<boolean> {
+  const result = await db.delete(libraryExercises).where(and(eq(libraryExercises.id, id), eq(libraryExercises.createdBy, userId)));
+  return (result.count ?? 0) > 0;
 }

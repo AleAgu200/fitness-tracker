@@ -1,16 +1,7 @@
-import Database from "better-sqlite3";
+import { and, eq } from "drizzle-orm";
 
-const db = new Database("./data/auth.db");
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS "push_devices" (
-    "expoPushToken" TEXT NOT NULL PRIMARY KEY,
-    "userId"        TEXT NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
-    "platform"      TEXT NOT NULL,
-    "updatedAt"     INTEGER NOT NULL
-  );
-  CREATE INDEX IF NOT EXISTS "push_user" ON "push_devices" ("userId");
-`);
+import { db } from "@/db";
+import { pushDevices, user } from "@/db/schema";
 
 const TOKEN_RE = /^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$/;
 
@@ -18,24 +9,21 @@ export function isExpoPushToken(token: string): boolean {
   return TOKEN_RE.test(token);
 }
 
-export function registerPushDevice(userId: string, token: string, platform: string): void {
-  db.prepare(`
-    INSERT INTO "push_devices" ("expoPushToken", "userId", "platform", "updatedAt")
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT("expoPushToken") DO UPDATE SET
-      "userId" = excluded."userId",
-      "platform" = excluded."platform",
-      "updatedAt" = excluded."updatedAt"
-  `).run(token, userId, platform, Date.now());
+export async function registerPushDevice(userId: string, token: string, platform: string): Promise<void> {
+  await db.insert(pushDevices)
+    .values({ expoPushToken: token, userId, platform, updatedAt: Date.now() })
+    .onConflictDoUpdate({
+      target: pushDevices.expoPushToken,
+      set: { userId, platform, updatedAt: Date.now() },
+    });
 }
 
-export function unregisterPushDevice(userId: string, token: string): void {
-  db.prepare(`DELETE FROM "push_devices" WHERE "userId" = ? AND "expoPushToken" = ?`).run(userId, token);
+export async function unregisterPushDevice(userId: string, token: string): Promise<void> {
+  await db.delete(pushDevices).where(and(eq(pushDevices.userId, userId), eq(pushDevices.expoPushToken, token)));
 }
 
-function tokensFor(userId: string): string[] {
-  const rows = db.prepare(`SELECT "expoPushToken" FROM "push_devices" WHERE "userId" = ?`)
-    .all(userId) as { expoPushToken: string }[];
+async function tokensFor(userId: string): Promise<string[]> {
+  const rows = await db.select({ expoPushToken: pushDevices.expoPushToken }).from(pushDevices).where(eq(pushDevices.userId, userId));
   return rows.map(row => row.expoPushToken);
 }
 
@@ -50,15 +38,13 @@ export async function pushProfessionalMessage(
   receiverId: string,
   content: string,
 ): Promise<void> {
-  const sender = db.prepare(`SELECT "name", "role" FROM "user" WHERE "id" = ?`)
-    .get(senderId) as { name: string; role: string } | undefined;
-  const receiver = db.prepare(`SELECT "role" FROM "user" WHERE "id" = ?`)
-    .get(receiverId) as { role: string } | undefined;
+  const [sender] = await db.select({ name: user.name, role: user.role }).from(user).where(eq(user.id, senderId));
+  const [receiver] = await db.select({ role: user.role }).from(user).where(eq(user.id, receiverId));
 
   if (!sender || !receiver || receiver.role !== "athlete") return;
   if (sender.role !== "coach" && sender.role !== "nutritionist") return;
 
-  const tokens = tokensFor(receiverId);
+  const tokens = await tokensFor(receiverId);
   if (!tokens.length) return;
 
   const role = sender.role === "coach" ? "entrenador" : "nutricionista";
@@ -80,9 +66,9 @@ export async function pushProfessionalMessage(
   if (!response.ok) throw new Error(`expo_push_${response.status}`);
 
   const json = await response.json() as { data?: ExpoTicket[] };
-  json.data?.forEach((ticket, index) => {
+  for (const [index, ticket] of json.data?.entries() ?? []) {
     if (ticket.status === "error" && ticket.details?.error === "DeviceNotRegistered") {
-      db.prepare(`DELETE FROM "push_devices" WHERE "expoPushToken" = ?`).run(tokens[index]);
+      await db.delete(pushDevices).where(eq(pushDevices.expoPushToken, tokens[index]));
     }
-  });
+  }
 }

@@ -1,21 +1,9 @@
-import Database from "better-sqlite3";
 import { randomBytes } from "crypto";
 
-// Same DB as auth + supervision so we can enforce links and join names
-const db = new Database("./data/auth.db");
+import { and, asc, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS "messages" (
-    "id"         TEXT NOT NULL PRIMARY KEY,
-    "senderId"   TEXT NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
-    "receiverId" TEXT NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
-    "content"    TEXT NOT NULL,
-    "sentAt"     INTEGER NOT NULL,
-    "readAt"     INTEGER
-  );
-  CREATE INDEX IF NOT EXISTS "msg_pair"   ON "messages" ("senderId", "receiverId", "sentAt");
-  CREATE INDEX IF NOT EXISTS "msg_unread" ON "messages" ("receiverId", "readAt");
-`);
+import { db } from "@/db";
+import { messages, supervisionLinks } from "@/db/schema";
 
 export interface Message {
   id: string;
@@ -27,16 +15,21 @@ export interface Message {
 }
 
 /** Messaging is only allowed between users with an active supervision link */
-export function areLinked(a: string, b: string): boolean {
-  const row = db.prepare(
-    `SELECT 1 FROM "supervision_links"
-     WHERE "status" = 'active'
-       AND (("professionalId" = ? AND "athleteId" = ?) OR ("professionalId" = ? AND "athleteId" = ?))`,
-  ).get(a, b, b, a);
+export async function areLinked(a: string, b: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: supervisionLinks.id })
+    .from(supervisionLinks)
+    .where(and(
+      eq(supervisionLinks.status, "active"),
+      or(
+        and(eq(supervisionLinks.professionalId, a), eq(supervisionLinks.athleteId, b)),
+        and(eq(supervisionLinks.professionalId, b), eq(supervisionLinks.athleteId, a)),
+      ),
+    ));
   return !!row;
 }
 
-export function sendMessage(senderId: string, receiverId: string, content: string): Message {
+export async function sendMessage(senderId: string, receiverId: string, content: string): Promise<Message> {
   const msg: Message = {
     id: randomBytes(12).toString("hex"),
     senderId,
@@ -45,57 +38,60 @@ export function sendMessage(senderId: string, receiverId: string, content: strin
     sentAt: Date.now(),
     readAt: null,
   };
-  db.prepare(
-    `INSERT INTO "messages" ("id","senderId","receiverId","content","sentAt")
-     VALUES (?, ?, ?, ?, ?)`,
-  ).run(msg.id, msg.senderId, msg.receiverId, msg.content, msg.sentAt);
+  await db.insert(messages).values(msg);
   return msg;
 }
 
 /** Both directions of a conversation, oldest first. `since` (ms) for incremental polling. */
-export function getConversation(me: string, other: string, since = 0, limit = 200): Message[] {
-  return db.prepare(
-    `SELECT * FROM "messages"
-     WHERE (("senderId" = ? AND "receiverId" = ?) OR ("senderId" = ? AND "receiverId" = ?))
-       AND "sentAt" > ?
-     ORDER BY "sentAt" ASC
-     LIMIT ?`,
-  ).all(me, other, other, me, since, limit) as Message[];
+export async function getConversation(me: string, other: string, since = 0, limit = 200): Promise<Message[]> {
+  const rows = await db
+    .select()
+    .from(messages)
+    .where(and(
+      or(
+        and(eq(messages.senderId, me), eq(messages.receiverId, other)),
+        and(eq(messages.senderId, other), eq(messages.receiverId, me)),
+      ),
+      gt(messages.sentAt, since),
+    ))
+    .orderBy(asc(messages.sentAt))
+    .limit(limit);
+  return rows;
 }
 
-export function markConversationRead(me: string, other: string): void {
-  db.prepare(
-    `UPDATE "messages" SET "readAt" = ?
-     WHERE "receiverId" = ? AND "senderId" = ? AND "readAt" IS NULL`,
-  ).run(Date.now(), me, other);
+export async function markConversationRead(me: string, other: string): Promise<void> {
+  await db.update(messages)
+    .set({ readAt: Date.now() })
+    .where(and(eq(messages.receiverId, me), eq(messages.senderId, other), isNull(messages.readAt)));
 }
 
 /** Most recent message time (either direction) per conversation partner */
-export function lastMessageAt(me: string): Record<string, number> {
-  const rows = db.prepare(
-    `SELECT CASE WHEN "senderId" = ? THEN "receiverId" ELSE "senderId" END AS other,
-            MAX("sentAt") AS last
-     FROM "messages"
-     WHERE "senderId" = ? OR "receiverId" = ?
-     GROUP BY other`,
-  ).all(me, me, me) as { other: string; last: number }[];
+export async function lastMessageAt(me: string): Promise<Record<string, number>> {
+  const rows = await db
+    .select({ senderId: messages.senderId, receiverId: messages.receiverId, sentAt: messages.sentAt })
+    .from(messages)
+    .where(or(eq(messages.senderId, me), eq(messages.receiverId, me)));
   const result: Record<string, number> = {};
-  for (const r of rows) result[r.other] = r.last;
+  for (const r of rows) {
+    const other = r.senderId === me ? r.receiverId : r.senderId;
+    if (!result[other] || r.sentAt > result[other]) result[other] = r.sentAt;
+  }
   return result;
 }
 
 /** Unread incoming messages grouped by sender */
-export function unreadCounts(me: string): { total: number; bySender: Record<string, number> } {
-  const rows = db.prepare(
-    `SELECT "senderId", COUNT(*) AS n FROM "messages"
-     WHERE "receiverId" = ? AND "readAt" IS NULL
-     GROUP BY "senderId"`,
-  ).all(me) as { senderId: string; n: number }[];
+export async function unreadCounts(me: string): Promise<{ total: number; bySender: Record<string, number> }> {
+  const rows = await db
+    .select({ senderId: messages.senderId, n: sql<number>`count(*)` })
+    .from(messages)
+    .where(and(eq(messages.receiverId, me), isNull(messages.readAt)))
+    .groupBy(messages.senderId);
   const bySender: Record<string, number> = {};
   let total = 0;
   for (const r of rows) {
-    bySender[r.senderId] = r.n;
-    total += r.n;
+    const n = Number(r.n);
+    bySender[r.senderId] = n;
+    total += n;
   }
   return { total, bySender };
 }

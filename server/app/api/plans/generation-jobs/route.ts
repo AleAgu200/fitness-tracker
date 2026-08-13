@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   const user = await getSessionUser(request);
   if (!user) return unauthorized();
 
-  const lookup = getCurrentGenerationJob(user.id);
+  const lookup = await getCurrentGenerationJob(user.id);
   if (lookup.job && lookup.shouldSchedule) {
     scheduleAfterResponse(lookup.job.id);
   }
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const created = createOrReuseGenerationJob(user.id, parsedInput.data);
+    const created = await createOrReuseGenerationJob(user.id, parsedInput.data);
     if (created.shouldSchedule) scheduleAfterResponse(created.job.id);
     return Response.json(
       { job: created.job, reused: created.reused },

@@ -23,10 +23,10 @@ export async function POST(request: Request) {
   }
 
   if (body.enabled === false) {
-    unregisterPushDevice(user.id, token);
+    await unregisterPushDevice(user.id, token);
   } else {
     const platform = body.platform === "ios" ? "ios" : "android";
-    registerPushDevice(user.id, token, platform);
+    await registerPushDevice(user.id, token, platform);
   }
   return Response.json({ ok: true });
 }

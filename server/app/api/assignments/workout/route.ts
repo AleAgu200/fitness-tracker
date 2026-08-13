@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   if (body.exercises.length > MAX_EXERCISES) {
     return Response.json({ error: "too_many_exercises" }, { status: 400 });
   }
-  if (!areLinked(user.id, athleteId)) return Response.json({ error: "not_linked" }, { status: 403 });
+  if (!(await areLinked(user.id, athleteId))) return Response.json({ error: "not_linked" }, { status: 403 });
 
   const exercises: WorkoutPayload["exercises"] = [];
   for (const raw of body.exercises as Record<string, unknown>[]) {
@@ -39,6 +39,6 @@ export async function POST(request: Request) {
     });
   }
 
-  const version = assignWorkout(user.id, athleteId, { coachName: user.name, exercises });
+  const version = await assignWorkout(user.id, athleteId, { coachName: user.name, exercises });
   return Response.json({ ok: true, version });
 }

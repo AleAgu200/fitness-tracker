@@ -5,7 +5,7 @@ export async function GET(request: Request) {
   const user = await getSessionUser(request);
   if (!user) return unauthorized();
   const q = new URL(request.url).searchParams.get("q") ?? "";
-  return Response.json({ exercises: listExercises(q) });
+  return Response.json({ exercises: await listExercises(q) });
 }
 
 export async function POST(request: Request) {
@@ -24,5 +24,5 @@ export async function POST(request: Request) {
   const equipment = typeof body.equipment === "string" ? body.equipment : "otro";
   if (!name) return Response.json({ error: "invalid_body" }, { status: 400 });
 
-  return Response.json({ exercise: createExercise(user.id, { name, muscleGroup, equipment }) });
+  return Response.json({ exercise: await createExercise(user.id, { name, muscleGroup, equipment }) });
 }

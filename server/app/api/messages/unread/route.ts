@@ -5,5 +5,5 @@ import { unreadCounts } from "@/lib/messaging";
 export async function GET(request: Request) {
   const user = await getSessionUser(request);
   if (!user) return unauthorized();
-  return Response.json(unreadCounts(user.id));
+  return Response.json(await unreadCounts(user.id));
 }

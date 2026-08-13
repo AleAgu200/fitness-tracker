@@ -13,9 +13,9 @@ export async function GET(request: Request) {
   const other = url.searchParams.get("with");
   const since = Number(url.searchParams.get("since") ?? 0) || 0;
   if (!other) return Response.json({ error: "missing_with" }, { status: 400 });
-  if (!areLinked(user.id, other)) return Response.json({ error: "not_linked" }, { status: 403 });
+  if (!(await areLinked(user.id, other))) return Response.json({ error: "not_linked" }, { status: 403 });
 
-  return Response.json({ messages: getConversation(user.id, other, since) });
+  return Response.json({ messages: await getConversation(user.id, other, since) });
 }
 
 /** POST /api/messages { to, content } */
@@ -35,10 +35,10 @@ export async function POST(request: Request) {
   if (content.length > MAX_CONTENT) {
     return Response.json({ error: "content_too_long" }, { status: 400 });
   }
-  if (!areLinked(user.id, to)) return Response.json({ error: "not_linked" }, { status: 403 });
+  if (!(await areLinked(user.id, to))) return Response.json({ error: "not_linked" }, { status: 403 });
 
   const cleanContent = content.trim();
-  const message = sendMessage(user.id, to, cleanContent);
+  const message = await sendMessage(user.id, to, cleanContent);
   try {
     await pushProfessionalMessage(user.id, to, cleanContent);
   } catch (error) {

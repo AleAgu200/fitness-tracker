@@ -1,32 +1,7 @@
-import Database from "better-sqlite3";
+import { desc, eq } from "drizzle-orm";
 
-const db = new Database("./data/auth.db");
-db.pragma("foreign_keys = ON");
-db.pragma("busy_timeout = 5000");
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS "athlete_profiles" (
-    "userId"       TEXT NOT NULL PRIMARY KEY REFERENCES "user"("id") ON DELETE CASCADE,
-    "fullName"     TEXT NOT NULL,
-    "sex"          TEXT CHECK ("sex" IS NULL OR "sex" IN ('M','F','X')),
-    "dateOfBirth"  TEXT,
-    "heightCm"     REAL,
-    "goalWeightKg" REAL,
-    "createdAt"    INTEGER NOT NULL,
-    "updatedAt"    INTEGER NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS "body_measurements" (
-    "id"         TEXT NOT NULL PRIMARY KEY,
-    "athleteId"  TEXT NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
-    "measuredAt" INTEGER NOT NULL,
-    "weightKg"   REAL NOT NULL,
-    "createdAt"  INTEGER NOT NULL
-  );
-
-  CREATE INDEX IF NOT EXISTS "body_measurements_athlete_date"
-    ON "body_measurements" ("athleteId", "measuredAt" DESC);
-`);
+import { db } from "@/db";
+import { athleteProfiles, bodyMeasurements, user } from "@/db/schema";
 
 export interface WeightMeasurementInput {
   id: string;
@@ -56,99 +31,78 @@ export interface AthleteProfileRecord {
 }
 
 type ProfileRow = Omit<AthleteProfileRecord, "latestWeight">;
+type DbClient = typeof db | Parameters<Parameters<(typeof db)["transaction"]>[0]>[0];
 
-function getProfileRow(userId: string): ProfileRow | null {
-  return (db.prepare(`
-    SELECT "userId", "fullName", "sex", "dateOfBirth", "heightCm",
-           "goalWeightKg", "createdAt", "updatedAt"
-    FROM "athlete_profiles"
-    WHERE "userId" = ?
-  `).get(userId) as ProfileRow | undefined) ?? null;
+async function getProfileRow(client: DbClient, userId: string): Promise<ProfileRow | null> {
+  const [row] = await client
+    .select()
+    .from(athleteProfiles)
+    .where(eq(athleteProfiles.userId, userId));
+  return (row as ProfileRow | undefined) ?? null;
 }
 
-function getLatestWeight(userId: string): WeightMeasurementInput | null {
-  return (db.prepare(`
-    SELECT "id", "measuredAt", "weightKg"
-    FROM "body_measurements"
-    WHERE "athleteId" = ?
-    ORDER BY "measuredAt" DESC, "createdAt" DESC
-    LIMIT 1
-  `).get(userId) as WeightMeasurementInput | undefined) ?? null;
+async function getLatestWeight(userId: string): Promise<WeightMeasurementInput | null> {
+  const [row] = await db
+    .select({ id: bodyMeasurements.id, measuredAt: bodyMeasurements.measuredAt, weightKg: bodyMeasurements.weightKg })
+    .from(bodyMeasurements)
+    .where(eq(bodyMeasurements.athleteId, userId))
+    .orderBy(desc(bodyMeasurements.measuredAt), desc(bodyMeasurements.createdAt))
+    .limit(1);
+  return row ?? null;
 }
 
-export function getAthleteProfile(userId: string): AthleteProfileRecord | null {
-  const profile = getProfileRow(userId);
-  return profile ? { ...profile, latestWeight: getLatestWeight(userId) } : null;
+export async function getAthleteProfile(userId: string): Promise<AthleteProfileRecord | null> {
+  const profile = await getProfileRow(db, userId);
+  if (!profile) return null;
+  return { ...profile, latestWeight: await getLatestWeight(userId) };
 }
 
-export function upsertAthleteProfile(
+export async function upsertAthleteProfile(
   userId: string,
   fallbackName: string,
   update: AthleteProfileUpdate,
-): AthleteProfileRecord {
-  const transaction = db.transaction(() => {
-    const existing = getProfileRow(userId);
+): Promise<AthleteProfileRecord> {
+  await db.transaction(async (tx) => {
+    const existing = await getProfileRow(tx, userId);
     const now = Date.now();
     const fullName = update.fullName ?? existing?.fullName ?? fallbackName;
     const sex = update.sex !== undefined ? update.sex : (existing?.sex ?? null);
-    const dateOfBirth = update.dateOfBirth !== undefined
-      ? update.dateOfBirth
-      : (existing?.dateOfBirth ?? null);
-    const heightCm = update.heightCm !== undefined
-      ? update.heightCm
-      : (existing?.heightCm ?? null);
-    const goalWeightKg = update.goalWeightKg !== undefined
-      ? update.goalWeightKg
-      : (existing?.goalWeightKg ?? null);
+    const dateOfBirth = update.dateOfBirth !== undefined ? update.dateOfBirth : (existing?.dateOfBirth ?? null);
+    const heightCm = update.heightCm !== undefined ? update.heightCm : (existing?.heightCm ?? null);
+    const goalWeightKg = update.goalWeightKg !== undefined ? update.goalWeightKg : (existing?.goalWeightKg ?? null);
 
-    db.prepare(`
-      INSERT INTO "athlete_profiles"
-        ("userId", "fullName", "sex", "dateOfBirth", "heightCm", "goalWeightKg", "createdAt", "updatedAt")
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT("userId") DO UPDATE SET
-        "fullName" = excluded."fullName",
-        "sex" = excluded."sex",
-        "dateOfBirth" = excluded."dateOfBirth",
-        "heightCm" = excluded."heightCm",
-        "goalWeightKg" = excluded."goalWeightKg",
-        "updatedAt" = excluded."updatedAt"
-    `).run(
-      userId,
-      fullName,
-      sex,
-      dateOfBirth,
-      heightCm,
-      goalWeightKg,
-      existing?.createdAt ?? now,
-      now,
-    );
+    await tx.insert(athleteProfiles)
+      .values({ userId, fullName, sex, dateOfBirth, heightCm, goalWeightKg, createdAt: existing?.createdAt ?? now, updatedAt: now })
+      .onConflictDoUpdate({
+        target: athleteProfiles.userId,
+        set: { fullName, sex, dateOfBirth, heightCm, goalWeightKg, updatedAt: now },
+      });
 
     // The portal reads Better Auth's user name, so update both in one transaction.
-    db.prepare(`UPDATE "user" SET "name" = ?, "updatedAt" = ? WHERE "id" = ?`)
-      .run(fullName, now, userId);
+    await tx.update(user).set({ name: fullName, updatedAt: new Date(now) }).where(eq(user.id, userId));
 
     if (update.measurement) {
-      const owner = db.prepare(`SELECT "athleteId" FROM "body_measurements" WHERE "id" = ?`)
-        .get(update.measurement.id) as { athleteId: string } | undefined;
+      const [owner] = await tx
+        .select({ athleteId: bodyMeasurements.athleteId })
+        .from(bodyMeasurements)
+        .where(eq(bodyMeasurements.id, update.measurement.id));
       if (owner && owner.athleteId !== userId) {
         throw new Error("measurement_id_conflict");
       }
-      db.prepare(`
-        INSERT INTO "body_measurements" ("id", "athleteId", "measuredAt", "weightKg", "createdAt")
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT("id") DO UPDATE SET
-          "measuredAt" = excluded."measuredAt",
-          "weightKg" = excluded."weightKg"
-      `).run(
-        update.measurement.id,
-        userId,
-        update.measurement.measuredAt,
-        update.measurement.weightKg,
-        now,
-      );
+      await tx.insert(bodyMeasurements)
+        .values({
+          id: update.measurement.id,
+          athleteId: userId,
+          measuredAt: update.measurement.measuredAt,
+          weightKg: update.measurement.weightKg,
+          createdAt: now,
+        })
+        .onConflictDoUpdate({
+          target: bodyMeasurements.id,
+          set: { measuredAt: update.measurement.measuredAt, weightKg: update.measurement.weightKg },
+        });
     }
   });
 
-  transaction();
-  return getAthleteProfile(userId)!;
+  return (await getAthleteProfile(userId))!;
 }

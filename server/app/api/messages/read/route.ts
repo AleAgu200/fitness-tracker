@@ -14,6 +14,6 @@ export async function POST(request: Request) {
   }
   if (typeof withId !== "string") return Response.json({ error: "invalid_body" }, { status: 400 });
 
-  markConversationRead(user.id, withId);
+  await markConversationRead(user.id, withId);
   return Response.json({ ok: true });
 }

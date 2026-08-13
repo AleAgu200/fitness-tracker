@@ -1,6 +1,9 @@
 import { createHash, randomUUID } from "crypto";
 
-import Database from "better-sqlite3";
+import { and, desc, eq, gte, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
+
+import { db } from "@/db";
+import { planGenerationJobs } from "@/db/schema";
 
 import {
   assembleAndGenerate,
@@ -48,30 +51,10 @@ export interface PublicPlanGenerationJob {
   error: { code: string; retryable: boolean } | null;
 }
 
-interface GenerationJobRow {
-  id: string;
-  userId: string;
-  inputHash: string;
-  requestJson: string | null;
+type GenerationJobRow = Omit<typeof planGenerationJobs.$inferSelect, "status" | "phase"> & {
   status: PlanGenerationJobStatus;
   phase: PlanGenerationJobPhase;
-  attempt: number;
-  runCount: number;
-  upstreamCalls: number;
-  resultJson: string | null;
-  errorCode: string | null;
-  errorRetryable: number | null;
-  timingsJson: string;
-  leaseOwner: string | null;
-  leaseExpiresAt: number | null;
-  createdAt: number;
-  startedAt: number | null;
-  phaseStartedAt: number | null;
-  completedAt: number | null;
-  updatedAt: number;
-  durationMs: number | null;
-  consumedAt: number | null;
-}
+};
 
 interface TimingEntry {
   phase: Exclude<PlanGenerationJobPhase, "queued" | "completed">;
@@ -92,61 +75,6 @@ export interface CreateGenerationJobResult extends GenerationJobLookup {
 export type ConsumeGenerationJobResult =
   | { ok: true; job: PublicPlanGenerationJob }
   | { ok: false; reason: "not_found" | "not_terminal" };
-
-const db = new Database("./data/auth.db");
-db.pragma("foreign_keys = ON");
-db.pragma("busy_timeout = 5000");
-db.pragma("journal_mode = WAL");
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS "plan_generation_jobs" (
-    "id"             TEXT NOT NULL PRIMARY KEY,
-    "userId"         TEXT NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
-    "inputHash"      TEXT NOT NULL,
-    "requestJson"    TEXT,
-    "status"         TEXT NOT NULL CHECK ("status" IN ('queued','running','succeeded','requires_review','failed')),
-    "phase"          TEXT NOT NULL CHECK ("phase" IN ('queued','preparing','generating','validating','completed')),
-    "attempt"        INTEGER NOT NULL DEFAULT 0,
-    "runCount"       INTEGER NOT NULL DEFAULT 0,
-    "upstreamCalls"  INTEGER NOT NULL DEFAULT 0,
-    "resultJson"     TEXT,
-    "errorCode"      TEXT,
-    "errorRetryable" INTEGER,
-    "timingsJson"    TEXT NOT NULL DEFAULT '[]',
-    "leaseOwner"     TEXT,
-    "leaseExpiresAt" INTEGER,
-    "createdAt"      INTEGER NOT NULL,
-    "startedAt"      INTEGER,
-    "phaseStartedAt" INTEGER,
-    "completedAt"    INTEGER,
-    "updatedAt"      INTEGER NOT NULL,
-    "durationMs"     INTEGER,
-    "consumedAt"     INTEGER,
-    CHECK ("requestJson" IS NULL OR json_valid("requestJson")),
-    CHECK ("resultJson" IS NULL OR json_valid("resultJson")),
-    CHECK (json_valid("timingsJson"))
-  );
-
-  CREATE UNIQUE INDEX IF NOT EXISTS "plan_generation_jobs_one_active_user"
-    ON "plan_generation_jobs" ("userId")
-    WHERE "status" IN ('queued','running');
-
-  CREATE INDEX IF NOT EXISTS "plan_generation_jobs_user_current"
-    ON "plan_generation_jobs" ("userId", "consumedAt", "createdAt" DESC);
-
-  CREATE INDEX IF NOT EXISTS "plan_generation_jobs_stale_lease"
-    ON "plan_generation_jobs" ("status", "leaseExpiresAt");
-`);
-
-// CREATE TABLE IF NOT EXISTS does not add columns to existing local databases.
-const generationJobColumns = db.prepare(
-  `PRAGMA table_info("plan_generation_jobs")`,
-).all() as { name: string }[];
-if (!generationJobColumns.some((column) => column.name === "upstreamCalls")) {
-  db.exec(
-    `ALTER TABLE "plan_generation_jobs" ADD COLUMN "upstreamCalls" INTEGER NOT NULL DEFAULT 0`,
-  );
-}
 
 class LostGenerationJobLeaseError extends Error {
   constructor() {
@@ -198,22 +126,12 @@ function hashInput(input: RawGenerationRequest): string {
     .digest("hex");
 }
 
-function parseResult(value: string | null): AssembleAndGenerateResult | null {
-  if (!value) return null;
-  try {
-    return JSON.parse(value) as AssembleAndGenerateResult;
-  } catch {
-    return null;
-  }
+function parseResult(value: unknown): AssembleAndGenerateResult | null {
+  return value == null ? null : (value as AssembleAndGenerateResult);
 }
 
-function parseTimings(value: string): TimingEntry[] {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? (parsed as TimingEntry[]) : [];
-  } catch {
-    return [];
-  }
+function parseTimings(value: unknown): TimingEntry[] {
+  return Array.isArray(value) ? (value as TimingEntry[]) : [];
 }
 
 function toPublicJob(row: GenerationJobRow, now = Date.now()): PublicPlanGenerationJob {
@@ -231,27 +149,26 @@ function toPublicJob(row: GenerationJobRow, now = Date.now()): PublicPlanGenerat
     durationMs: row.completedAt === null ? null : (row.durationMs ?? 0),
     result: parseResult(row.resultJson),
     error: row.errorCode
-      ? { code: row.errorCode, retryable: row.errorRetryable === 1 }
+      ? { code: row.errorCode, retryable: row.errorRetryable === true }
       : null,
   };
 }
 
-function getRowForUser(id: string, userId: string): GenerationJobRow | null {
-  return (db.prepare(`
-    SELECT * FROM "plan_generation_jobs"
-    WHERE "id" = ? AND "userId" = ?
-  `).get(id, userId) as GenerationJobRow | undefined) ?? null;
+async function getRowForUser(id: string, userId: string): Promise<GenerationJobRow | null> {
+  const [row] = await db.select().from(planGenerationJobs)
+    .where(and(eq(planGenerationJobs.id, id), eq(planGenerationJobs.userId, userId)));
+  return (row as GenerationJobRow | undefined) ?? null;
 }
 
-function getCurrentRow(userId: string): GenerationJobRow | null {
-  return (db.prepare(`
-    SELECT * FROM "plan_generation_jobs"
-    WHERE "userId" = ? AND "consumedAt" IS NULL
-    ORDER BY
-      CASE WHEN "status" IN ('queued','running') THEN 0 ELSE 1 END,
-      "createdAt" DESC
-    LIMIT 1
-  `).get(userId) as GenerationJobRow | undefined) ?? null;
+async function getCurrentRow(userId: string): Promise<GenerationJobRow | null> {
+  const [row] = await db.select().from(planGenerationJobs)
+    .where(and(eq(planGenerationJobs.userId, userId), isNull(planGenerationJobs.consumedAt)))
+    .orderBy(
+      sql`case when ${planGenerationJobs.status} in ('queued','running') then 0 else 1 end`,
+      desc(planGenerationJobs.createdAt),
+    )
+    .limit(1);
+  return (row as GenerationJobRow | undefined) ?? null;
 }
 
 function isStale(row: GenerationJobRow, now = Date.now()): boolean {
@@ -262,101 +179,108 @@ function shouldSchedule(row: GenerationJobRow, now = Date.now()): boolean {
   return row.status === "queued" || isStale(row, now);
 }
 
-function recoverExhaustedJobs(userId: string, id?: string): void {
+async function recoverExhaustedJobs(userId: string, id?: string): Promise<void> {
   const now = Date.now();
-  const rows = db.prepare(`
-    UPDATE "plan_generation_jobs"
-    SET "status" = 'failed',
-        "requestJson" = NULL,
-        "errorCode" = 'generation_interrupted',
-        "errorRetryable" = 1,
-        "completedAt" = ?,
-        "updatedAt" = ?,
-        "durationMs" = MAX(0, ? - COALESCE("startedAt", "createdAt")),
-        "leaseOwner" = NULL,
-        "leaseExpiresAt" = NULL
-    WHERE "userId" = ?
-      AND (? IS NULL OR "id" = ?)
-      AND "status" = 'running'
-      AND COALESCE("leaseExpiresAt", 0) <= ?
-      AND "runCount" >= ?
-    RETURNING "id", "durationMs"
-  `).all(now, now, now, userId, id ?? null, id ?? null, now, MAX_RUN_ATTEMPTS) as {
-    id: string;
-    durationMs: number;
-  }[];
+  const conditions = [
+    eq(planGenerationJobs.userId, userId),
+    eq(planGenerationJobs.status, "running"),
+    sql`coalesce(${planGenerationJobs.leaseExpiresAt}, 0) <= ${now}`,
+    gte(planGenerationJobs.runCount, MAX_RUN_ATTEMPTS),
+  ];
+  if (id) conditions.push(eq(planGenerationJobs.id, id));
+
+  const rows = await db.update(planGenerationJobs)
+    .set({
+      status: "failed",
+      requestJson: null,
+      errorCode: "generation_interrupted",
+      errorRetryable: true,
+      completedAt: now,
+      updatedAt: now,
+      durationMs: sql`greatest(0, ${now} - coalesce(${planGenerationJobs.startedAt}, ${planGenerationJobs.createdAt}))`,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+    })
+    .where(and(...conditions))
+    .returning({ id: planGenerationJobs.id, durationMs: planGenerationJobs.durationMs });
 
   for (const row of rows) {
     logJobEvent("recovery_exhausted", {
       jobId: row.id,
       status: "failed",
-      durationMs: row.durationMs,
+      durationMs: row.durationMs ?? 0,
     });
   }
 }
 
-export function createOrReuseGenerationJob(
+export async function createOrReuseGenerationJob(
   userId: string,
   input: RawGenerationRequest,
-): CreateGenerationJobResult {
-  recoverExhaustedJobs(userId);
+): Promise<CreateGenerationJobResult> {
+  await recoverExhaustedJobs(userId);
   const inputHash = hashInput(input);
   const now = Date.now();
 
-  const transaction = db.transaction((): { row: GenerationJobRow; reused: boolean } => {
-    const active = db.prepare(`
-      SELECT * FROM "plan_generation_jobs"
-      WHERE "userId" = ? AND "status" IN ('queued','running')
-      ORDER BY "createdAt" DESC LIMIT 1
-    `).get(userId) as GenerationJobRow | undefined;
-    if (active) return { row: active, reused: true };
-
-    const reusableTerminal = db.prepare(`
-      SELECT * FROM "plan_generation_jobs"
-      WHERE "userId" = ?
-        AND "inputHash" = ?
-        AND "consumedAt" IS NULL
-        AND "status" IN ('succeeded','requires_review')
-      ORDER BY "createdAt" DESC LIMIT 1
-    `).get(userId, inputHash) as GenerationJobRow | undefined;
-    if (reusableTerminal) return { row: reusableTerminal, reused: true };
-
-    // Starting a deliberate replacement makes older terminal jobs no longer
-    // "current" while preserving them for authenticated lookup by ID.
-    db.prepare(`
-      UPDATE "plan_generation_jobs"
-      SET "consumedAt" = COALESCE("consumedAt", ?), "updatedAt" = ?
-      WHERE "userId" = ?
-        AND "consumedAt" IS NULL
-        AND "status" NOT IN ('queued','running')
-    `).run(now, now, userId);
-
-    const id = randomUUID();
-    db.prepare(`
-      INSERT INTO "plan_generation_jobs" (
-        "id", "userId", "inputHash", "requestJson", "status", "phase",
-        "attempt", "runCount", "timingsJson", "createdAt", "updatedAt"
-      ) VALUES (?, ?, ?, ?, 'queued', 'queued', 0, 0, '[]', ?, ?)
-    `).run(id, userId, inputHash, JSON.stringify(input), now, now);
-
-    return {
-      row: db.prepare(`SELECT * FROM "plan_generation_jobs" WHERE "id" = ?`)
-        .get(id) as GenerationJobRow,
-      reused: false,
-    };
-  });
+  async function findActive(): Promise<GenerationJobRow | undefined> {
+    const [row] = await db.select().from(planGenerationJobs)
+      .where(and(eq(planGenerationJobs.userId, userId), inArray(planGenerationJobs.status, ["queued", "running"])))
+      .orderBy(desc(planGenerationJobs.createdAt))
+      .limit(1);
+    return row as GenerationJobRow | undefined;
+  }
 
   let selected: { row: GenerationJobRow; reused: boolean };
   try {
-    selected = transaction();
+    selected = await db.transaction(async (tx): Promise<{ row: GenerationJobRow; reused: boolean }> => {
+      const [active] = await tx.select().from(planGenerationJobs)
+        .where(and(eq(planGenerationJobs.userId, userId), inArray(planGenerationJobs.status, ["queued", "running"])))
+        .orderBy(desc(planGenerationJobs.createdAt))
+        .limit(1);
+      if (active) return { row: active as GenerationJobRow, reused: true };
+
+      const [reusableTerminal] = await tx.select().from(planGenerationJobs)
+        .where(and(
+          eq(planGenerationJobs.userId, userId),
+          eq(planGenerationJobs.inputHash, inputHash),
+          isNull(planGenerationJobs.consumedAt),
+          inArray(planGenerationJobs.status, ["succeeded", "requires_review"]),
+        ))
+        .orderBy(desc(planGenerationJobs.createdAt))
+        .limit(1);
+      if (reusableTerminal) return { row: reusableTerminal as GenerationJobRow, reused: true };
+
+      // Starting a deliberate replacement makes older terminal jobs no longer
+      // "current" while preserving them for authenticated lookup by ID.
+      await tx.update(planGenerationJobs)
+        .set({ consumedAt: sql`coalesce(${planGenerationJobs.consumedAt}, ${now})`, updatedAt: now })
+        .where(and(
+          eq(planGenerationJobs.userId, userId),
+          isNull(planGenerationJobs.consumedAt),
+          notInArray(planGenerationJobs.status, ["queued", "running"]),
+        ));
+
+      const id = randomUUID();
+      await tx.insert(planGenerationJobs).values({
+        id,
+        userId,
+        inputHash,
+        requestJson: input,
+        status: "queued",
+        phase: "queued",
+        attempt: 0,
+        runCount: 0,
+        timingsJson: [],
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const [row] = await tx.select().from(planGenerationJobs).where(eq(planGenerationJobs.id, id));
+      return { row: row as GenerationJobRow, reused: false };
+    });
   } catch (error) {
     // A second local Next instance may have inserted after our first read. The
     // partial unique index is the authority; return its active job on collision.
-    const active = db.prepare(`
-      SELECT * FROM "plan_generation_jobs"
-      WHERE "userId" = ? AND "status" IN ('queued','running')
-      ORDER BY "createdAt" DESC LIMIT 1
-    `).get(userId) as GenerationJobRow | undefined;
+    const active = await findActive();
     if (!active) throw error;
     selected = { row: active, reused: true };
   }
@@ -375,43 +299,41 @@ export function createOrReuseGenerationJob(
   };
 }
 
-export function getCurrentGenerationJob(userId: string): GenerationJobLookup {
-  recoverExhaustedJobs(userId);
-  const row = getCurrentRow(userId);
+export async function getCurrentGenerationJob(userId: string): Promise<GenerationJobLookup> {
+  await recoverExhaustedJobs(userId);
+  const row = await getCurrentRow(userId);
   return {
     job: row ? toPublicJob(row) : null,
     shouldSchedule: row ? shouldSchedule(row) : false,
   };
 }
 
-export function getGenerationJob(userId: string, id: string): GenerationJobLookup {
-  recoverExhaustedJobs(userId, id);
-  const row = getRowForUser(id, userId);
+export async function getGenerationJob(userId: string, id: string): Promise<GenerationJobLookup> {
+  await recoverExhaustedJobs(userId, id);
+  const row = await getRowForUser(id, userId);
   return {
     job: row ? toPublicJob(row) : null,
     shouldSchedule: row ? shouldSchedule(row) : false,
   };
 }
 
-export function consumeGenerationJob(
+export async function consumeGenerationJob(
   userId: string,
   id: string,
-): ConsumeGenerationJobResult {
-  recoverExhaustedJobs(userId, id);
-  const row = getRowForUser(id, userId);
+): Promise<ConsumeGenerationJobResult> {
+  await recoverExhaustedJobs(userId, id);
+  const row = await getRowForUser(id, userId);
   if (!row) return { ok: false, reason: "not_found" };
   if (row.status === "queued" || row.status === "running") {
     return { ok: false, reason: "not_terminal" };
   }
 
   const now = Date.now();
-  db.prepare(`
-    UPDATE "plan_generation_jobs"
-    SET "consumedAt" = COALESCE("consumedAt", ?), "updatedAt" = ?
-    WHERE "id" = ? AND "userId" = ?
-  `).run(now, now, id, userId);
+  await db.update(planGenerationJobs)
+    .set({ consumedAt: sql`coalesce(${planGenerationJobs.consumedAt}, ${now})`, updatedAt: now })
+    .where(and(eq(planGenerationJobs.id, id), eq(planGenerationJobs.userId, userId)));
 
-  const consumed = getRowForUser(id, userId)!;
+  const consumed = (await getRowForUser(id, userId))!;
   logJobEvent("consumed", {
     jobId: consumed.id,
     status: consumed.status,
@@ -420,91 +342,78 @@ export function consumeGenerationJob(
   return { ok: true, job: toPublicJob(consumed) };
 }
 
-function claimGenerationJob(id: string, leaseOwner: string): GenerationJobRow | null {
+async function claimGenerationJob(id: string, leaseOwner: string): Promise<GenerationJobRow | null> {
   const now = Date.now();
-  return (db.prepare(`
-    UPDATE "plan_generation_jobs"
-    SET "status" = 'running',
-        "phase" = 'preparing',
-        "attempt" = 0,
-        "runCount" = "runCount" + 1,
-        "leaseOwner" = ?,
-        "leaseExpiresAt" = ?,
-        "startedAt" = COALESCE("startedAt", ?),
-        "phaseStartedAt" = ?,
-        "updatedAt" = ?
-    WHERE "id" = ?
-      AND "runCount" < ?
-      AND (
-        "status" = 'queued'
-        OR (
-          "status" = 'running'
-          AND COALESCE("leaseExpiresAt", 0) <= ?
-        )
-      )
-    RETURNING *
-  `).get(
-    leaseOwner,
-    now + LEASE_DURATION_MS,
-    now,
-    now,
-    now,
-    id,
-    MAX_RUN_ATTEMPTS,
-    now,
-  ) as GenerationJobRow | undefined) ?? null;
+  const [row] = await db.update(planGenerationJobs)
+    .set({
+      status: "running",
+      phase: "preparing",
+      attempt: 0,
+      runCount: sql`${planGenerationJobs.runCount} + 1`,
+      leaseOwner,
+      leaseExpiresAt: now + LEASE_DURATION_MS,
+      startedAt: sql`coalesce(${planGenerationJobs.startedAt}, ${now})`,
+      phaseStartedAt: now,
+      updatedAt: now,
+    })
+    .where(and(
+      eq(planGenerationJobs.id, id),
+      lt(planGenerationJobs.runCount, MAX_RUN_ATTEMPTS),
+      or(
+        eq(planGenerationJobs.status, "queued"),
+        and(
+          eq(planGenerationJobs.status, "running"),
+          sql`coalesce(${planGenerationJobs.leaseExpiresAt}, 0) <= ${now}`,
+        ),
+      ),
+    ))
+    .returning();
+  return (row as GenerationJobRow | undefined) ?? null;
 }
 
-function updateProgress(
+async function updateProgress(
   id: string,
   leaseOwner: string,
   progress: AssembleAndGenerateProgress,
   timings: TimingEntry[],
   now: number,
-): void {
-  const updated = db.prepare(`
-    UPDATE "plan_generation_jobs"
-    SET "phase" = ?,
-        "attempt" = ?,
-        "phaseStartedAt" = ?,
-        "timingsJson" = ?,
-        "leaseExpiresAt" = ?,
-        "updatedAt" = ?
-    WHERE "id" = ? AND "status" = 'running' AND "leaseOwner" = ?
-  `).run(
-    progress.phase,
-    progress.attempt,
-    now,
-    JSON.stringify(timings),
-    now + LEASE_DURATION_MS,
-    now,
-    id,
-    leaseOwner,
-  );
-  if (updated.changes !== 1) throw new LostGenerationJobLeaseError();
+): Promise<void> {
+  const rows = await db.update(planGenerationJobs)
+    .set({
+      phase: progress.phase,
+      attempt: progress.attempt,
+      phaseStartedAt: now,
+      timingsJson: timings,
+      leaseExpiresAt: now + LEASE_DURATION_MS,
+      updatedAt: now,
+    })
+    .where(and(
+      eq(planGenerationJobs.id, id),
+      eq(planGenerationJobs.status, "running"),
+      eq(planGenerationJobs.leaseOwner, leaseOwner),
+    ))
+    .returning({ id: planGenerationJobs.id });
+  if (rows.length !== 1) throw new LostGenerationJobLeaseError();
 }
 
 /** Reserve the call before contacting OpenRouter. Persisting this counter keeps
  * crash/lease recovery from resetting the two-call budget for the same job. */
-function reserveUpstreamCall(id: string, leaseOwner: string): boolean {
+async function reserveUpstreamCall(id: string, leaseOwner: string): Promise<boolean> {
   const now = Date.now();
-  const updated = db.prepare(`
-    UPDATE "plan_generation_jobs"
-    SET "upstreamCalls" = "upstreamCalls" + 1,
-        "leaseExpiresAt" = ?,
-        "updatedAt" = ?
-    WHERE "id" = ?
-      AND "status" = 'running'
-      AND "leaseOwner" = ?
-      AND "upstreamCalls" < ?
-  `).run(
-    now + LEASE_DURATION_MS,
-    now,
-    id,
-    leaseOwner,
-    MAX_UPSTREAM_CALLS,
-  );
-  return updated.changes === 1;
+  const rows = await db.update(planGenerationJobs)
+    .set({
+      upstreamCalls: sql`${planGenerationJobs.upstreamCalls} + 1`,
+      leaseExpiresAt: now + LEASE_DURATION_MS,
+      updatedAt: now,
+    })
+    .where(and(
+      eq(planGenerationJobs.id, id),
+      eq(planGenerationJobs.status, "running"),
+      eq(planGenerationJobs.leaseOwner, leaseOwner),
+      lt(planGenerationJobs.upstreamCalls, MAX_UPSTREAM_CALLS),
+    ))
+    .returning({ id: planGenerationJobs.id });
+  return rows.length === 1;
 }
 
 function classifyJobError(error: unknown): { code: string; retryable: boolean } {
@@ -546,7 +455,7 @@ function classifyJobError(error: unknown): { code: string; retryable: boolean } 
   return { code: "generation_failed", retryable: false };
 }
 
-function completeJob(
+async function completeJob(
   row: GenerationJobRow,
   leaseOwner: string,
   status: Extract<PlanGenerationJobStatus, "succeeded" | "requires_review" | "failed">,
@@ -554,43 +463,36 @@ function completeJob(
   timings: TimingEntry[],
   result: AssembleAndGenerateResult | null,
   error: { code: string; retryable: boolean } | null,
-): boolean {
+): Promise<boolean> {
   const now = Date.now();
   const durationMs = Math.max(0, now - (row.startedAt ?? now));
-  const updated = db.prepare(`
-    UPDATE "plan_generation_jobs"
-    SET "status" = ?,
-        "phase" = ?,
-        "requestJson" = NULL,
-        "resultJson" = ?,
-        "errorCode" = ?,
-        "errorRetryable" = ?,
-        "timingsJson" = ?,
-        "completedAt" = ?,
-        "updatedAt" = ?,
-        "durationMs" = ?,
-        "leaseOwner" = NULL,
-        "leaseExpiresAt" = NULL
-    WHERE "id" = ? AND "status" = 'running' AND "leaseOwner" = ?
-  `).run(
-    status,
-    phase,
-    result ? JSON.stringify(result) : null,
-    error?.code ?? null,
-    error ? (error.retryable ? 1 : 0) : null,
-    JSON.stringify(timings),
-    now,
-    now,
-    durationMs,
-    row.id,
-    leaseOwner,
-  );
-  return updated.changes === 1;
+  const rows = await db.update(planGenerationJobs)
+    .set({
+      status,
+      phase,
+      requestJson: null,
+      resultJson: result,
+      errorCode: error?.code ?? null,
+      errorRetryable: error ? error.retryable : null,
+      timingsJson: timings,
+      completedAt: now,
+      updatedAt: now,
+      durationMs,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+    })
+    .where(and(
+      eq(planGenerationJobs.id, row.id),
+      eq(planGenerationJobs.status, "running"),
+      eq(planGenerationJobs.leaseOwner, leaseOwner),
+    ))
+    .returning({ id: planGenerationJobs.id });
+  return rows.length === 1;
 }
 
 export async function runGenerationJob(id: string): Promise<void> {
   const leaseOwner = randomUUID();
-  const row = claimGenerationJob(id, leaseOwner);
+  const row = await claimGenerationJob(id, leaseOwner);
   if (!row) return;
 
   logJobEvent(row.runCount > 1 ? "lease_recovered" : "claimed", {
@@ -602,17 +504,17 @@ export async function runGenerationJob(id: string): Promise<void> {
 
   let leaseLost = false;
   const heartbeat = setInterval(() => {
-    try {
-      const now = Date.now();
-      const updated = db.prepare(`
-        UPDATE "plan_generation_jobs"
-        SET "leaseExpiresAt" = ?, "updatedAt" = ?
-        WHERE "id" = ? AND "status" = 'running' AND "leaseOwner" = ?
-      `).run(now + LEASE_DURATION_MS, now, row.id, leaseOwner);
-      if (updated.changes !== 1) leaseLost = true;
-    } catch {
-      leaseLost = true;
-    }
+    const now = Date.now();
+    db.update(planGenerationJobs)
+      .set({ leaseExpiresAt: now + LEASE_DURATION_MS, updatedAt: now })
+      .where(and(
+        eq(planGenerationJobs.id, row.id),
+        eq(planGenerationJobs.status, "running"),
+        eq(planGenerationJobs.leaseOwner, leaseOwner),
+      ))
+      .returning({ id: planGenerationJobs.id })
+      .then((rows) => { if (rows.length !== 1) leaseLost = true; })
+      .catch(() => { leaseLost = true; });
   }, HEARTBEAT_INTERVAL_MS);
   heartbeat.unref();
 
@@ -639,7 +541,7 @@ export async function runGenerationJob(id: string): Promise<void> {
     if (progress.phase !== "preparing") {
       const diagnostic = progress.upstream;
       if (!diagnostic) {
-        if (!reserveUpstreamCall(row.id, leaseOwner)) {
+        if (!(await reserveUpstreamCall(row.id, leaseOwner))) {
           throw new GenerationCallBudgetExceededError();
         }
         logJobEvent("upstream_started", {
@@ -684,7 +586,7 @@ export async function runGenerationJob(id: string): Promise<void> {
 
     const now = Date.now();
     finishCurrentTiming(now);
-    updateProgress(row.id, leaseOwner, progress, timings, now);
+    await updateProgress(row.id, leaseOwner, progress, timings, now);
     currentPhase = progress.phase;
     currentAttempt = progress.attempt;
     phaseStartedAt = now;
@@ -693,7 +595,7 @@ export async function runGenerationJob(id: string): Promise<void> {
   try {
     let input: RawGenerationRequest;
     try {
-      input = rawGenerationRequestSchema.parse(JSON.parse(row.requestJson ?? "null"));
+      input = rawGenerationRequestSchema.parse(row.requestJson ?? null);
     } catch {
       throw new StoredGenerationRequestError();
     }
@@ -703,7 +605,7 @@ export async function runGenerationJob(id: string): Promise<void> {
     finishCurrentTiming(Date.now());
 
     const status = result.ok ? "succeeded" : "requires_review";
-    const completed = completeJob(
+    const completed = await completeJob(
       row,
       leaseOwner,
       status,
@@ -735,7 +637,7 @@ export async function runGenerationJob(id: string): Promise<void> {
 
     finishCurrentTiming(Date.now());
     const classified = classifyJobError(error);
-    const completed = completeJob(
+    const completed = await completeJob(
       row,
       leaseOwner,
       "failed",

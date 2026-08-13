@@ -11,7 +11,7 @@ export async function POST(
   if (!user) return unauthorized();
 
   const { id } = await params;
-  const consumed = consumeGenerationJob(user.id, id);
+  const consumed = await consumeGenerationJob(user.id, id);
   if (!consumed.ok) {
     if (consumed.reason === "not_found") {
       return Response.json({ error: "generation_job_not_found" }, { status: 404 });

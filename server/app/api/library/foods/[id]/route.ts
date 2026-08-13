@@ -18,7 +18,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const nums = [body.kcal, body.proteinG, body.carbsG, body.fatG].map(v => Math.max(0, Number(v) || 0));
   if (!name) return Response.json({ error: "invalid_body" }, { status: 400 });
 
-  const ok = updateFood(user.id, id, {
+  const ok = await updateFood(user.id, id, {
     name, category, kcal: nums[0], proteinG: nums[1], carbsG: nums[2], fatG: nums[3],
   });
   if (!ok) return Response.json({ error: "not_editable" }, { status: 403 });
@@ -31,7 +31,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   if (user.role !== "nutritionist") return forbidden();
   const { id } = await params;
 
-  const ok = deleteFood(user.id, id);
+  const ok = await deleteFood(user.id, id);
   if (!ok) return Response.json({ error: "not_editable" }, { status: 403 });
   return Response.json({ ok: true });
 }

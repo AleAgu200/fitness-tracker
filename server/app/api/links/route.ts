@@ -8,12 +8,12 @@ export async function GET(request: Request) {
   if (!user) return unauthorized();
 
   if (roleToKind(user.role)) {
-    const athletes = getAthletes(user.id);
-    const lastMsg = lastMessageAt(user.id);
+    const athletes = await getAthletes(user.id);
+    const lastMsg = await lastMessageAt(user.id);
     return Response.json({
       role: user.role,
       athletes: athletes.map(a => ({ ...a, lastMessageAt: lastMsg[a.userId] ?? null })),
     });
   }
-  return Response.json({ role: user.role, team: getTeam(user.id) });
+  return Response.json({ role: user.role, team: await getTeam(user.id) });
 }

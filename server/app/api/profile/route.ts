@@ -42,7 +42,7 @@ export async function GET(request: Request) {
   if (!user) return unauthorized();
   if (user.role !== "athlete") return forbidden();
   return Response.json(
-    { profile: getAthleteProfile(user.id) },
+    { profile: await getAthleteProfile(user.id) },
     { headers: { "Cache-Control": "private, no-store" } },
   );
 }
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
 
   try {
     return Response.json(
-      { profile: upsertAthleteProfile(user.id, user.name, parsed.data) },
+      { profile: await upsertAthleteProfile(user.id, user.name, parsed.data) },
       { headers: { "Cache-Control": "private, no-store" } },
     );
   } catch (error) {

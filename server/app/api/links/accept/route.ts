@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "invalid_code" }, { status: 400 });
   }
 
-  const result = acceptInvite(user.id, code);
+  const result = await acceptInvite(user.id, code);
   if (!result.ok) {
     const status = result.error === "already_linked" ? 409 : 400;
     return Response.json({ error: result.error }, { status });
