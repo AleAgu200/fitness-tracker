@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -167,6 +167,45 @@ function ProfileSection() {
   );
 }
 
+function TrainingPlanSection() {
+  const C = useColors();
+
+  function regenerate() {
+    Alert.alert(
+      'Regenerar plan',
+      // The questionnaire answers (objetivo, entreno, nutrición, lesiones) get
+      // borradas al aceptar un plan (ver results.tsx, clearGenerationProfile) —
+      // por diseño, para no retener más de lo necesario datos que salen a un
+      // proveedor de IA externo. Por eso "regenerar" vuelve a pasar por esas
+      // preguntas en vez de saltar directo a generating.tsx.
+      'Vas a volver a responder el cuestionario de objetivo, entreno y nutrición, y el plan nuevo va a reemplazar tu semana actual (entreno y comidas). ¿Querés continuar?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Continuar', onPress: () => router.push('/(onboarding)/goal' as any) },
+      ],
+    );
+  }
+
+  return (
+    <View style={{ marginBottom: 20 }}>
+      <Label style={{ marginBottom: 9 }}>PLAN DE ENTRENO</Label>
+      <PressableScale
+        onPress={regenerate}
+        haptic="medium"
+        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: C.card, borderWidth: 1, borderColor: C.border, padding: 14, paddingHorizontal: 16 }}
+      >
+        <View style={{ flex: 1, paddingRight: 10 }}>
+          <Text style={{ fontFamily: F.interSemi, fontSize: 14, color: C.textPrimary }}>Regenerar plan con IA</Text>
+          <Text style={{ fontFamily: F.inter, fontSize: 12, color: C.textTertiary, marginTop: 3 }}>
+            Volvé a contestar el cuestionario y reemplazá tu plan actual
+          </Text>
+        </View>
+        <Text style={{ fontFamily: F.mono, fontSize: 12, color: C.textSecondary }}>→</Text>
+      </PressableScale>
+    </View>
+  );
+}
+
 export default function ConfiguracionScreen() {
   const { signOut } = useSession();
   const C = useColors();
@@ -206,6 +245,8 @@ export default function ConfiguracionScreen() {
         <NotificationSettings />
 
         <PreferencesSettings />
+
+        <TrainingPlanSection />
 
         {/* CUENTA */}
         <View style={{ marginTop: 4 }}>

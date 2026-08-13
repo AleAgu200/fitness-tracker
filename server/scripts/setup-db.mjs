@@ -22,7 +22,8 @@ db.exec(`
     "image"         TEXT,
     "createdAt"     INTEGER NOT NULL,
     "updatedAt"     INTEGER NOT NULL,
-    "role"          TEXT NOT NULL DEFAULT 'athlete'
+    "role"          TEXT NOT NULL DEFAULT 'athlete',
+    "isSuperAdmin"  INTEGER NOT NULL DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS "session" (
@@ -120,6 +121,14 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS "plan_generation_jobs_stale_lease"
     ON "plan_generation_jobs" ("status", "leaseExpiresAt");
 `);
+
+// Idempotent column add for databases created before isSuperAdmin existed —
+// CREATE TABLE IF NOT EXISTS above only helps fresh installs.
+try {
+  db.exec(`ALTER TABLE "user" ADD COLUMN "isSuperAdmin" INTEGER NOT NULL DEFAULT 0`);
+} catch (e) {
+  if (!String(e).includes("duplicate column name")) throw e;
+}
 
 console.log("✓ PULSO server tables created at", dbPath);
 db.close();

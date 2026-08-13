@@ -47,7 +47,10 @@ export async function getActiveSession() {
   await restoreCookieFromStorage();
   const { data } = await authClient.getSession();
   if (!data?.session) return null;
-  return { userId: data.user.id, sessionId: data.session.id };
+  // isSuperAdmin is a Better Auth additionalField (server/lib/auth.ts) not declared
+  // in this client's type config, so it comes through untyped on the raw response.
+  const user = data.user as typeof data.user & { isSuperAdmin?: boolean };
+  return { userId: user.id, sessionId: data.session.id, isSuperAdmin: user.isSuperAdmin ?? false };
 }
 
 export async function signOut() {

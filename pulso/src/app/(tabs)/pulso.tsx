@@ -1,5 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,6 +8,7 @@ import { AnimatedBar, Card, GlowPulse, Label, PressableScale } from '@/component
 import { F, useColors, withAlpha } from '@/constants/colors';
 import { useApp } from '@/context/app-state';
 import { usePreferences } from '@/context/preferences';
+import { useSession } from '@/context/session';
 import { displayWeight } from '@/lib/units';
 
 type PulseTab = 'core' | 'cards' | 'week' | 'team';
@@ -22,12 +23,19 @@ const TABS: { key: PulseTab; label: string }[] = [
 const TEAM_SHARE_KEY = 'pulso_team_progress_sharing';
 
 export default function PulsoScreen() {
+  const { isSuperAdmin, loading } = useSession();
   const { state } = useApp();
   const { accent, weightUnit } = usePreferences();
   const C = useColors();
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<PulseTab>('core');
   const [shareWithTeam, setShareWithTeam] = useState(false);
+
+  // Belt-and-suspenders: the tab bar already hides this route (see (tabs)/_layout.tsx),
+  // but block direct navigation too (deep link, dev menu, etc).
+  if (!loading && !isSuperAdmin) {
+    return <Redirect href={'/(tabs)/hoy' as any} />;
+  }
 
   useEffect(() => {
     SecureStore.getItemAsync(TEAM_SHARE_KEY)

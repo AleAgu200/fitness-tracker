@@ -4,6 +4,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { FoodPicker } from '@/components/food-picker';
 import { Label, PressableScale } from '@/components/ui/kit';
+import { TimePickerField } from '@/components/ui/time-picker-field';
 import { F, useColors } from '@/constants/colors';
 import { describeFoods, PickedFood, totalsFor } from '@/lib/foods';
 
@@ -31,7 +32,7 @@ interface Props {
 export function MealPlanForm({ editing, initial, onCancel, onSave, onDelete }: Props) {
   const C = useColors();
   const [label, setLabel] = useState(initial.label);
-  const [time, setTime] = useState(initial.time);
+  const [time, setTime] = useState(initial.time || '12:00');
   const [n, setN] = useState(initial.n);
   const [kcal, setKcal] = useState(initial.kcal ? String(initial.kcal) : '');
   const [p, setP] = useState(initial.p ? String(initial.p) : '');
@@ -88,13 +89,7 @@ export function MealPlanForm({ editing, initial, onCancel, onSave, onDelete }: P
         </View>
         <View style={{ flex: 1 }}>
           <Label style={{ marginBottom: 6 }}>HORA</Label>
-          <TextInput
-            value={time}
-            onChangeText={setTime}
-            placeholder="07:30"
-            placeholderTextColor={C.textTertiary}
-            style={inputStyle}
-          />
+          <TimePickerField value={time} onChange={setTime} accentColor={C.cyan} />
         </View>
       </View>
       <FoodPicker items={picked} onChange={applyPicked} />

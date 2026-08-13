@@ -42,6 +42,13 @@ export const auth = betterAuth({
         defaultValue: "athlete",
         input: false,
       },
+      // Gates admin-only features (e.g. the PULSO tab). Never settable via the
+      // API (input: false) — only server/scripts/grant-superadmin.mjs can flip it.
+      isSuperAdmin: {
+        type: "boolean",
+        defaultValue: false,
+        input: false,
+      },
     },
   },
 });

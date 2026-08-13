@@ -5,6 +5,7 @@ import { F, useColors, withAlpha } from '@/constants/colors';
 import { usePreferences } from '@/context/preferences';
 
 import { PressableScale } from './kit';
+import { TimePickerField } from './time-picker-field';
 
 export interface ChipOption {
   label: string;
@@ -181,6 +182,79 @@ export function FreeTextChipInput({
               letterSpacing: 0.6,
             }}
           >
+            {addLabel}
+          </Text>
+        </PressableScale>
+      </View>
+    </View>
+  );
+}
+
+export interface TimeChipInputProps {
+  value: string[];
+  onChange: (next: string[]) => void;
+  addLabel?: string;
+}
+
+/** Same chip list as FreeTextChipInput, but the "add" control is the native
+ *  time picker instead of a text field — for lists of times of day. */
+export function TimeChipInput({ value, onChange, addLabel = 'AGREGAR' }: TimeChipInputProps) {
+  const { accent } = usePreferences();
+  const [draft, setDraft] = useState('07:00');
+
+  function addDraft() {
+    const alreadyExists = value.includes(draft);
+    if (!alreadyExists) onChange([...value, draft]);
+  }
+
+  function removeItem(index: number) {
+    onChange(value.filter((_, itemIndex) => itemIndex !== index));
+  }
+
+  return (
+    <View style={{ gap: 10 }}>
+      {value.length > 0 ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {value.map((item, index) => (
+            <PressableScale
+              key={`${item}-${index}`}
+              onPress={() => removeItem(index)}
+              style={{
+                minHeight: 36,
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderRadius: 999,
+                borderWidth: 1,
+                borderColor: accent,
+                backgroundColor: withAlpha(accent, 0.13),
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 7,
+              }}
+            >
+              <Text style={{ color: accent, fontFamily: F.interMed, fontSize: 12 }}>{item}</Text>
+              <Text style={{ color: accent, fontFamily: F.monoBold, fontSize: 13 }}>×</Text>
+            </PressableScale>
+          ))}
+        </View>
+      ) : null}
+
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <TimePickerField value={draft} onChange={setDraft} accentColor={accent} />
+        <PressableScale
+          onPress={addDraft}
+          style={{
+            minWidth: 88,
+            minHeight: 44,
+            paddingHorizontal: 12,
+            borderWidth: 1,
+            borderColor: accent,
+            backgroundColor: withAlpha(accent, 0.13),
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text style={{ color: accent, fontFamily: F.monoBold, fontSize: 9, letterSpacing: 0.6 }}>
             {addLabel}
           </Text>
         </PressableScale>

@@ -35,7 +35,6 @@ import {
 import { ExercisePlanValues } from '@/components/exercise-plan-form';
 import {
   addPlanExercise,
-  applySuggestedPlan as dbApplySuggestedPlan,
   deletePlanExercise,
   getPlan,
   updatePlanExercise,
@@ -95,6 +94,7 @@ export interface Exercise {
   basePR: number;
   muscleGroup: 'chest' | 'back' | 'legs' | 'shoulders' | 'arms' | 'core' | 'full' | null;
   wxId: string | null;
+  gifPath: string | null;
 }
 
 export interface Meal {
@@ -257,7 +257,6 @@ interface AppContextValue {
    *  used by the widget's "done" quick-log, which auto-advances once the target is hit. */
   guardarSet: (override?: { slotId: string }) => void;
   finishWorkout: () => void;
-  applySuggestedPlan: () => void;
   startEditEx: () => void;
   startAddEx: () => void;
   cancelExForm: () => void;
@@ -387,6 +386,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           basePR: e.basePR,
           muscleGroup: e.muscleGroup,
           wxId: e.wxId,
+          gifPath: e.gifPath,
         }));
         const prMap: Record<string, number> = {};
         for (const e of exercises) prMap[e.id] = e.basePR;
@@ -539,6 +539,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         basePR: e.basePR,
         muscleGroup: e.muscleGroup,
         wxId: e.wxId,
+        gifPath: e.gifPath,
       }));
       const prMap: Record<string, number> = {};
       for (const e of exercises) prMap[e.id] = Math.max(e.basePR, s.prMap[e.id] ?? 0);
@@ -917,14 +918,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       .catch(e => console.error('[finish]', e));
   }, [syncCheckIn]);
 
-  const applySuggestedPlan = useCallback(() => {
-    const templateId = templateIdRef.current;
-    if (!templateId) return;
-    dbApplySuggestedPlan(templateId)
-      .then(() => reloadPlan())
-      .catch(e => console.error('[plan]', e));
-  }, [reloadPlan]);
-
   const startEditEx = useCallback(() =>
     setState(s => ({ ...s, editingEx: true, addingEx: false })), []);
 
@@ -946,6 +939,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       peso: Math.max(0, values.peso || 0),
       step: values.step || 2.5,
       wxId: values.wxId,
+      gifPath: values.gifPath,
     };
     setState(st => ({ ...st, editingEx: false }));
     updatePlanExercise(uid, cur.id, data)
@@ -968,6 +962,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       peso: Math.max(0, values.peso || 0),
       step: values.step || 2.5,
       wxId: values.wxId,
+      gifPath: values.gifPath,
     };
     setState(st => ({ ...st, addingEx: false }));
     addPlanExercise(uid, templateId, data)
@@ -1034,6 +1029,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     reps: number;
     weight: number;
     step: number;
+    gifPath?: string | null;
   }) => {
     const uid = userRef.current;
     const templateId = templateIdRef.current;
@@ -1046,6 +1042,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       reps: exercise.reps,
       peso: exercise.weight,
       step: exercise.step,
+      gifPath: exercise.gifPath,
     });
     await reloadPlan();
   }, [reloadPlan]);
@@ -1097,7 +1094,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setMeal, setMealNote, setWater,
       startAddMeal, startEditMeal, cancelMealForm, setMealDraft, saveMealForm, deleteMeal,
       selectEx, incPeso, decPeso, incReps, decReps, setRpe, guardarSet,
-      finishWorkout, applySuggestedPlan,
+      finishWorkout,
       startEditEx, startAddEx, cancelExForm, saveEditEx, saveAddEx, deleteEx,
       addRest, reduceRest, skipRest, dismissPrFlash,
       addRecommendedExercise,

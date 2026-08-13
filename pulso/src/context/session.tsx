@@ -6,6 +6,7 @@ import { unregisterNotificationsForUser } from '@/lib/notifications';
 interface SessionState {
   userId: string | null;
   sessionId: string | null;
+  isSuperAdmin: boolean;
   loading: boolean;
 }
 
@@ -17,13 +18,14 @@ interface SessionContextValue extends SessionState {
 const SessionContext = createContext<SessionContextValue | null>(null);
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<SessionState>({ userId: null, sessionId: null, loading: true });
+  const [state, setState] = useState<SessionState>({ userId: null, sessionId: null, isSuperAdmin: false, loading: true });
 
   const refresh = useCallback(async () => {
     const session = await getActiveSession();
     setState({
       userId: session?.userId ?? null,
       sessionId: session?.sessionId ?? null,
+      isSuperAdmin: session?.isSuperAdmin ?? false,
       loading: false,
     });
   }, []);
@@ -35,7 +37,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     // AppProvider reacts to userId flipping to null by stopping the rest timer and
     // clearing the widget/rest-timer native stores (see app-state.tsx) — the
     // account-agnostic device state cleanup lives there, not here.
-    setState({ userId: null, sessionId: null, loading: false });
+    setState({ userId: null, sessionId: null, isSuperAdmin: false, loading: false });
 
     const cleanups: Promise<void>[] = [];
     if (userId) {

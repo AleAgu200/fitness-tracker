@@ -17,10 +17,12 @@ function dateToTimeString(date: Date): string {
 }
 
 /**
- * Native time-of-day picker. iOS renders an always-inline compact pill (the
- * platform's own tap-to-expand wheel). Android's DateTimePicker only supports
- * a dialog that opens the instant it mounts, so there we show a small chip
- * and mount the dialog on demand, unmounting on selection/dismiss.
+ * Native time-of-day picker — hour + minute + AM/PM, never 24h/military
+ * (`is24Hour={false}`, forced regardless of the device's system setting).
+ * iOS renders an always-inline compact pill (tap to expand the wheel). Android's
+ * DateTimePicker only supports a dialog, so there we show a small chip and mount
+ * a "spinner" dialog on demand (the 3-column hour/minute/AM-PM wheel, not the
+ * circular clock face) — same one shown in the OS alarm app.
  */
 export function TimePickerField({ value, onChange, accentColor = BRAND.yellow }: {
   value: string;
@@ -38,6 +40,7 @@ export function TimePickerField({ value, onChange, accentColor = BRAND.yellow }:
         value={date}
         mode="time"
         display="compact"
+        is24Hour={false}
         accentColor={accentColor}
         themeVariant={scheme === 'light' ? 'light' : 'dark'}
         onValueChange={(_, newDate) => onChange(dateToTimeString(newDate))}
@@ -65,7 +68,9 @@ export function TimePickerField({ value, onChange, accentColor = BRAND.yellow }:
         <DateTimePicker
           value={date}
           mode="time"
+          display="spinner"
           presentation="dialog"
+          is24Hour={false}
           accentColor={accentColor}
           onValueChange={(_, newDate) => {
             setPickerOpen(false);

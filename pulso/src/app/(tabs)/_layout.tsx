@@ -31,7 +31,7 @@ function TabIcon({ color, name, focused }: { color: ColorValue; name: IconName; 
 }
 
 export default function TabsLayout() {
-  const { userId, loading } = useSession();
+  const { userId, loading, isSuperAdmin } = useSession();
   const { accent } = usePreferences();
   const C = useColors();
 
@@ -85,6 +85,9 @@ export default function TabsLayout() {
         options={{
           title: 'PULSO',
           tabBarIcon: ({ color, focused }) => <TabIcon color={color} focused={focused} name="lightning-bolt" />,
+          // Admin-only feature (see server/scripts/grant-superadmin.mjs) — href: null
+          // hides the tab from the bar without unmounting the (tabs) group's routes.
+          href: isSuperAdmin ? undefined : null,
         }}
       />
       <Tabs.Screen

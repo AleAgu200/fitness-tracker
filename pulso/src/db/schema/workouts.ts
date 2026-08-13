@@ -41,7 +41,11 @@ export const exercises = sqliteTable('exercises', {
   createdByUserId: text('created_by_user_id'),
   // WorkoutX exercise id — lets already-saved exercises show their demo GIF
   // without re-searching. Null for custom exercises or ones added before this existed.
+  // WorkoutX is currently disabled in favor of gifPath below; kept for a possible future switch-back.
   wxId:            text('wx_id'),
+  // Public path into the local exercise-catalog media (server/public/exercises/gifs/<file>.gif),
+  // e.g. "/exercises/gifs/0001-2gPfomN.gif". Preferred over wxId for new exercises.
+  gifPath:         text('gif_path'),
 });
 
 export const personalRecords = sqliteTable('personal_records', {

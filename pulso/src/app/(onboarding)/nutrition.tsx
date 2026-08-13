@@ -4,7 +4,7 @@ import { ActivityIndicator, Text, View } from 'react-native';
 
 import { FieldLabel, SectionHeader } from '@/components/onboarding/section-header';
 import { WizardShell } from '@/components/onboarding/wizard-shell';
-import { ChipSelect, FreeTextChipInput } from '@/components/ui/chip-select';
+import { ChipSelect, FreeTextChipInput, TimeChipInput } from '@/components/ui/chip-select';
 import { PressableScale } from '@/components/ui/kit';
 import { F, useColors, withAlpha } from '@/constants/colors';
 import { usePreferences } from '@/context/preferences';
@@ -204,13 +204,7 @@ export default function OnboardingNutritionScreen() {
           <MealsStepper value={mealsPerDay} onChange={setMealsPerDay} />
           <View style={{ height: 15 }} />
           <FieldLabel>HORARIOS PREFERIDOS (OPCIONAL)</FieldLabel>
-          <FreeTextChipInput
-            value={preferredMealTimes}
-            onChange={setPreferredMealTimes}
-            placeholder="Ej. 07:30"
-            addLabel="AGREGAR"
-            maxLength={5}
-          />
+          <TimeChipInput value={preferredMealTimes} onChange={setPreferredMealTimes} />
 
           <View style={{ height: 26 }} />
           <SectionHeader label="PREFERENCIAS PRÁCTICAS" />

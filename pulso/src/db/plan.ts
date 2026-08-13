@@ -22,7 +22,8 @@ export interface PlanExercise {
   restSeconds: number;
   basePR: number;
   muscleGroup: 'chest' | 'back' | 'legs' | 'shoulders' | 'arms' | 'core' | 'full' | null;
-  wxId: string | null; // WorkoutX id, for showing the exercise's demo animation
+  wxId: string | null; // legacy WorkoutX id, for showing the exercise's demo animation (WorkoutX disabled)
+  gifPath: string | null; // local exercise-catalog GIF path, preferred over wxId
 }
 
 async function getOrCreateActiveProgramId(athleteId: string): Promise<string> {
@@ -140,6 +141,7 @@ export async function getPlan(athleteId: string, weekday: number): Promise<{ tem
       restSeconds: templateExerciseSlots.restSeconds,
       muscleGroup: exercises.muscleGroup,
       wxId: exercises.wxId,
+      gifPath: exercises.gifPath,
     })
     .from(templateExerciseSlots)
     .innerJoin(exercises, eq(templateExerciseSlots.exerciseId, exercises.id))
@@ -166,20 +168,24 @@ export async function getPlan(athleteId: string, weekday: number): Promise<{ tem
       basePR: prByExercise.get(r.exerciseId) ?? r.peso ?? 0,
       muscleGroup: r.muscleGroup,
       wxId: r.wxId,
+      gifPath: r.gifPath,
     })),
   };
 }
 
 /** Reuse a catalog exercise when the name matches, otherwise create a custom one.
- *  When a WorkoutX id is given, it's also backfilled onto an existing name match
+ *  When a gifPath/wxId is given, it's also backfilled onto an existing name match
  *  that doesn't have one yet, so re-picking the same exercise from search later
  *  unlocks its demo animation. */
-async function resolveExerciseId(athleteId: string, nombre: string, wxId?: string | null): Promise<string> {
-  const all = await db.select({ id: exercises.id, name: exercises.name, wxId: exercises.wxId }).from(exercises);
+async function resolveExerciseId(athleteId: string, nombre: string, wxId?: string | null, gifPath?: string | null): Promise<string> {
+  const all = await db.select({ id: exercises.id, name: exercises.name, wxId: exercises.wxId, gifPath: exercises.gifPath }).from(exercises);
   const match = all.find(e => e.name.trim().toLowerCase() === nombre.trim().toLowerCase());
   if (match) {
-    if (wxId && !match.wxId) {
-      await db.update(exercises).set({ wxId }).where(eq(exercises.id, match.id));
+    if ((gifPath && !match.gifPath) || (wxId && !match.wxId)) {
+      await db.update(exercises).set({
+        ...(gifPath && !match.gifPath ? { gifPath } : {}),
+        ...(wxId && !match.wxId ? { wxId } : {}),
+      }).where(eq(exercises.id, match.id));
     }
     return match.id;
   }
@@ -193,6 +199,7 @@ async function resolveExerciseId(athleteId: string, nombre: string, wxId?: strin
     isCustom: true,
     createdByUserId: athleteId,
     wxId: wxId ?? null,
+    gifPath: gifPath ?? null,
   });
   return id;
 }
@@ -200,9 +207,9 @@ async function resolveExerciseId(athleteId: string, nombre: string, wxId?: strin
 export async function addPlanExercise(
   athleteId: string,
   templateId: string,
-  data: { nombre: string; target: number; reps: number; peso: number; step: number; wxId?: string | null },
+  data: { nombre: string; target: number; reps: number; peso: number; step: number; wxId?: string | null; gifPath?: string | null },
 ): Promise<void> {
-  const exerciseId = await resolveExerciseId(athleteId, data.nombre, data.wxId);
+  const exerciseId = await resolveExerciseId(athleteId, data.nombre, data.wxId, data.gifPath);
   const existing = await db
     .select({ id: templateExerciseSlots.id })
     .from(templateExerciseSlots)
@@ -224,9 +231,9 @@ export async function addPlanExercise(
 export async function updatePlanExercise(
   athleteId: string,
   slotId: string,
-  data: { nombre: string; target: number; reps: number; peso: number; step: number; wxId?: string | null },
+  data: { nombre: string; target: number; reps: number; peso: number; step: number; wxId?: string | null; gifPath?: string | null },
 ): Promise<void> {
-  const exerciseId = await resolveExerciseId(athleteId, data.nombre, data.wxId);
+  const exerciseId = await resolveExerciseId(athleteId, data.nombre, data.wxId, data.gifPath);
   await db
     .update(templateExerciseSlots)
     .set({
@@ -274,36 +281,4 @@ export async function replacePlanExercises(
       stepKg: it.step,
     });
   }
-}
-
-const SUGGESTED_PLAN = [
-  { exerciseId: 'ex_sentadilla',    target: 4, reps: 6,  peso: 60, step: 5 },
-  { exerciseId: 'ex_press_banca',   target: 4, reps: 8,  peso: 40, step: 2.5 },
-  { exerciseId: 'ex_peso_muerto',   target: 3, reps: 5,  peso: 80, step: 5 },
-  { exerciseId: 'ex_press_militar', target: 3, reps: 8,  peso: 25, step: 2.5 },
-  { exerciseId: 'ex_dominadas',     target: 3, reps: 8,  peso: 0,  step: 1 },
-  { exerciseId: 'ex_remo_barra',    target: 4, reps: 10, peso: 40, step: 2.5 },
-];
-
-/** Fill an empty plan with the seeded catalog exercises */
-export async function applySuggestedPlan(templateId: string): Promise<void> {
-  const existing = await db
-    .select({ id: templateExerciseSlots.id })
-    .from(templateExerciseSlots)
-    .where(eq(templateExerciseSlots.templateId, templateId));
-  if (existing.length > 0) return;
-
-  await db.insert(templateExerciseSlots).values(
-    SUGGESTED_PLAN.map((s, i) => ({
-      id: nanoid(),
-      templateId,
-      exerciseId: s.exerciseId,
-      slotOrder: i,
-      targetSets: s.target,
-      targetReps: s.reps,
-      targetWeightKg: s.peso,
-      restSeconds: 90,
-      stepKg: s.step,
-    })),
-  );
 }

@@ -5,17 +5,22 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { PressableScale } from '@/components/ui/kit';
 import { F, useColors } from '@/constants/colors';
+import { catalogMediaUrl } from '@/lib/exercise-catalog';
 import { workoutXGifSource, workoutXGifUrlFromId } from '@/lib/workoutx';
 
 /** Full-screen GIF viewer for an already-saved exercise, opened by tapping its
- *  animation button in the plan/session lists. Tap outside the card (or ✕) to close. */
-export function ExerciseAnimationModal({ nombre, wxId, onClose }: {
+ *  animation button in the plan/session lists. Tap outside the card (or ✕) to close.
+ *  `gifPath` (local catalog, public URL) is preferred; `wxId` (WorkoutX, legacy/disabled)
+ *  is the fallback so exercises saved before the switch keep working. */
+export function ExerciseAnimationModal({ nombre, wxId, gifPath, onClose }: {
   nombre: string;
-  wxId: string;
+  wxId?: string | null;
+  gifPath?: string | null;
   onClose: () => void;
 }) {
   const C = useColors();
   const [imageFailed, setImageFailed] = useState(false);
+  const source = gifPath ? { uri: catalogMediaUrl(gifPath) } : wxId ? workoutXGifSource(workoutXGifUrlFromId(wxId)) : null;
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
@@ -40,9 +45,9 @@ export function ExerciseAnimationModal({ nombre, wxId, onClose }: {
             </View>
 
             <View style={{ aspectRatio: 1, backgroundColor: C.bgEl, alignItems: 'center', justifyContent: 'center' }}>
-              {!imageFailed ? (
+              {source && !imageFailed ? (
                 <Image
-                  source={workoutXGifSource(workoutXGifUrlFromId(wxId))}
+                  source={source}
                   style={{ width: '100%', height: '100%' }}
                   contentFit="contain"
                   autoplay

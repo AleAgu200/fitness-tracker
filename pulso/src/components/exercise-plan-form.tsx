@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { Image } from 'expo-image';
+import { useEffect, useMemo, useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
@@ -11,18 +12,30 @@ import {
   PulsoBodyMap,
 } from '@/components/body-map/pulso-body-map';
 import { Label, PressableScale } from '@/components/ui/kit';
-import { WorkoutXSearch } from '@/components/workoutx-search';
+import { ExerciseCatalogSearch } from '@/components/exercise-catalog-search';
 import { F, useColors, withAlpha } from '@/constants/colors';
+import { CatalogSuggestion, catalogMediaUrl, listCatalogByTargets } from '@/lib/exercise-catalog';
 import { WeightUnit } from '@/lib/settings';
 import {
   DETAILED_MUSCLE_LABELS,
   DetailedMuscleKey,
   exerciseTargetsMuscle,
   inferExerciseMuscles,
+  MUSCLE_KEY_TO_CATALOG_TARGET,
   POPULAR_EXERCISES,
 } from '@/lib/muscles';
 import { displayWeight, formatWeight, toKg } from '@/lib/units';
-import { WxSuggestion } from '@/lib/workoutx';
+
+/** A single map suggestion, whichever source it came from (catalog exercises always
+ *  carry a gifPath; the small POPULAR_EXERCISES fallback for tibialis/neck doesn't). */
+interface MapSuggestion {
+  name: string;
+  sets: number;
+  reps: number;
+  weight: number;
+  step: number;
+  gifPath?: string | null;
+}
 
 const MUSCLES: { key: MuscleGroup; label: string }[] = [
   { key: 'chest', label: 'PECHO' },
@@ -40,8 +53,10 @@ export interface ExercisePlanValues {
   reps: number;
   peso: number; // kg
   step: number;
-  /** WorkoutX id, for the demo animation — undefined on initial values means "unknown/new" */
+  /** Legacy WorkoutX id, for the demo animation — kept for exercises saved before the switch to gifPath */
   wxId?: string | null;
+  /** Local exercise-catalog GIF path, for the demo animation — undefined on initial values means "unknown/new" */
+  gifPath?: string | null;
 }
 
 /** An exercise already in whichever day's plan is being edited, for the muscle
@@ -66,7 +81,7 @@ interface ExercisePlanFormProps {
   onCancel: () => void;
   onSave: (values: ExercisePlanValues) => void;
   onDelete?: () => void;
-  onAddFromMap: (exercise: { name: string; sets: number; reps: number; weight: number; step: number }) => Promise<void>;
+  onAddFromMap: (exercise: MapSuggestion) => Promise<void>;
 }
 
 /**
@@ -86,7 +101,7 @@ export function ExercisePlanForm({
   // Increment isn't user-editable in this form (matches the original UI), just carried through
   const [step] = useState(String(initial.step));
 
-  const [selectedWorkoutX, setSelectedWorkoutX] = useState<WxSuggestion | null>(null);
+  const [selectedCatalog, setSelectedCatalog] = useState<CatalogSuggestion | null>(null);
   const [usingManualName, setUsingManualName] = useState(false);
   const [addMode, setAddMode] = useState<'buscador' | 'mapa'>('buscador');
   const [bodySide, setBodySide] = useState<BodySide>('front');
@@ -97,7 +112,7 @@ export function ExercisePlanForm({
   const [addingSuggestion, setAddingSuggestion] = useState<string | null>(null);
   const [mapAddError, setMapAddError] = useState<string | null>(null);
 
-  const canConfigureExercise = editing || selectedWorkoutX != null || usingManualName;
+  const canConfigureExercise = editing || selectedCatalog != null || usingManualName;
 
   // ── mapa muscular · agregar ejercicio por músculo ───────────────────────────
   const muscleStats = useMemo(() => MUSCLES.map(item => {
@@ -108,9 +123,33 @@ export function ExercisePlanForm({
   }), [existingExercises]);
   const selectedMuscle = muscleStats.find(item => item.key === muscle);
   const selectedMuscleDetail = muscleSlug ? muscleDetailForSlug(muscleSlug) : null;
-  const selectedPopularExercises = selectedMuscleDetail
-    ? POPULAR_EXERCISES[selectedMuscleDetail.key as DetailedMuscleKey] ?? []
-    : [];
+  const selectedMuscleKey = selectedMuscleDetail?.key as DetailedMuscleKey | undefined;
+  const catalogTargets = selectedMuscleKey ? MUSCLE_KEY_TO_CATALOG_TARGET[selectedMuscleKey] : undefined;
+
+  const [catalogSuggestions, setCatalogSuggestions] = useState<CatalogSuggestion[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!catalogTargets) {
+      setCatalogSuggestions([]);
+      return;
+    }
+    const controller = new AbortController();
+    setSuggestionsLoading(true);
+    listCatalogByTargets(catalogTargets, 3, controller.signal)
+      .then(setCatalogSuggestions)
+      .catch(() => setCatalogSuggestions([]))
+      .finally(() => setSuggestionsLoading(false));
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMuscleKey]);
+
+  // Catalog exercises (guaranteed GIF) when this muscle maps to the catalog's
+  // vocabulary; otherwise the small hand-picked fallback (no GIF) for the two
+  // muscles the free dataset doesn't cover (tibialis, neck).
+  const selectedSuggestions: MapSuggestion[] = catalogTargets
+    ? catalogSuggestions.map(ex => ({ name: ex.name, sets: 3, reps: 8, weight: 0, step: 2.5, gifPath: ex.gifPath }))
+    : selectedMuscleKey ? POPULAR_EXERCISES[selectedMuscleKey] ?? [] : [];
   const selectedExercises = selectedMuscle?.exercises.filter(exercise =>
     !selectedMuscleDetail ||
     exerciseTargetsMuscle(
@@ -155,12 +194,18 @@ export function ExercisePlanForm({
   const selectedDone = selectedExercises.reduce((sum, exercise) => sum + (exercise.doneCount ?? 0), 0);
 
   function save() {
-    // Keep the original WorkoutX link when editing without touching the name/search
-    // (selectedWorkoutX is null until the user re-searches); drop it if the name changed
+    // Keep the original animation link when editing without touching the name/search
+    // (selectedCatalog is null until the user re-searches); drop it if the name changed
     // without picking a new match, since it'd no longer point at the right animation.
-    const wxId = selectedWorkoutX
-      ? selectedWorkoutX.id
-      : nombre.trim() === initial.nombre.trim()
+    const unchangedName = nombre.trim() === initial.nombre.trim();
+    const gifPath = selectedCatalog
+      ? selectedCatalog.gifPath
+      : unchangedName
+        ? initial.gifPath ?? null
+        : null;
+    const wxId = selectedCatalog
+      ? null
+      : unchangedName
         ? initial.wxId ?? null
         : null;
     onSave({
@@ -170,6 +215,7 @@ export function ExercisePlanForm({
       peso: toKg(Math.max(0, +peso || 0), weightUnit),
       step: +step || 2.5,
       wxId,
+      gifPath,
     });
   }
 
@@ -205,11 +251,11 @@ export function ExercisePlanForm({
 
       {(editing || addMode === 'buscador') && (
         <>
-          <Label style={{ marginBottom: 6 }}>NOMBRE · BUSCAR EN WORKOUTX</Label>
+          <Label style={{ marginBottom: 6 }}>NOMBRE · BUSCAR EJERCICIO</Label>
           <TextInput
             value={nombre}
             onChangeText={v => {
-              setSelectedWorkoutX(null);
+              setSelectedCatalog(null);
               setUsingManualName(false);
               setNombre(v);
             }}
@@ -218,11 +264,11 @@ export function ExercisePlanForm({
             style={{ backgroundColor: C.bgEl, borderWidth: 1, borderColor: C.border, padding: 10, color: C.textPrimary, fontFamily: F.inter, fontSize: 14, marginBottom: 10 }}
           />
 
-          <WorkoutXSearch
+          <ExerciseCatalogSearch
             query={nombre}
             enabled
             onSelect={suggestion => {
-              setSelectedWorkoutX(suggestion);
+              setSelectedCatalog(suggestion);
               setUsingManualName(false);
               setNombre(suggestion.name);
             }}
@@ -397,10 +443,16 @@ export function ExercisePlanForm({
                   No hay ejercicios asociados a este músculo en el plan actual.
                 </Text>
               )}
-              {selectedMuscleDetail && selectedPopularExercises.length > 0 && (
+              {selectedMuscleDetail && suggestionsLoading && (
                 <View style={{ borderTopWidth: 1, borderTopColor: C.border, marginTop: 12, paddingTop: 12 }}>
                   <Label style={{ color: accent, marginBottom: 8 }}>EJERCICIOS POPULARES</Label>
-                  {selectedPopularExercises.map(exercise => {
+                  <Text style={{ fontFamily: F.mono, fontSize: 10, color: C.textTertiary }}>BUSCANDO…</Text>
+                </View>
+              )}
+              {selectedMuscleDetail && !suggestionsLoading && selectedSuggestions.length > 0 && (
+                <View style={{ borderTopWidth: 1, borderTopColor: C.border, marginTop: 12, paddingTop: 12 }}>
+                  <Label style={{ color: accent, marginBottom: 8 }}>EJERCICIOS POPULARES</Label>
+                  {selectedSuggestions.map(exercise => {
                     const exists = existingExercises.some(
                       item => item.nombre.trim().toLocaleLowerCase('es') ===
                         exercise.name.trim().toLocaleLowerCase('es'),
@@ -410,13 +462,25 @@ export function ExercisePlanForm({
                       <View
                         key={exercise.name}
                         style={{
+                          flexDirection: 'row',
                           borderWidth: 1,
                           borderColor: C.border,
                           backgroundColor: C.card,
-                          padding: 11,
                           marginBottom: 7,
+                          overflow: 'hidden',
                         }}
                       >
+                        {exercise.gifPath && (
+                          <Image
+                            source={{ uri: catalogMediaUrl(exercise.gifPath) }}
+                            style={{ width: 64, height: 64, backgroundColor: C.bgEl }}
+                            contentFit="contain"
+                            autoplay
+                            cachePolicy="memory-disk"
+                            recyclingKey={exercise.name}
+                          />
+                        )}
+                        <View style={{ flex: 1, padding: 11 }}>
                         <Text style={{ fontFamily: F.interSemi, fontSize: 13, color: C.textPrimary }}>
                           {exercise.name}
                         </Text>
@@ -453,6 +517,7 @@ export function ExercisePlanForm({
                             {exists ? 'AGREGADO' : loading ? 'AGREGANDO…' : '+ AGREGAR AL PLAN'}
                           </Text>
                         </PressableScale>
+                        </View>
                       </View>
                     );
                   })}

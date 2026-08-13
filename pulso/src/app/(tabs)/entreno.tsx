@@ -68,7 +68,7 @@ function OtherDayPlanEditor({ weekday, onChanged }: { weekday: number; onChanged
   const [exercises, setExercises] = useState<PlanExercise[]>([]);
   const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
-  const [viewingAnimation, setViewingAnimation] = useState<{ nombre: string; wxId: string } | null>(null);
+  const [viewingAnimation, setViewingAnimation] = useState<{ nombre: string; wxId: string | null; gifPath: string | null } | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -124,11 +124,12 @@ function OtherDayPlanEditor({ weekday, onChanged }: { weekday: number; onChanged
     }
   }
 
-  async function addFromMap(exercise: { name: string; sets: number; reps: number; weight: number; step: number }) {
+  async function addFromMap(exercise: { name: string; sets: number; reps: number; weight: number; step: number; gifPath?: string | null }) {
     if (!userId || !templateId) return;
     if (exercises.some(item => item.nombre.trim().toLocaleLowerCase('es') === exercise.name.trim().toLocaleLowerCase('es'))) return;
     await addPlanExercise(userId, templateId, {
       nombre: exercise.name, target: exercise.sets, reps: exercise.reps, peso: exercise.weight, step: exercise.step,
+      gifPath: exercise.gifPath,
     });
     await load();
     onChanged();
@@ -155,8 +156,8 @@ function OtherDayPlanEditor({ weekday, onChanged }: { weekday: number; onChanged
           key={editingExercise ? `edit-${editingExercise.slotId}` : 'add'}
           editing={editingExercise != null}
           initial={editingExercise
-            ? { nombre: editingExercise.nombre, target: editingExercise.target, reps: editingExercise.reps, peso: editingExercise.peso, step: editingExercise.step, wxId: editingExercise.wxId }
-            : { nombre: '', target: 3, reps: 8, peso: 0, step: 2.5, wxId: null }}
+            ? { nombre: editingExercise.nombre, target: editingExercise.target, reps: editingExercise.reps, peso: editingExercise.peso, step: editingExercise.step, wxId: editingExercise.wxId, gifPath: editingExercise.gifPath }
+            : { nombre: '', target: 3, reps: 8, peso: 0, step: 2.5, wxId: null, gifPath: null }}
           weightUnit={weightUnit}
           accent={accent}
           existingExercises={existingExercises}
@@ -171,10 +172,10 @@ function OtherDayPlanEditor({ weekday, onChanged }: { weekday: number; onChanged
       {!exercises.length && !formOpen && (
         <Card index={0} style={{ padding: 22, marginBottom: 12, alignItems: 'center' }}>
           <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 1.8, color: C.textTertiary, textTransform: 'uppercase', marginBottom: 10 }}>
-            SIN PLAN PARA {WEEKDAY_LABELS[weekday]}
+            SIN EJERCICIOS PARA {WEEKDAY_LABELS[weekday]}
           </Text>
           <Text style={{ fontFamily: F.inter, fontSize: 14, color: C.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 16 }}>
-            Armá los ejercicios de este día para tu plan semanal
+            No hay ejercicios registrados para este día
           </Text>
           <PressableScale
             onPress={() => { setAdding(true); setEditingSlotId(null); }}
@@ -206,10 +207,10 @@ function OtherDayPlanEditor({ weekday, onChanged }: { weekday: number; onChanged
                   {ex.target}×{ex.reps} · {formatWeight(ex.peso, weightUnit)}
                 </Text>
               </View>
-              {ex.wxId && (
+              {(ex.gifPath || ex.wxId) && (
                 <PressableScale
                   haptic="light"
-                  onPress={() => setViewingAnimation({ nombre: ex.nombre, wxId: ex.wxId! })}
+                  onPress={() => setViewingAnimation({ nombre: ex.nombre, wxId: ex.wxId, gifPath: ex.gifPath })}
                   accessibilityLabel={`Ver animación de ${ex.nombre}`}
                   style={{ paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1, borderColor: C.border, backgroundColor: C.bgEl }}
                 >
@@ -236,6 +237,7 @@ function OtherDayPlanEditor({ weekday, onChanged }: { weekday: number; onChanged
         <ExerciseAnimationModal
           nombre={viewingAnimation.nombre}
           wxId={viewingAnimation.wxId}
+          gifPath={viewingAnimation.gifPath}
           onClose={() => setViewingAnimation(null)}
         />
       )}
@@ -246,7 +248,7 @@ function OtherDayPlanEditor({ weekday, onChanged }: { weekday: number; onChanged
 export default function EntrenoScreen() {
   const {
     state, selectEx, incPeso, decPeso, incReps, decReps, setRpe, guardarSet,
-    finishWorkout, applySuggestedPlan,
+    finishWorkout,
     startEditEx, startAddEx, cancelExForm, saveEditEx, saveAddEx, deleteEx,
     addRest, skipRest, dismissPrFlash, addRecommendedExercise,
   } = useApp();
@@ -262,7 +264,7 @@ export default function EntrenoScreen() {
   // those dashboards. See OtherDayPlanEditor below for the non-today branch.
   const [selectedWeekday, setSelectedWeekday] = useState(todayWeekday);
   const [weekPlanCounts, setWeekPlanCounts] = useState<Record<number, number>>({});
-  const [viewingAnimation, setViewingAnimation] = useState<{ nombre: string; wxId: string } | null>(null);
+  const [viewingAnimation, setViewingAnimation] = useState<{ nombre: string; wxId: string | null; gifPath: string | null } | null>(null);
   const isToday = selectedWeekday === todayWeekday;
 
   // Widget "✓ LISTO" / "■ FIN" buttons deep-link here (pulso://entreno?action=...) instead
@@ -497,26 +499,17 @@ export default function EntrenoScreen() {
         {!hasPlan && !addingEx && (
           <Card index={0} style={{ padding: 22, marginBottom: 12, alignItems: 'center' }}>
             <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 1.8, color: C.textTertiary, textTransform: 'uppercase', marginBottom: 10 }}>
-              SIN PLAN DE ENTRENO
+              SIN EJERCICIOS HOY
             </Text>
             <Text style={{ fontFamily: F.inter, fontSize: 14, color: C.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 16 }}>
-              Empezá con un plan full-body sugerido o armá el tuyo desde cero
+              No hay ejercicios registrados para este día
             </Text>
             <PressableScale
-              onPress={applySuggestedPlan}
-              haptic="medium"
-              style={{ backgroundColor: accent, paddingVertical: 12, paddingHorizontal: 22, alignItems: 'center', marginBottom: 10, alignSelf: 'stretch' }}
-            >
-              <Text style={{ fontFamily: F.monoXBold, fontSize: 11, letterSpacing: 0.6, color: C.bg, textTransform: 'uppercase' }}>
-                ★ USAR PLAN SUGERIDO
-              </Text>
-            </PressableScale>
-            <PressableScale
               onPress={startAddEx}
-              style={{ borderWidth: 1, borderColor: C.border, paddingVertical: 12, paddingHorizontal: 22, alignItems: 'center', alignSelf: 'stretch' }}
+              style={{ borderWidth: 1, borderColor: accent, paddingVertical: 12, paddingHorizontal: 22, alignItems: 'center', alignSelf: 'stretch' }}
             >
-              <Text style={{ fontFamily: F.monoBold, fontSize: 11, letterSpacing: 0.6, color: C.textSecondary, textTransform: 'uppercase' }}>
-                + CREAR MI PLAN
+              <Text style={{ fontFamily: F.monoBold, fontSize: 11, letterSpacing: 0.6, color: accent, textTransform: 'uppercase' }}>
+                + AGREGAR EJERCICIO
               </Text>
             </PressableScale>
           </Card>
@@ -533,10 +526,10 @@ export default function EntrenoScreen() {
                 </Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
-                {activeEx.wxId && (
+                {(activeEx.gifPath || activeEx.wxId) && (
                   <PressableScale
                     haptic="light"
-                    onPress={() => setViewingAnimation({ nombre: activeEx.nombre, wxId: activeEx.wxId! })}
+                    onPress={() => setViewingAnimation({ nombre: activeEx.nombre, wxId: activeEx.wxId, gifPath: activeEx.gifPath })}
                     accessibilityLabel={`Ver animación de ${activeEx.nombre}`}
                     style={{ paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1, borderColor: C.border, backgroundColor: C.bgEl }}
                   >
@@ -667,8 +660,8 @@ export default function EntrenoScreen() {
             key={editingEx ? `edit-${activeEx?.id}` : 'add'}
             editing={editingEx}
             initial={editingEx && activeEx
-              ? { nombre: activeEx.nombre, target: activeEx.target, reps: activeEx.reps, peso: activeEx.peso, step: activeEx.step, wxId: activeEx.wxId }
-              : { nombre: '', target: 3, reps: 8, peso: 0, step: 2.5, wxId: null }}
+              ? { nombre: activeEx.nombre, target: activeEx.target, reps: activeEx.reps, peso: activeEx.peso, step: activeEx.step, wxId: activeEx.wxId, gifPath: activeEx.gifPath }
+              : { nombre: '', target: 3, reps: 8, peso: 0, step: 2.5, wxId: null, gifPath: null }}
             weightUnit={weightUnit}
             accent={accent}
             existingExercises={exercises.map(e => ({
@@ -711,10 +704,10 @@ export default function EntrenoScreen() {
                         {e.sub} · {formatWeight(ton, weightUnit)}
                       </Text>
                     </View>
-                    {e.wxId && (
+                    {(e.gifPath || e.wxId) && (
                       <PressableScale
                         haptic="light"
-                        onPress={() => setViewingAnimation({ nombre: e.nombre, wxId: e.wxId! })}
+                        onPress={() => setViewingAnimation({ nombre: e.nombre, wxId: e.wxId, gifPath: e.gifPath })}
                         accessibilityLabel={`Ver animación de ${e.nombre}`}
                         style={{ paddingHorizontal: 8, paddingVertical: 5, borderWidth: 1, borderColor: C.border, backgroundColor: C.bgEl }}
                       >
@@ -765,6 +758,7 @@ export default function EntrenoScreen() {
       <ExerciseAnimationModal
         nombre={viewingAnimation.nombre}
         wxId={viewingAnimation.wxId}
+        gifPath={viewingAnimation.gifPath}
         onClose={() => setViewingAnimation(null)}
       />
     )}

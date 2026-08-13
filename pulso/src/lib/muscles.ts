@@ -103,6 +103,32 @@ export const DETAILED_MUSCLE_LABELS: Record<DetailedMuscleKey, string> = {
   neck: 'CUELLO',
 };
 
+// Maps this app's detailed muscle taxonomy to the `target` values used by the
+// local exercise catalog (server/lib/exercise-catalog.json, 1324 exercises with
+// GIFs) — lets the body map suggest catalog exercises (guaranteed to have a GIF)
+// instead of the static POPULAR_EXERCISES below, whose names don't reliably
+// match the catalog's. `tibialis`/`neck` have no catalog coverage at all, so
+// they're intentionally omitted here and keep falling back to POPULAR_EXERCISES.
+export const MUSCLE_KEY_TO_CATALOG_TARGET: Partial<Record<DetailedMuscleKey, string[]>> = {
+  chest: ['pectorals'],
+  upper_back: ['upper back', 'lats'],
+  lower_back: ['spine'],
+  trapezius: ['traps'],
+  deltoids: ['delts'],
+  biceps: ['biceps'],
+  triceps: ['triceps'],
+  forearms: ['forearms'],
+  upper_abs: ['abs'],
+  lower_abs: ['abs'],
+  abs: ['abs'],
+  obliques: ['abs'],
+  quadriceps: ['quads'],
+  hamstrings: ['hamstrings'],
+  gluteals: ['glutes'],
+  adductors: ['adductors'],
+  calves: ['calves'],
+};
+
 export interface PopularExercise {
   name: string;
   sets: number;

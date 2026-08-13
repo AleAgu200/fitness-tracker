@@ -43,3 +43,10 @@ next-env.d.ts
 # Runtime SQLite data (accounts, sessions and athlete profiles)
 /data/*
 !/data/.gitkeep
+
+# One-off exercise catalog exports (not committed — reference data for manual video sourcing)
+/exercise-catalog-exports/
+
+# Imported exercise animation media (GIFs/images) — regenerate locally with
+# scripts/import-exercise-catalog.mjs; not committed (large binaries, third-party media)
+/public/exercises/

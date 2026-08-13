@@ -8,6 +8,7 @@ import m0003 from './0003_calm_shinko_yamashiro.sql';
 import m0004 from './0004_cuddly_greymalkin.sql';
 import m0005 from './0005_add_weekday_to_meal_slots.sql';
 import m0006 from './0006_true_slipstream.sql';
+import m0007 from './0007_stormy_joseph.sql';
 
   export default {
     journal,
@@ -18,7 +19,8 @@ m0002,
 m0003,
 m0004,
 m0005,
-m0006
+m0006,
+m0007
     }
   }
   

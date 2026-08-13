@@ -5,6 +5,7 @@ import { ActivityIndicator, Text, View } from 'react-native';
 import { FieldLabel, SectionHeader } from '@/components/onboarding/section-header';
 import { WizardShell } from '@/components/onboarding/wizard-shell';
 import { ChipSelect, FreeTextChipInput } from '@/components/ui/chip-select';
+import { DurationPickerField } from '@/components/ui/duration-picker-field';
 import { PressableScale } from '@/components/ui/kit';
 import { F, useColors, withAlpha } from '@/constants/colors';
 import { usePreferences } from '@/context/preferences';
@@ -206,13 +207,12 @@ export default function OnboardingTrainingScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <FieldLabel>MINUTOS POR SESIÓN</FieldLabel>
-              <Stepper
+              <DurationPickerField
                 value={sessionMinutes}
-                onChange={next => setSessionMinutes(Math.min(180, Math.max(15, next)))}
+                onChange={setSessionMinutes}
                 min={15}
                 max={180}
                 step={15}
-                suffix="MIN"
               />
             </View>
           </View>
