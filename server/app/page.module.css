@@ -17,7 +17,7 @@
   font-family: var(--font-pulso-body), Arial, sans-serif;
 }
 
-.page *, .page *::before, .page *::after { box-sizing: border-box; }
+.page *, .page *::before, .page *::after { box-sizing: border-box; min-width: 0; }
 .page a { color: inherit; text-decoration: none; }
 
 .skipLink {
@@ -151,6 +151,7 @@
   letter-spacing: -0.04em;
   text-transform: uppercase;
   text-wrap: balance;
+  overflow-wrap: break-word;
 }
 .hero h1 em { display: inline-block; color: var(--volt); font-style: normal; }
 .heroBody {
@@ -290,7 +291,7 @@
 .comparisonLabel span { width: 8px; height: 8px; border-radius: 50%; background: oklch(0.55 0.025 286); }
 .solutionSide .comparisonLabel { color: oklch(0.28 0.055 111); }
 .solutionSide .comparisonLabel span { background: var(--volt); box-shadow: 0 0 0 4px oklch(0.28 0.055 111 / 0.1), 0 0 12px oklch(0.55 0.15 111 / 0.42); }
-.comparisonSide h2 { max-width: 9ch; margin: clamp(42px, 6vw, 78px) 0 0; font: 700 clamp(2.8rem, 4.6vw, 4.8rem)/0.94 var(--font-pulso-display), sans-serif; letter-spacing: -0.04em; text-transform: uppercase; text-wrap: balance; }
+.comparisonSide h2 { max-width: 9ch; margin: clamp(42px, 6vw, 78px) 0 0; font: 700 clamp(2.8rem, 4.6vw, 4.8rem)/0.94 var(--font-pulso-display), sans-serif; letter-spacing: -0.04em; text-transform: uppercase; text-wrap: balance; overflow-wrap: break-word; }
 .problemSide h2 { color: oklch(0.25 0.012 286); }
 .comparisonBody { align-self: end; max-width: 42ch; margin: 0; color: oklch(0.35 0.015 286); font-size: clamp(0.95rem, 1.15vw, 1.08rem); line-height: 1.66; text-wrap: pretty; }
 .solutionSide .comparisonBody { color: oklch(0.27 0.045 111); }
@@ -302,11 +303,11 @@
 .strongPulse { stroke: oklch(0.38 0.11 111); stroke-width: 2.2; }
 .comparisonSweep { stroke: oklch(0.985 0 0); stroke-width: 3; stroke-dasharray: 130 900; filter: drop-shadow(0 0 4px oklch(0.985 0 0 / 0.8)); animation: comparisonSweep 3.8s linear infinite; }
 .pulseSwitch { fill: var(--volt); stroke: var(--ink); stroke-width: 3; filter: drop-shadow(0 0 6px oklch(0.55 0.15 111 / 0.5)); }
-.privacyIntro h2, .professionalIntro h2, .finalCta h2 { max-width: 900px; margin: 0; font: 700 clamp(2.8rem, 5.7vw, 5.6rem)/0.98 var(--font-pulso-display), sans-serif; letter-spacing: -0.04em; text-transform: uppercase; text-wrap: balance; }
+.privacyIntro h2, .professionalIntro h2, .finalCta h2 { max-width: 900px; margin: 0; font: 700 clamp(2.8rem, 5.7vw, 5.6rem)/0.98 var(--font-pulso-display), sans-serif; letter-spacing: -0.04em; text-transform: uppercase; text-wrap: balance; overflow-wrap: break-word; }
 
 .dayLayout { display: grid; grid-template-columns: 0.72fr 1.28fr; gap: 42px; padding-top: clamp(64px, 8vw, 112px); }
 .dayStatement { position: sticky; top: 40px; align-self: start; }
-.giantDay { display: block; color: var(--ink); font: 700 clamp(6rem, 13vw, 12rem)/0.75 var(--font-pulso-display), sans-serif; letter-spacing: -0.04em; }
+.giantDay { display: block; color: var(--ink); font: 700 clamp(6rem, 13vw, 12rem)/0.75 var(--font-pulso-display), sans-serif; letter-spacing: -0.04em; overflow-wrap: break-word; }
 .dayStatement p { max-width: 38ch; margin: 54px 0 0; color: oklch(0.38 0.012 286); font-size: 1rem; line-height: 1.65; }
 .dayTimeline { margin: 0; padding: 0; list-style: none; }
 .dayTimeline li { display: grid; grid-template-columns: 70px 30px 1fr; gap: 18px; min-height: 190px; }
@@ -360,7 +361,7 @@
 .ecgData line { stroke: currentColor; stroke-width: 1; stroke-dasharray: 3 4; }
 .ecgData circle { fill: var(--volt); stroke: currentColor; stroke-width: 2; }
 .ecgData text { fill: currentColor; }
-.offlineCopy { font: 700 clamp(3.5rem, 7vw, 5.5rem)/0.9 var(--font-pulso-display), sans-serif; letter-spacing: -0.04em; text-transform: uppercase; }
+.offlineCopy { font: 700 clamp(3.5rem, 7vw, 5.5rem)/0.9 var(--font-pulso-display), sans-serif; letter-spacing: -0.04em; text-transform: uppercase; overflow-wrap: break-word; }
 .offlineCondition { display: block; color: oklch(0.38 0.08 111); font-size: 0.58em; line-height: 1; letter-spacing: -0.02em; }
 .offlinePromise { display: block; margin-top: 0.16em; }
 .offlineSection p { max-width: 50ch; margin: 0; font-size: clamp(1.1rem, 1.6vw, 1.35rem); font-weight: 600; line-height: 1.62; text-align: justify; text-align-last: left; text-wrap: pretty; hyphens: auto; }
@@ -510,6 +511,7 @@
   .offlineCondition { font-size: 0.55em; }
   .offlineSection { min-height: 620px; }
   .ecgBackdrop { inset: 12% -52% 0 -18%; }
+  .ecgData { display: none; }
   .windowBar { grid-template-columns: 1fr auto; }
   .windowBar span { display: none; }
   .portalContent { padding: 22px 16px; }
