@@ -215,9 +215,50 @@ export default function Home() {
       </section>
 
       <section className={styles.systemSection} id="sistema">
-        <div className={styles.sectionHeading}>
-          <p>Tu disciplina no necesita otro discurso.</p>
-          <h2>Necesita un lugar donde vivir.</h2>
+        <div className={styles.sectionHeading} aria-label="La diferencia entre entrenar con información dispersa y usar PULSO">
+          <div className={styles.comparisonPulse} aria-hidden="true">
+            <svg viewBox="0 0 1400 160" preserveAspectRatio="none" fill="none">
+              <path
+                className={styles.brokenPulse}
+                d="M0 84h94m34 0h118m42 0h76m52 0h126m46 0h112"
+              />
+              <path
+                className={styles.strongPulseGlow}
+                d="M700 84h78l20-20 22 43 31-91 34 68h54l18-28 24 54 30-94 33 68h64l17-18 19 36 25-66 27 48h204"
+              />
+              <path
+                className={styles.strongPulse}
+                d="M700 84h78l20-20 22 43 31-91 34 68h54l18-28 24 54 30-94 33 68h64l17-18 19 36 25-66 27 48h204"
+              />
+              <path
+                className={styles.comparisonSweep}
+                d="M700 84h78l20-20 22 43 31-91 34 68h54l18-28 24 54 30-94 33 68h64l17-18 19 36 25-66 27 48h204"
+              />
+              <circle className={styles.pulseSwitch} cx="700" cy="84" r="7" />
+            </svg>
+          </div>
+
+          <article className={`${styles.comparisonSide} ${styles.problemSide}`}>
+            <p className={styles.comparisonLabel}>
+              <span /> Sin un sistema
+            </p>
+            <h2>Todo queda suelto.</h2>
+            <p className={styles.comparisonBody}>
+              La rutina en una app. Las comidas en otra. El seguimiento perdido
+              entre mensajes, notas y memoria.
+            </p>
+          </article>
+
+          <article className={`${styles.comparisonSide} ${styles.solutionSide}`}>
+            <p className={styles.comparisonLabel}>
+              <span /> Con PULSO
+            </p>
+            <h2>Todo tiene su lugar.</h2>
+            <p className={styles.comparisonBody}>
+              Entrenamiento, nutrición, check-ins y guía profesional conectados
+              en un solo sistema.
+            </p>
+          </article>
         </div>
 
         <div className={styles.dayLayout}>
@@ -287,14 +328,53 @@ export default function Home() {
       </section>
 
       <section className={styles.offlineSection}>
+        <div className={styles.ecgBackdrop} aria-hidden="true">
+          <svg viewBox="0 0 1600 420" preserveAspectRatio="none" fill="none">
+            <defs>
+              <linearGradient id="offline-ecg-fade" x1="0" y1="0" x2="1600" y2="0" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stopColor="currentColor" stopOpacity="0.54" />
+                <stop offset="0.55" stopColor="currentColor" stopOpacity="0.3" />
+                <stop offset="1" stopColor="currentColor" stopOpacity="0.12" />
+              </linearGradient>
+            </defs>
+
+            <path
+              className={styles.ecgGlow}
+              d="M0 235H90l30-15 22 35 23-60 25 40h35l25-85 25 165L330 52l55 183h90l25-25 22 50 28-110 35 85h90l25-17 24 32 26-70 30 55h85l23-11 22 21 22-40 23 30h85l15-6 15 12 18-23 17 17h95l10-3 10 6 12-12 13 9h95l6-1 8 2 6-5 10 4h230"
+            />
+            <path
+              className={styles.ecgTrace}
+              stroke="url(#offline-ecg-fade)"
+              d="M0 235H90l30-15 22 35 23-60 25 40h35l25-85 25 165L330 52l55 183h90l25-25 22 50 28-110 35 85h90l25-17 24 32 26-70 30 55h85l23-11 22 21 22-40 23 30h85l15-6 15 12 18-23 17 17h95l10-3 10 6 12-12 13 9h95l6-1 8 2 6-5 10 4h230"
+            />
+            <path
+              className={styles.ecgSweep}
+              d="M0 235H90l30-15 22 35 23-60 25 40h35l25-85 25 165L330 52l55 183h90l25-25 22 50 28-110 35 85h90l25-17 24 32 26-70 30 55h85l23-11 22 21 22-40 23 30h85l15-6 15 12 18-23 17 17h95l10-3 10 6 12-12 13 9h95l6-1 8 2 6-5 10 4h230"
+            />
+
+            <g className={styles.ecgData}>
+              <line x1="330" y1="52" x2="330" y2="22" />
+              <circle cx="330" cy="52" r="5" />
+              <text x="330" y="13" textAnchor="middle">82%</text>
+
+              <line x1="550" y1="150" x2="550" y2="117" />
+              <circle cx="550" cy="150" r="4" />
+              <text x="550" y="107" textAnchor="middle">4 × 6</text>
+
+              <line x1="750" y1="180" x2="750" y2="148" />
+              <circle cx="750" cy="180" r="3.5" />
+              <text x="750" y="138" textAnchor="middle">RPE 8</text>
+            </g>
+          </svg>
+        </div>
+
         <div className={styles.offlineCopy}>
-          <span className={styles.signalLost}>SIN SEÑAL</span>
-          <span className={styles.slash}>/</span>
-          <span className={styles.planReady}>CON PLAN</span>
+          <span className={styles.offlineCondition}>SIN WI-FI. SIN DATOS.</span>
+          <span className={styles.offlinePromise}>PULSO SIGUE FUNCIONANDO.</span>
         </div>
         <p>
-          El sótano del gym no tiene Wi-Fi. Tu rutina, tus registros y tu progreso
-          no deberían depender de eso.
+          Aunque no tengas conexión, puedes abrir tu rutina, registrar cada serie
+          y consultar tu plan de comidas. Todo queda guardado en tu teléfono.
         </p>
       </section>
 
@@ -386,7 +466,7 @@ export default function Home() {
         </Link>
         <p>Entrenamiento. Nutrición. Seguimiento. Una sola señal.</p>
         <div>
-          <span>© {new Date().getFullYear()} PULSO</span>
+          <span>pulsofitness</span>
           <Link href="/portal">Portal profesional</Link>
         </div>
       </footer>

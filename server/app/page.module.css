@@ -103,7 +103,7 @@
 .hero {
   position: relative;
   min-height: 940px;
-  padding: 176px max(24px, calc((100vw - 1392px) / 2)) 0;
+  padding: 176px max(24px, calc((100vw - 1392px) / 2)) 110px;
   background:
     radial-gradient(circle at 74% 46%, color-mix(in oklch, var(--cyan) 10%, transparent), transparent 34%),
     linear-gradient(90deg, transparent 49.95%, color-mix(in oklch, var(--line) 45%, transparent) 50%, transparent 50.05%);
@@ -281,10 +281,28 @@
 
 .systemSection, .privacySection, .professionalSection { padding: clamp(110px, 12vw, 190px) max(24px, calc((100vw - 1392px) / 2)); }
 .systemSection { position: relative; background: oklch(0.97 0.004 286); color: var(--ink); }
-.sectionHeading { display: grid; grid-template-columns: 0.72fr 1.28fr; align-items: end; gap: 42px; padding-bottom: clamp(60px, 8vw, 112px); border-bottom: 1px solid oklch(0.79 0.01 286); }
-.sectionHeading > p, .professionalIntro > p:first-child, .finalCta > p:first-of-type { margin: 0; font: 700 0.72rem var(--font-pulso-mono), monospace; letter-spacing: 0.08em; text-transform: uppercase; }
-.sectionHeading > p { max-width: 32ch; color: oklch(0.42 0.014 286); line-height: 1.6; }
-.sectionHeading h2, .privacyIntro h2, .professionalIntro h2, .finalCta h2 { max-width: 900px; margin: 0; font: 700 clamp(2.8rem, 5.7vw, 5.6rem)/0.98 var(--font-pulso-display), sans-serif; letter-spacing: -0.04em; text-transform: uppercase; text-wrap: balance; }
+.sectionHeading { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: hidden; border: 1px solid oklch(0.78 0.01 286); }
+.comparisonSide { position: relative; z-index: 1; display: grid; min-height: 540px; grid-template-rows: auto auto 1fr auto; padding: clamp(36px, 5vw, 72px); }
+.problemSide { background: oklch(0.93 0.005 286); }
+.solutionSide { border-left: 1px solid oklch(0.72 0.035 111); background: oklch(0.94 0.045 111); }
+.comparisonLabel, .professionalIntro > p:first-child, .finalCta > p:first-of-type { margin: 0; font: 700 0.72rem var(--font-pulso-mono), monospace; letter-spacing: 0.08em; text-transform: uppercase; }
+.comparisonLabel { display: flex; align-items: center; gap: 10px; color: oklch(0.4 0.012 286); }
+.comparisonLabel span { width: 8px; height: 8px; border-radius: 50%; background: oklch(0.55 0.025 286); }
+.solutionSide .comparisonLabel { color: oklch(0.28 0.055 111); }
+.solutionSide .comparisonLabel span { background: var(--volt); box-shadow: 0 0 0 4px oklch(0.28 0.055 111 / 0.1), 0 0 12px oklch(0.55 0.15 111 / 0.42); }
+.comparisonSide h2 { max-width: 9ch; margin: clamp(42px, 6vw, 78px) 0 0; font: 700 clamp(2.8rem, 4.6vw, 4.8rem)/0.94 var(--font-pulso-display), sans-serif; letter-spacing: -0.04em; text-transform: uppercase; text-wrap: balance; }
+.problemSide h2 { color: oklch(0.25 0.012 286); }
+.comparisonBody { align-self: end; max-width: 42ch; margin: 0; color: oklch(0.35 0.015 286); font-size: clamp(0.95rem, 1.15vw, 1.08rem); line-height: 1.66; text-wrap: pretty; }
+.solutionSide .comparisonBody { color: oklch(0.27 0.045 111); }
+.comparisonPulse { position: absolute; inset: 53% 0 auto; z-index: 2; height: 128px; pointer-events: none; transform: translateY(-50%); }
+.comparisonPulse svg { width: 100%; height: 100%; overflow: visible; }
+.comparisonPulse path { vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.brokenPulse { stroke: oklch(0.55 0.015 286); stroke-width: 1.5; stroke-dasharray: 7 9; opacity: 0.5; }
+.strongPulseGlow { stroke: oklch(0.56 0.15 111); stroke-width: 16; opacity: 0.1; filter: blur(7px); }
+.strongPulse { stroke: oklch(0.38 0.11 111); stroke-width: 2.2; }
+.comparisonSweep { stroke: oklch(0.985 0 0); stroke-width: 3; stroke-dasharray: 130 900; filter: drop-shadow(0 0 4px oklch(0.985 0 0 / 0.8)); animation: comparisonSweep 3.8s linear infinite; }
+.pulseSwitch { fill: var(--volt); stroke: var(--ink); stroke-width: 3; filter: drop-shadow(0 0 6px oklch(0.55 0.15 111 / 0.5)); }
+.privacyIntro h2, .professionalIntro h2, .finalCta h2 { max-width: 900px; margin: 0; font: 700 clamp(2.8rem, 5.7vw, 5.6rem)/0.98 var(--font-pulso-display), sans-serif; letter-spacing: -0.04em; text-transform: uppercase; text-wrap: balance; }
 
 .dayLayout { display: grid; grid-template-columns: 0.72fr 1.28fr; gap: 42px; padding-top: clamp(64px, 8vw, 112px); }
 .dayStatement { position: sticky; top: 40px; align-self: start; }
@@ -331,11 +349,21 @@
 .transferLine i:nth-child(3) { animation-delay: 400ms; }
 .transferLine small { max-width: 20ch; color: oklch(0.65 0.025 223); line-height: 1.55; }
 
-.offlineSection { display: grid; grid-template-columns: 1.35fr 0.65fr; align-items: end; gap: 60px; padding: clamp(90px, 10vw, 150px) max(24px, calc((100vw - 1392px) / 2)); background: var(--volt); color: oklch(0.13 0.02 111); }
-.offlineCopy { font: 700 clamp(3.5rem, 8.2vw, 8rem)/0.86 var(--font-pulso-display), sans-serif; letter-spacing: -0.04em; text-transform: uppercase; }
-.signalLost { text-decoration: line-through 0.07em; text-decoration-color: oklch(0.38 0.08 111); }
-.slash { margin-inline: 0.15em; color: oklch(0.43 0.1 111); }
-.offlineSection p { max-width: 36ch; margin: 0; font-size: clamp(1rem, 1.4vw, 1.2rem); font-weight: 600; line-height: 1.55; }
+.offlineSection { position: relative; display: grid; grid-template-columns: 1.35fr 0.65fr; align-items: center; gap: 60px; min-height: 520px; overflow: hidden; padding: clamp(90px, 10vw, 150px) max(24px, calc((100vw - 1392px) / 2)); background: var(--volt); color: oklch(0.13 0.02 111); isolation: isolate; }
+.ecgBackdrop { position: absolute; inset: 0; z-index: -1; color: oklch(0.16 0.035 111); pointer-events: none; }
+.ecgBackdrop svg { width: 100%; height: 100%; overflow: visible; }
+.ecgBackdrop path { vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.ecgGlow { stroke: currentColor; stroke-width: 18; opacity: 0.08; filter: blur(9px); }
+.ecgTrace { stroke-width: 2; }
+.ecgSweep { stroke: oklch(0.985 0 0); stroke-width: 2.5; stroke-dasharray: 210 1900; opacity: 0.74; filter: drop-shadow(0 0 5px oklch(0.985 0 0 / 0.75)); animation: ecgSweep 5.8s linear infinite; }
+.ecgData { color: oklch(0.18 0.04 111); font: 700 17px var(--font-pulso-mono), monospace; }
+.ecgData line { stroke: currentColor; stroke-width: 1; stroke-dasharray: 3 4; }
+.ecgData circle { fill: var(--volt); stroke: currentColor; stroke-width: 2; }
+.ecgData text { fill: currentColor; }
+.offlineCopy { font: 700 clamp(3.5rem, 7vw, 5.5rem)/0.9 var(--font-pulso-display), sans-serif; letter-spacing: -0.04em; text-transform: uppercase; }
+.offlineCondition { display: block; color: oklch(0.38 0.08 111); font-size: 0.58em; line-height: 1; letter-spacing: -0.02em; }
+.offlinePromise { display: block; margin-top: 0.16em; }
+.offlineSection p { max-width: 50ch; margin: 0; font-size: clamp(1.1rem, 1.6vw, 1.35rem); font-weight: 600; line-height: 1.62; text-align: justify; text-align-last: left; text-wrap: pretty; hyphens: auto; }
 
 .professionalSection { background: var(--ink); }
 .professionalIntro { display: grid; grid-template-columns: 0.62fr 1.4fr 0.8fr; align-items: start; gap: clamp(28px, 4vw, 68px); }
@@ -357,6 +385,7 @@
 .portalLogo { display: flex; align-items: center; gap: 8px; margin-bottom: 32px; color: var(--fg); font: 700 1rem var(--font-pulso-display), sans-serif; letter-spacing: 0.06em; }
 .portalLogo svg { width: 27px; }
 .portalBody aside > span { padding: 11px 10px; }
+.portalBody aside > span:nth-of-type(3) { display: none; }
 .portalBody aside > span b { float: right; display: grid; width: 18px; height: 18px; border-radius: 50%; place-items: center; background: var(--volt); color: var(--ink); font-size: 0.58rem; }
 .portalBody .portalActive { background: var(--ink-soft); color: var(--volt); }
 .portalContent { padding: clamp(24px, 4vw, 50px); }
@@ -407,6 +436,8 @@
 @keyframes deviceArrive { from { opacity: 0; transform: translateY(38px) rotate(-2.5deg); } to { opacity: 1; transform: translateY(0) rotate(-2.5deg); } }
 @keyframes noteArrive { from { opacity: 0; transform: translate(24px, 18px) rotate(2deg); } to { opacity: 1; transform: translate(0, 0) rotate(2deg); } }
 @keyframes transfer { 0%, 100% { opacity: 0.22; transform: scale(0.75); } 50% { opacity: 1; transform: scale(1); } }
+@keyframes ecgSweep { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -2110; } }
+@keyframes comparisonSweep { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -1030; } }
 
 @media (max-width: 1120px) {
   .hero { padding-top: 150px; }
@@ -435,6 +466,9 @@
   .capabilityRail { display: none; }
   .sectionHeading, .dayLayout, .offlineSection { grid-template-columns: 1fr; }
   .sectionHeading { align-items: start; }
+  .comparisonSide { min-height: 430px; }
+  .solutionSide { border-top: 1px solid oklch(0.72 0.035 111); border-left: 0; }
+  .comparisonPulse { top: 50%; opacity: 0.34; }
   .dayStatement { position: static; }
   .giantDay { font-size: clamp(7rem, 24vw, 11rem); }
   .dayStatement p { margin-top: 36px; }
@@ -444,7 +478,8 @@
   .transferLine { min-height: 170px; }
   .transferLine div { width: 1px; height: 86px; flex-direction: column; }
   .transferLine div::before { inset: 0; width: 1px; height: auto; }
-  .offlineSection { align-items: start; }
+  .offlineSection { align-items: center; }
+  .offlineSection p { max-width: 58ch; }
   .portalBody { grid-template-columns: 1fr; }
   .portalBody aside { display: none; }
   .portalLower { grid-template-columns: 1fr; }
@@ -466,13 +501,15 @@
   .coachNote { top: 24px; right: -2px; width: 196px; }
   .offlineTag { right: 2px; bottom: 38px; }
   .dailyStats div { padding-left: 8px; }
-  .sectionHeading h2, .privacyIntro h2, .professionalIntro h2 { font-size: clamp(2.55rem, 13vw, 3.8rem); }
+  .comparisonSide h2, .privacyIntro h2, .professionalIntro h2 { font-size: clamp(2.55rem, 13vw, 3.8rem); }
   .dayTimeline li { grid-template-columns: 54px 20px 1fr; gap: 8px; }
   .timelineCopy { padding-left: 12px; }
   .lockBadge { width: 58px; height: 58px; }
   .dataNodePrimary, .dataNodeSecondary { min-height: 300px; }
   .offlineCopy { font-size: clamp(3rem, 16vw, 4.8rem); }
-  .slash { display: block; height: 0.45em; margin: 0; }
+  .offlineCondition { font-size: 0.55em; }
+  .offlineSection { min-height: 620px; }
+  .ecgBackdrop { inset: 12% -52% 0 -18%; }
   .windowBar { grid-template-columns: 1fr auto; }
   .windowBar span { display: none; }
   .portalContent { padding: 22px 16px; }
