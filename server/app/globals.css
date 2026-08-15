@@ -15,8 +15,8 @@
   --color-fg-mid: #c7c7ce;
   --color-fg-sec: #8a8a93;
   --color-fg-ter: #5a5a62;
-  --font-app: "Inter", system-ui, sans-serif;
-  --font-mono-app: "JetBrains Mono", ui-monospace, monospace;
+  --font-app: var(--font-pulso-body), system-ui, sans-serif;
+  --font-mono-app: var(--font-pulso-mono), ui-monospace, monospace;
 }
 
 html {
@@ -24,12 +24,17 @@ html {
 }
 
 body {
+  margin: 0;
   min-height: 100%;
   overflow-x: hidden;
   background: var(--color-ink);
   color: var(--color-fg);
-  font-family: var(--font-app);
+  font-family: var(--font-pulso-body), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 @media (prefers-color-scheme: dark) {
