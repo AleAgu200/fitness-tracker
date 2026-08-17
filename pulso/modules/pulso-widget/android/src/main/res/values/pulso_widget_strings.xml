@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="pulso_widget_large_label">Pulso · Entreno</string>
-    <string name="pulso_widget_large_description">Ejercicio actual, siguiente y descanso con controles.</string>
-    <string name="pulso_widget_small_label">Pulso · Entreno mini</string>
-    <string name="pulso_widget_small_description">Ejercicio actual, siguiente y descanso.</string>
+    <string name="pulso_widget_large_label">Pulso · Control bar</string>
+    <string name="pulso_widget_large_description">Ejercicio, series y descanso de un vistazo.</string>
+    <string name="pulso_widget_small_label">Pulso · Glance</string>
+    <string name="pulso_widget_small_description">Estado mínimo y temporizador de descanso.</string>
+    <string name="pulso_widget_dashboard_label">Pulso · Rutina</string>
+    <string name="pulso_widget_dashboard_description">Rutina activa, próximos ejercicios y acción principal.</string>
+    <string name="pulso_widget_session_label">Pulso · Sesión completa</string>
+    <string name="pulso_widget_session_description">Series, volumen y controles del descanso.</string>
 </resources>

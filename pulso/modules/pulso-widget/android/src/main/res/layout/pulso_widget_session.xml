@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/pulso_widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/pulso_widget_card"
+    android:padding="12dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="3"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/pulso_current"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:textColor="#FAFAFA"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/pulso_detail"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:textColor="#C7C7CE"
+                android:textSize="11sp" />
+
+            <ProgressBar
+                android:id="@+id/pulso_set_progress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="4dp"
+                android:layout_marginTop="7dp"
+                android:indeterminate="false"
+                android:progressBackgroundTint="#26262A"
+                android:progressTint="#E8FF59"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/pulso_set_history"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="7dp"
+                android:maxLines="3"
+                android:ellipsize="end"
+                android:textColor="#FAFAFA"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/pulso_next"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:textColor="#8A8A93"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="2"
+            android:layout_marginStart="10dp"
+            android:gravity="end"
+            android:orientation="vertical">
+
+            <Chronometer
+                android:id="@+id/pulso_chronometer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:textColor="#3DDCFF"
+                android:textSize="30sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/pulso_volume"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:textColor="#8A8A93"
+                android:textSize="10sp" />
+
+            <TextView
+                android:id="@+id/pulso_btn_finish"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="7dp"
+                android:gravity="center"
+                android:background="@drawable/pulso_widget_button"
+                android:text="FINALIZAR EN APP"
+                android:textColor="#C7C7CE"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/pulso_rest_idle"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="8dp"
+        android:gravity="center"
+        android:background="@drawable/pulso_widget_primary_button"
+        android:text="REGISTRAR SERIE"
+        android:textColor="#0A0A0B"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/pulso_rest_actions"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/pulso_btn_reduce"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:background="@drawable/pulso_widget_button"
+            android:text="−30 s"
+            android:textColor="#C7C7CE"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/pulso_btn_skip"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="2"
+            android:layout_marginHorizontal="8dp"
+            android:gravity="center"
+            android:background="@drawable/pulso_widget_primary_button"
+            android:text="SALTAR"
+            android:textColor="#0A0A0B"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/pulso_btn_add"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:background="@drawable/pulso_widget_button"
+            android:text="+30 s"
+            android:textColor="#C7C7CE"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+</LinearLayout>

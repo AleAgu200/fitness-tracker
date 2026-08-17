@@ -35,18 +35,15 @@ export function setWidgetWorkout(state: {
   currentExercise: string | null;
   currentSlotId: string | null;
   nextExercise: string | null;
+  nextExercises: string | null;
   setDetail: string | null;
+  setProgress: string | null;
+  sessionVolume: string | null;
+  setHistory: string | null;
+  muscleGroup: string | null;
   accent: string;
 }): void {
-  widget()?.setWorkout(
-    state.workoutActive,
-    state.sessionDone,
-    state.currentExercise,
-    state.currentSlotId,
-    state.nextExercise,
-    state.setDetail,
-    state.accent,
-  );
+  widget()?.setWorkout(state);
 }
 
 /**

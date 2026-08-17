@@ -24,6 +24,10 @@ class PulsoWidgetLargeProvider : PulsoWidgetProvider(PulsoWidgetVariant.LARGE)
 
 class PulsoWidgetSmallProvider : PulsoWidgetProvider(PulsoWidgetVariant.SMALL)
 
+class PulsoWidgetDashboardProvider : PulsoWidgetProvider(PulsoWidgetVariant.DASHBOARD)
+
+class PulsoWidgetSessionProvider : PulsoWidgetProvider(PulsoWidgetVariant.SESSION)
+
 /**
  * Per-size layout differences. Both strips are too short for the full stack, so each one
  * declares which views its layout actually contains — a RemoteViews call against a view
@@ -31,15 +35,17 @@ class PulsoWidgetSmallProvider : PulsoWidgetProvider(PulsoWidgetVariant.SMALL)
  */
 enum class PulsoWidgetVariant(
   val layout: Int,
-  /** Null when the layout has no eyebrow row (the 1x1 has no vertical room for one). */
-  val eyebrow: String?,
-  /** The 4x1 folds the set line into the title; the 1x1 has no room for it at all. */
   val showsDetail: Boolean,
-  val hasControls: Boolean,
+  val showsNext: Boolean,
+  val hasPrimaryAction: Boolean,
+  val hasRestAdjustments: Boolean,
+  val showsSessionData: Boolean,
   val provider: Class<out AppWidgetProvider>,
 ) {
-  LARGE(R.layout.pulso_widget_large, "ENTRENO ACTUAL", true, true, PulsoWidgetLargeProvider::class.java),
-  SMALL(R.layout.pulso_widget_small, null, false, false, PulsoWidgetSmallProvider::class.java),
+  SMALL(R.layout.pulso_widget_small, false, false, false, false, false, PulsoWidgetSmallProvider::class.java),
+  LARGE(R.layout.pulso_widget_large, true, true, false, false, false, PulsoWidgetLargeProvider::class.java),
+  DASHBOARD(R.layout.pulso_widget_dashboard, true, true, true, false, false, PulsoWidgetDashboardProvider::class.java),
+  SESSION(R.layout.pulso_widget_session, true, true, true, true, true, PulsoWidgetSessionProvider::class.java),
 }
 
 /**
@@ -109,7 +115,7 @@ abstract class PulsoWidgetProvider(private val variant: PulsoWidgetVariant) : Ap
     ): RemoteViews {
       val views = RemoteViews(context.packageName, variant.layout)
       views.setOnClickPendingIntent(R.id.pulso_widget_root, openAppIntent(context))
-      if (variant.hasControls) views.setViewVisibility(R.id.pulso_btn_finish, View.GONE)
+      if (variant.showsSessionData) views.setViewVisibility(R.id.pulso_btn_finish, View.GONE)
 
       if (snapshot.sessionDone) {
         renderComplete(views, snapshot, variant)
@@ -121,76 +127,101 @@ abstract class PulsoWidgetProvider(private val variant: PulsoWidgetVariant) : Ap
         return views
       }
 
-      variant.eyebrow?.let { label ->
-        views.setTextViewText(R.id.pulso_eyebrow, label)
-        views.setTextColor(R.id.pulso_eyebrow, snapshot.accent)
-        views.setViewVisibility(R.id.pulso_eyebrow, View.VISIBLE)
-      }
-
-      val detail = snapshot.setDetail
-      val title = if (variant.showsDetail && !detail.isNullOrBlank()) {
-        "${snapshot.currentExercise} · $detail"
-      } else {
-        snapshot.currentExercise
-      }
       // Reset explicitly: the empty/complete states tint this row with the accent, and
       // RemoteViews carries that over into the next repaint otherwise.
       views.setTextColor(R.id.pulso_current, TITLE_COLOR)
-      views.setTextViewText(R.id.pulso_current, title)
+      val currentTitle = if (variant == PulsoWidgetVariant.SMALL) {
+        snapshot.currentExercise
+          .split(Regex("\\s+"))
+          .filter { it.isNotBlank() }
+          .take(3)
+          .joinToString("") { it.first().uppercase() }
+      } else {
+        snapshot.currentExercise
+      }
+      views.setTextViewText(R.id.pulso_current, currentTitle)
 
-      views.setTextViewText(R.id.pulso_next, snapshot.nextExercise?.let { "SIG · $it" } ?: "")
-      views.setViewVisibility(
-        R.id.pulso_next,
-        if (snapshot.nextExercise.isNullOrBlank()) View.GONE else View.VISIBLE,
-      )
-
-      if (variant.hasControls) {
-        views.setViewVisibility(R.id.pulso_btn_finish, View.VISIBLE)
-        views.setOnClickPendingIntent(R.id.pulso_btn_finish, openAppIntent(context, "entreno?action=finish"))
+      if (variant == PulsoWidgetVariant.SMALL) {
+        val progress = snapshot.setProgress?.removePrefix("SERIES ") ?: "EN CURSO"
+        views.setTextViewText(R.id.pulso_next, progress)
+        views.setViewVisibility(R.id.pulso_next, View.VISIBLE)
       }
 
+      if (variant.showsDetail) {
+        val detail = listOfNotNull(snapshot.setDetail, snapshot.setProgress).joinToString(" · ")
+        views.setTextViewText(R.id.pulso_detail, detail)
+        views.setViewVisibility(R.id.pulso_detail, if (detail.isBlank()) View.GONE else View.VISIBLE)
+      }
+
+      if (variant.showsNext) {
+        val next = if (variant == PulsoWidgetVariant.DASHBOARD || variant == PulsoWidgetVariant.SESSION) {
+          snapshot.nextExercises
+        } else {
+          snapshot.nextExercise
+        }
+        views.setTextViewText(R.id.pulso_next, next?.let { "DESPUÉS · $it" } ?: "")
+        views.setViewVisibility(R.id.pulso_next, if (next.isNullOrBlank()) View.GONE else View.VISIBLE)
+      }
+
+      if (variant.showsSessionData) {
+        views.setTextViewText(R.id.pulso_volume, snapshot.sessionVolume?.let { "VOLUMEN · $it" } ?: "VOLUMEN · —")
+        views.setTextViewText(R.id.pulso_set_history, snapshot.setHistory ?: "Primera serie lista para registrar")
+        views.setViewVisibility(R.id.pulso_btn_finish, View.VISIBLE)
+        views.setOnClickPendingIntent(R.id.pulso_btn_finish, openAppIntent(context))
+      }
+
+      renderSetProgress(views, snapshot)
       renderRest(context, views, snapshot, variant)
       return views
     }
 
+    /**
+     * Set completion moves only when workout data changes. Unlike the countdown, this
+     * deliberately has no clock or animation loop, so it costs no background redraws.
+     */
+    private fun renderSetProgress(views: RemoteViews, snapshot: WidgetSnapshot) {
+      val parts = snapshot.setProgress
+        ?.removePrefix("SERIES ")
+        ?.split("/")
+      val completed = parts?.getOrNull(0)?.trim()?.toIntOrNull() ?: 0
+      val target = parts?.getOrNull(1)?.trim()?.toIntOrNull() ?: 0
+
+      if (target <= 0) {
+        views.setViewVisibility(R.id.pulso_set_progress, View.GONE)
+        return
+      }
+
+      views.setProgressBar(R.id.pulso_set_progress, target, completed.coerceIn(0, target), false)
+      views.setViewVisibility(R.id.pulso_set_progress, View.VISIBLE)
+    }
+
     private fun renderEmpty(views: RemoteViews, snapshot: WidgetSnapshot, variant: PulsoWidgetVariant) {
-      if (variant.eyebrow != null) {
-        views.setTextViewText(R.id.pulso_eyebrow, "⚡ PULSO")
-        views.setTextColor(R.id.pulso_eyebrow, snapshot.accent)
-        views.setViewVisibility(R.id.pulso_eyebrow, View.VISIBLE)
-        views.setTextViewText(R.id.pulso_current, "Comenzá tu entreno")
-        views.setViewVisibility(R.id.pulso_next, View.GONE)
-      } else {
-        // The 1x1 has no eyebrow, so the title row carries the branding instead.
-        views.setTextViewText(R.id.pulso_current, "⚡ PULSO")
-        views.setTextColor(R.id.pulso_current, snapshot.accent)
+      views.setTextViewText(R.id.pulso_current, "PULSO")
+      views.setTextColor(R.id.pulso_current, snapshot.accent)
+      if (variant.showsNext || variant == PulsoWidgetVariant.SMALL) {
         views.setTextViewText(R.id.pulso_next, "Comenzá tu entreno")
         views.setViewVisibility(R.id.pulso_next, View.VISIBLE)
       }
-
       views.setViewVisibility(R.id.pulso_chronometer, View.GONE)
       views.setViewVisibility(R.id.pulso_rest_idle, View.GONE)
-      if (variant.hasControls) views.setViewVisibility(R.id.pulso_rest_actions, View.GONE)
+      views.setViewVisibility(R.id.pulso_set_progress, View.GONE)
+      if (variant.hasPrimaryAction) views.setViewVisibility(R.id.pulso_rest_actions, View.GONE)
+      if (variant.showsSessionData) views.setViewVisibility(R.id.pulso_btn_finish, View.GONE)
     }
 
     /** Shown once the session is finished — same slots as [renderEmpty], different copy. */
     private fun renderComplete(views: RemoteViews, snapshot: WidgetSnapshot, variant: PulsoWidgetVariant) {
-      if (variant.eyebrow != null) {
-        views.setTextViewText(R.id.pulso_eyebrow, "⚡ PULSO")
-        views.setTextColor(R.id.pulso_eyebrow, snapshot.accent)
-        views.setViewVisibility(R.id.pulso_eyebrow, View.VISIBLE)
-        views.setTextViewText(R.id.pulso_current, "¡Buen trabajo!")
-        views.setViewVisibility(R.id.pulso_next, View.GONE)
-      } else {
-        views.setTextViewText(R.id.pulso_current, "⚡ ¡Buen trabajo!")
-        views.setTextColor(R.id.pulso_current, snapshot.accent)
+      views.setTextViewText(R.id.pulso_current, "¡Buen trabajo!")
+      views.setTextColor(R.id.pulso_current, snapshot.accent)
+      if (variant.showsNext || variant == PulsoWidgetVariant.SMALL) {
         views.setTextViewText(R.id.pulso_next, "Sesión completada")
         views.setViewVisibility(R.id.pulso_next, View.VISIBLE)
       }
-
       views.setViewVisibility(R.id.pulso_chronometer, View.GONE)
       views.setViewVisibility(R.id.pulso_rest_idle, View.GONE)
-      if (variant.hasControls) views.setViewVisibility(R.id.pulso_rest_actions, View.GONE)
+      views.setViewVisibility(R.id.pulso_set_progress, View.GONE)
+      if (variant.hasPrimaryAction) views.setViewVisibility(R.id.pulso_rest_actions, View.GONE)
+      if (variant.showsSessionData) views.setViewVisibility(R.id.pulso_btn_finish, View.GONE)
     }
 
     private fun renderRest(
@@ -203,7 +234,7 @@ abstract class PulsoWidgetProvider(private val variant: PulsoWidgetVariant) : Ap
         views.setChronometer(R.id.pulso_chronometer, SystemClock.elapsedRealtime(), null, false)
         views.setViewVisibility(R.id.pulso_chronometer, View.GONE)
         views.setViewVisibility(R.id.pulso_rest_idle, View.VISIBLE)
-        if (variant.hasControls) {
+        if (variant.hasPrimaryAction) {
           views.setViewVisibility(R.id.pulso_rest_actions, View.GONE)
           // "✓ LISTO" quick-logs the displayed exercise — the widget can't write to the
           // app's database itself, so this just opens the app, which performs the log the
@@ -230,11 +261,13 @@ abstract class PulsoWidgetProvider(private val variant: PulsoWidgetVariant) : Ap
       }
       views.setChronometer(R.id.pulso_chronometer, base, null, true)
 
-      if (!variant.hasControls) return
+      if (!variant.hasPrimaryAction) return
       views.setViewVisibility(R.id.pulso_rest_actions, View.VISIBLE)
-      views.setOnClickPendingIntent(R.id.pulso_btn_reduce, broadcast(context, ACTION_REST_REDUCE))
       views.setOnClickPendingIntent(R.id.pulso_btn_skip, broadcast(context, ACTION_REST_SKIP))
-      views.setOnClickPendingIntent(R.id.pulso_btn_add, broadcast(context, ACTION_REST_ADD))
+      if (variant.hasRestAdjustments) {
+        views.setOnClickPendingIntent(R.id.pulso_btn_reduce, broadcast(context, ACTION_REST_REDUCE))
+        views.setOnClickPendingIntent(R.id.pulso_btn_add, broadcast(context, ACTION_REST_ADD))
+      }
     }
 
     /**

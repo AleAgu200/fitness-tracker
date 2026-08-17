@@ -27,5 +27,29 @@
           android:name="android.appwidget.provider"
           android:resource="@xml/pulso_widget_small_info" />
     </receiver>
+
+    <receiver
+        android:name="expo.modules.pulsowidget.PulsoWidgetDashboardProvider"
+        android:exported="false"
+        android:label="@string/pulso_widget_dashboard_label">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+          android:name="android.appwidget.provider"
+          android:resource="@xml/pulso_widget_dashboard_info" />
+    </receiver>
+
+    <receiver
+        android:name="expo.modules.pulsowidget.PulsoWidgetSessionProvider"
+        android:exported="false"
+        android:label="@string/pulso_widget_session_label">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+          android:name="android.appwidget.provider"
+          android:resource="@xml/pulso_widget_session_info" />
+    </receiver>
   </application>
 </manifest>

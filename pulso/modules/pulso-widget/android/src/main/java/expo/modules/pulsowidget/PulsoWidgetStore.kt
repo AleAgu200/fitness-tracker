@@ -18,7 +18,12 @@ data class WidgetSnapshot(
   /** Plan-slot id of the active exercise — carried into the "✓ LISTO" deep link. */
   val currentSlotId: String?,
   val nextExercise: String?,
+  val nextExercises: String?,
   val setDetail: String?,
+  val setProgress: String?,
+  val sessionVolume: String?,
+  val setHistory: String?,
+  val muscleGroup: String?,
   val accent: Int,
   /** Wall-clock ms when the rest period ends, or 0 when not resting. */
   val restEndAt: Long,
@@ -32,7 +37,12 @@ data class WidgetSnapshot(
     put("currentExercise", currentExercise ?: JSONObject.NULL)
     put("currentSlotId", currentSlotId ?: JSONObject.NULL)
     put("nextExercise", nextExercise ?: JSONObject.NULL)
+    put("nextExercises", nextExercises ?: JSONObject.NULL)
     put("setDetail", setDetail ?: JSONObject.NULL)
+    put("setProgress", setProgress ?: JSONObject.NULL)
+    put("sessionVolume", sessionVolume ?: JSONObject.NULL)
+    put("setHistory", setHistory ?: JSONObject.NULL)
+    put("muscleGroup", muscleGroup ?: JSONObject.NULL)
     put("restEndAt", if (restEndAt > 0) restEndAt else JSONObject.NULL)
     put("restTotal", restTotal)
   }
@@ -45,7 +55,12 @@ object PulsoWidgetStore {
   private const val KEY_CURRENT = "current_exercise"
   private const val KEY_SLOT_ID = "current_slot_id"
   private const val KEY_NEXT = "next_exercise"
+  private const val KEY_NEXT_EXERCISES = "next_exercises"
   private const val KEY_DETAIL = "set_detail"
+  private const val KEY_PROGRESS = "set_progress"
+  private const val KEY_VOLUME = "session_volume"
+  private const val KEY_HISTORY = "set_history"
+  private const val KEY_MUSCLE = "muscle_group"
   private const val KEY_ACCENT = "accent"
   private const val KEY_REST_END_AT = "rest_end_at"
   private const val KEY_REST_TOTAL = "rest_total"
@@ -68,7 +83,12 @@ object PulsoWidgetStore {
       currentExercise = p.getString(KEY_CURRENT, null),
       currentSlotId = p.getString(KEY_SLOT_ID, null),
       nextExercise = p.getString(KEY_NEXT, null),
+      nextExercises = p.getString(KEY_NEXT_EXERCISES, null),
       setDetail = p.getString(KEY_DETAIL, null),
+      setProgress = p.getString(KEY_PROGRESS, null),
+      sessionVolume = p.getString(KEY_VOLUME, null),
+      setHistory = p.getString(KEY_HISTORY, null),
+      muscleGroup = p.getString(KEY_MUSCLE, null),
       accent = accent,
       restEndAt = p.getLong(KEY_REST_END_AT, 0L),
       restTotal = p.getInt(KEY_REST_TOTAL, 0),
@@ -83,7 +103,12 @@ object PulsoWidgetStore {
     currentExercise: String?,
     currentSlotId: String?,
     nextExercise: String?,
+    nextExercises: String?,
     setDetail: String?,
+    setProgress: String?,
+    sessionVolume: String?,
+    setHistory: String?,
+    muscleGroup: String?,
     accent: String?,
   ) {
     prefs(context).edit()
@@ -92,7 +117,12 @@ object PulsoWidgetStore {
       .putString(KEY_CURRENT, currentExercise)
       .putString(KEY_SLOT_ID, currentSlotId)
       .putString(KEY_NEXT, nextExercise)
+      .putString(KEY_NEXT_EXERCISES, nextExercises)
       .putString(KEY_DETAIL, setDetail)
+      .putString(KEY_PROGRESS, setProgress)
+      .putString(KEY_VOLUME, sessionVolume)
+      .putString(KEY_HISTORY, setHistory)
+      .putString(KEY_MUSCLE, muscleGroup)
       .putString(KEY_ACCENT, accent ?: DEFAULT_ACCENT)
       .apply()
   }

@@ -255,7 +255,7 @@ export default function EntrenoScreen() {
     state, selectEx, incPeso, decPeso, incReps, decReps, setRpe, guardarSet,
     finishWorkout,
     startEditEx, startAddEx, cancelExForm, saveEditEx, saveAddEx, deleteEx,
-    addRest, skipRest, dismissPrFlash, addRecommendedExercise,
+    addRest, reduceRest, skipRest, dismissPrFlash, addRecommendedExercise,
   } = useApp();
   const { accent, weightUnit } = usePreferences();
   const { userId } = useSession();
@@ -282,11 +282,17 @@ export default function EntrenoScreen() {
     handledAction.current = true;
     if (params.action === 'done' && params.slotId) {
       guardarSet({ slotId: params.slotId });
+    } else if (params.action === 'skip-rest') {
+      skipRest();
+    } else if (params.action === 'add-rest') {
+      addRest();
+    } else if (params.action === 'reduce-rest') {
+      reduceRest();
     } else if (params.action === 'finish') {
       finishWorkout();
     }
     router.setParams({ action: undefined, slotId: undefined });
-  }, [state.ready, params.action, params.slotId, guardarSet, finishWorkout]);
+  }, [state.ready, params.action, params.slotId, guardarSet, finishWorkout, skipRest, addRest, reduceRest]);
   useEffect(() => {
     if (!params.action) handledAction.current = false;
   }, [params.action]);
@@ -338,16 +344,26 @@ export default function EntrenoScreen() {
       currentExercise: activeEx?.nombre ?? null,
       currentSlotId: activeEx?.id ?? null,
       nextExercise: exercises[exIndex + 1]?.nombre ?? null,
+      nextExercises: exercises.slice(exIndex + 1, exIndex + 3).map(exercise => exercise.nombre),
+      muscleGroup: activeEx?.muscleGroup ?? null,
       weight: activeEx ? curPeso : null,
       reps: activeEx ? curReps : null,
       weightUnit,
+      completedSets: activeEx ? (log[activeEx.id] ?? []).length : 0,
+      targetSets: activeEx?.target ?? 0,
+      loggedSets: activeEx
+        ? (log[activeEx.id] ?? []).map(set => ({ weight: set.peso, reps: set.reps, rpe: set.rpe }))
+        : [],
+      sessionVolume: exercises.reduce((total, exercise) => (
+        total + (log[exercise.id] ?? []).reduce((sum, set) => sum + set.peso * set.reps, 0)
+      ), 0),
       restActive,
       restLeft,
       restEndAt: restActive ? Date.now() + restLeft * 1000 : null,
       restTotal,
       accent,
     });
-  }, [activeEx, exercises, exIndex, curPeso, curReps, weightUnit, restActive, restLeft, restTotal, accent, sessionDone, totalSets]);
+  }, [activeEx, exercises, exIndex, log, curPeso, curReps, weightUnit, restActive, restLeft, restTotal, accent, sessionDone, totalSets]);
 
   useEffect(() => () => {
     if (!restActive) cancelRestTimerNotification().catch(() => {});

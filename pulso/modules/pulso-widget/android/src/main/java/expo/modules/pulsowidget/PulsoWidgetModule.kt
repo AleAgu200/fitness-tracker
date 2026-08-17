@@ -3,7 +3,24 @@ package expo.modules.pulsowidget
 import android.content.Context
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import expo.modules.kotlin.records.Field
+import expo.modules.kotlin.records.Record
 import java.lang.ref.WeakReference
+
+class WidgetWorkoutRecord : Record {
+  @Field val workoutActive: Boolean = false
+  @Field val sessionDone: Boolean = false
+  @Field val currentExercise: String? = null
+  @Field val currentSlotId: String? = null
+  @Field val nextExercise: String? = null
+  @Field val nextExercises: String? = null
+  @Field val setDetail: String? = null
+  @Field val setProgress: String? = null
+  @Field val sessionVolume: String? = null
+  @Field val setHistory: String? = null
+  @Field val muscleGroup: String? = null
+  @Field val accent: String? = null
+}
 
 class PulsoWidgetModule : Module() {
   private val context: Context
@@ -17,15 +34,11 @@ class PulsoWidgetModule : Module() {
     OnCreate { live = WeakReference(this@PulsoWidgetModule) }
     OnDestroy { live = null }
 
-    Function("setWorkout") { workoutActive: Boolean,
-                             sessionDone: Boolean,
-                             currentExercise: String?,
-                             currentSlotId: String?,
-                             nextExercise: String?,
-                             setDetail: String?,
-                             accent: String? ->
+    Function("setWorkout") { state: WidgetWorkoutRecord ->
       PulsoWidgetStore.writeWorkout(
-        context, workoutActive, sessionDone, currentExercise, currentSlotId, nextExercise, setDetail, accent,
+        context, state.workoutActive, state.sessionDone, state.currentExercise, state.currentSlotId,
+        state.nextExercise, state.nextExercises, state.setDetail, state.setProgress,
+        state.sessionVolume, state.setHistory, state.muscleGroup, state.accent,
       )
       PulsoWidgetProvider.renderAll(context)
     }

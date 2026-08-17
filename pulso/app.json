@@ -57,7 +57,22 @@
               "displayName": "Pulso · Entreno",
               "description": "Ejercicio actual, siguiente y descanso.",
               "ios": {
-                "supportedFamilies": ["systemSmall", "systemLarge"]
+                "supportedFamilies": ["systemSmall", "systemMedium", "systemLarge"],
+                "configuration": {
+                  "title": "Vista del widget",
+                  "description": "Elegí el nivel de detalle para el tamaño mediano.",
+                  "parameters": {
+                    "presentation": {
+                      "title": "Vista mediana",
+                      "type": "enum",
+                      "default": "control",
+                      "values": [
+                        { "name": "Control activo", "value": "control" },
+                        { "name": "Panel de rutina", "value": "routine" }
+                      ]
+                    }
+                  }
+                }
               }
             }
           ]

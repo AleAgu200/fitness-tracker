@@ -15,7 +15,12 @@ interface AndroidWidgetPush {
   currentExercise: string | null;
   currentSlotId: string | null;
   nextExercise: string | null;
+  nextExercises: string | null;
   setDetail: string | null;
+  setProgress: string | null;
+  sessionVolume: string | null;
+  setHistory: string | null;
+  muscleGroup: string | null;
   accent: string;
 }
 
@@ -30,7 +35,18 @@ function androidPush(data: WorkoutWidgetData): AndroidWidgetPush {
     currentExercise: data.currentExercise,
     currentSlotId: data.currentSlotId,
     nextExercise: data.nextExercise,
+    nextExercises: data.nextExercises.length ? data.nextExercises.join(' · ') : null,
     setDetail,
+    setProgress: data.targetSets > 0 ? `SERIES ${data.completedSets}/${data.targetSets}` : null,
+    sessionVolume: data.sessionVolume > 0
+      ? `${Math.round(data.sessionVolume).toLocaleString('es-AR')} ${data.weightUnit}`
+      : null,
+    setHistory: data.loggedSets.length
+      ? data.loggedSets.slice(-3).map((set, index) => (
+        `S${Math.max(1, data.completedSets - data.loggedSets.length + index + 1)}  ${formatWeight(set.weight, data.weightUnit)} × ${set.reps} · RPE ${set.rpe}`
+      )).join('\n')
+      : null,
+    muscleGroup: data.muscleGroup,
     accent: data.accent,
   };
 }
@@ -44,7 +60,12 @@ function isSamePush(a: AndroidWidgetPush | null, b: AndroidWidgetPush): boolean 
     a.currentExercise === b.currentExercise &&
     a.currentSlotId === b.currentSlotId &&
     a.nextExercise === b.nextExercise &&
+    a.nextExercises === b.nextExercises &&
     a.setDetail === b.setDetail &&
+    a.setProgress === b.setProgress &&
+    a.sessionVolume === b.sessionVolume &&
+    a.setHistory === b.setHistory &&
+    a.muscleGroup === b.muscleGroup &&
     a.accent === b.accent;
 }
 
