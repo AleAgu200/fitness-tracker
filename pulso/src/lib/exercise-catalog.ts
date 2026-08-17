@@ -11,6 +11,8 @@ export interface CatalogSuggestion {
   muscleGroup: string;
   equipment: string;
   target: string;
+  secondaryMuscles: string[];
+  instructions: string;
   imagePath: string;
   gifPath: string;
 }
@@ -38,5 +40,6 @@ export async function listCatalogByTargets(targets: string[], limit = 5, signal?
 
 /** Absolute URL for a catalog-relative media path (e.g. "/exercises/gifs/0001-2gPfomN.gif"). */
 export function catalogMediaUrl(path: string): string {
+  if (/^https?:\/\//i.test(path)) return path;
   return `${SERVER_URL.replace(/\/$/, '')}${path}`;
 }

@@ -1,17 +1,139 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Card, Label, PressableScale } from '@/components/ui/kit';
 import { F, useColors } from '@/constants/colors';
 import { usePreferences } from '@/context/preferences';
+import { useSession } from '@/context/session';
+import { getLocalSharingConsents, getPendingProfessionalCheckin, getSyncSummary, SharingCategory } from '@/db/sync';
 import { ApiError } from '@/lib/api';
 import { fetchUnread } from '@/lib/messages';
 import { fetchTeam, redeemInvite, TeamMember } from '@/lib/team';
+import { syncMobileData, updateSharingConsent } from '@/lib/sync';
 
 const KIND_LABELS = { coach: 'ENTRENADOR', nutritionist: 'NUTRICIONISTA' } as const;
+const CATEGORY_LABELS: Record<SharingCategory, { title: string; description: string }> = {
+  training: { title: 'Entrenamiento', description: 'Sesiones, series, volumen y marcas' },
+  nutrition: { title: 'Nutrición', description: 'Cumplimiento, sustituciones y notas' },
+  metrics: { title: 'Métricas', description: 'Peso y evolución corporal' },
+  checkins: { title: 'Check-ins', description: 'Bienestar y respuestas semanales' },
+  photos: { title: 'Fotos', description: 'Fotos de progreso compartidas' },
+};
+
+function SupervisionControls() {
+  const C = useColors();
+  const { userId } = useSession();
+  const [summary, setSummary] = useState<Awaited<ReturnType<typeof getSyncSummary>> | null>(null);
+  const [consents, setConsents] = useState<Awaited<ReturnType<typeof getLocalSharingConsents>>>([]);
+  const [hasCheckin, setHasCheckin] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [changing, setChanging] = useState<string | null>(null);
+
+  const loadLocal = useCallback(async () => {
+    if (!userId) return;
+    const [nextSummary, nextConsents, checkin] = await Promise.all([
+      getSyncSummary(userId), getLocalSharingConsents(userId), getPendingProfessionalCheckin(userId),
+    ]);
+    setSummary(nextSummary);
+    setConsents(nextConsents);
+    setHasCheckin(Boolean(checkin));
+  }, [userId]);
+
+  const sync = useCallback(async () => {
+    if (!userId || syncing) return;
+    setSyncing(true);
+    await syncMobileData(userId);
+    await loadLocal();
+    setSyncing(false);
+  }, [loadLocal, syncing, userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    syncMobileData(userId).then(loadLocal).finally(() => setSyncing(false));
+  }, [loadLocal, userId]);
+
+  async function toggle(organizationId: string, category: SharingCategory, granted: boolean) {
+    const key = `${organizationId}:${category}`;
+    if (changing) return;
+    setChanging(key);
+    try {
+      if (!userId) return;
+      await updateSharingConsent(userId, organizationId, category, granted);
+      if (granted) await syncMobileData(userId);
+      await loadLocal();
+    } finally {
+      setChanging(null);
+    }
+  }
+
+  const organizations = [...new Set(consents.map(consent => consent.organizationId))];
+  const lastSync = summary?.lastSuccessAt
+    ? summary.lastSuccessAt.toLocaleString('es', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+    : 'Todavía no sincronizado';
+
+  return (
+    <>
+      {hasCheckin && (
+        <PressableScale onPress={() => router.push('/check-in' as never)} haptic="medium" style={{ marginBottom: 14 }}>
+          <Card index={1} style={{ padding: 14, borderColor: C.cyan }}>
+            <Label style={{ color: C.cyan }}>CHECK-IN PENDIENTE</Label>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 7 }}>
+              <Text style={{ flex: 1, fontFamily: F.grotesk, fontSize: 18, color: C.textPrimary }}>Tu profesional espera tu respuesta</Text>
+              <Text style={{ fontFamily: F.monoBold, fontSize: 12, color: C.cyan }}>ABRIR →</Text>
+            </View>
+          </Card>
+        </PressableScale>
+      )}
+
+      <Card index={2} style={{ marginBottom: 14 }}>
+        <View style={{ padding: 14, borderBottomWidth: 1, borderBottomColor: C.border }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Label>SINCRONIZACIÓN</Label>
+            <PressableScale onPress={sync} disabled={syncing} accessibilityLabel="Sincronizar ahora">
+              <Text style={{ fontFamily: F.monoBold, fontSize: 10, color: C.cyan }}>{syncing ? 'SINCRONIZANDO…' : 'SINCRONIZAR'}</Text>
+            </PressableScale>
+          </View>
+          <Text style={{ fontFamily: F.interMed, fontSize: 13, color: C.textPrimary, marginTop: 8 }}>{lastSync}</Text>
+          <Text style={{ fontFamily: F.mono, fontSize: 10, color: summary?.lastError ? C.orange : C.textTertiary, marginTop: 5 }}>
+            {summary?.writerConflict ? 'OTRO DISPOSITIVO ESTÁ REGISTRADO COMO PRINCIPAL' : summary?.upgradeRequired ? 'ACTUALIZACIÓN DE APP REQUERIDA' : summary?.lastError ? `PENDIENTE · ${summary.lastError}` : `${summary?.pending ?? 0} CAMBIOS PENDIENTES · ${summary?.rejected ?? 0} CON ERROR`}
+          </Text>
+        </View>
+      </Card>
+
+      {organizations.map((organizationId, organizationIndex) => (
+        <Card key={organizationId} index={organizationIndex + 3} style={{ marginBottom: 14 }}>
+          <View style={{ padding: 14, borderBottomWidth: 1, borderBottomColor: C.border }}>
+            <Label>DATOS COMPARTIDOS</Label>
+            <Text style={{ fontFamily: F.inter, fontSize: 12, color: C.textSecondary, marginTop: 6 }}>Organización · {organizationId.slice(-8)}</Text>
+          </View>
+          {(Object.keys(CATEGORY_LABELS) as SharingCategory[]).map(category => {
+            const consent = consents.find(item => item.organizationId === organizationId && item.category === category);
+            const key = `${organizationId}:${category}`;
+            return (
+              <View key={category} style={{ minHeight: 68, paddingHorizontal: 14, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: 1, borderBottomColor: C.borderLight }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontFamily: F.interSemi, fontSize: 13, color: C.textPrimary }}>{CATEGORY_LABELS[category].title}</Text>
+                  <Text style={{ fontFamily: F.inter, fontSize: 11, lineHeight: 16, color: C.textSecondary, marginTop: 3 }}>{CATEGORY_LABELS[category].description}</Text>
+                </View>
+                <Switch
+                  value={consent?.granted ?? false}
+                  disabled={changing === key}
+                  onValueChange={value => toggle(organizationId, category, value)}
+                  trackColor={{ false: C.border, true: C.cyan }}
+                  thumbColor={consent?.granted ? C.bg : C.textSecondary}
+                  accessibilityLabel={`Compartir ${CATEGORY_LABELS[category].title}`}
+                />
+              </View>
+            );
+          })}
+        </Card>
+      ))}
+    </>
+  );
+}
 
 function TeamSection() {
   const { accent } = usePreferences();
@@ -39,7 +161,9 @@ function TeamSection() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    Promise.resolve().then(load);
+  }, [load]);
 
   async function link() {
     if (code.trim().length < 4 || linking) return;
@@ -186,6 +310,7 @@ export default function EquipoScreen() {
         </View>
 
         <TeamSection />
+        <SupervisionControls />
       </View>
     </ScrollView>
   );

@@ -4,6 +4,7 @@ import { nanoid } from '@/lib/id';
 import { dayStart } from '@/lib/dates';
 import { db } from './index';
 import { bodyMeasurements, progressPhotos } from './schema';
+import { enqueueSyncMutation } from './sync';
 
 export type MetricKey = 'peso' | 'grasa' | 'musculo';
 
@@ -23,34 +24,36 @@ export async function logMeasurement(
   value: number,
   fallbackWeightKg: number,
 ): Promise<void> {
-  const start = dayStart(new Date());
-  const rows = await db
-    .select()
-    .from(bodyMeasurements)
-    .where(and(
-      eq(bodyMeasurements.athleteId, athleteId),
-      gte(bodyMeasurements.measuredAt, start),
-    ))
-    .limit(1);
-
-  const patch =
-    metric === 'peso'  ? { weightKg: value } :
-    metric === 'grasa' ? { bodyFatPct: value } :
-                         { muscleMassPct: value };
-
-  if (rows[0]) {
-    await db.update(bodyMeasurements).set(patch).where(eq(bodyMeasurements.id, rows[0].id));
-  } else {
-    await db.insert(bodyMeasurements).values({
-      id: nanoid(),
+  await db.transaction(async tx => {
+    const start = dayStart(new Date());
+    const [existing] = await tx.select().from(bodyMeasurements).where(and(
+      eq(bodyMeasurements.athleteId, athleteId), gte(bodyMeasurements.measuredAt, start),
+    )).limit(1);
+    const now = new Date();
+    const id = existing?.id ?? nanoid();
+    const version = (existing?.syncVersion ?? 0) + 1;
+    const weightKg = metric === 'peso' ? value : existing?.weightKg ?? fallbackWeightKg;
+    const patch = metric === 'peso' ? { weightKg } : metric === 'grasa' ? { bodyFatPct: value } : { muscleMassPct: value };
+    if (existing) {
+      await tx.update(bodyMeasurements).set({ ...patch, syncVersion: version }).where(eq(bodyMeasurements.id, id));
+    } else {
+      await tx.insert(bodyMeasurements).values({
+        id, athleteId, measuredAt: now, weightKg,
+        bodyFatPct: metric === 'grasa' ? value : null,
+        muscleMassPct: metric === 'musculo' ? value : null,
+        notes: null, syncVersion: version,
+      });
+    }
+    await enqueueSyncMutation(tx, {
       athleteId,
-      measuredAt: new Date(),
-      weightKg: metric === 'peso' ? value : fallbackWeightKg,
-      bodyFatPct: metric === 'grasa' ? value : null,
-      muscleMassPct: metric === 'musculo' ? value : null,
-      notes: null,
+      entityType: 'body_measurement',
+      entityId: id,
+      operation: existing && existing.syncVersion > 0 ? 'update' : 'create',
+      baseVersion: existing && existing.syncVersion > 0 ? existing.syncVersion : null,
+      occurredAt: now,
+      payload: { measuredAt: (existing?.measuredAt ?? now).getTime(), weightKg, version },
     });
-  }
+  });
 }
 
 export interface MetricHistories {

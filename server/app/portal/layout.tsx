@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api, SessionUser } from "./lib";
 import { PortalContext } from "./portal-context";
+import { canAccessPortalPath, ProfessionalRole } from "@/lib/portal-access";
 
 function useReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
@@ -216,53 +217,113 @@ function PowerSurgeFlash({ active }: { active: boolean }) {
 // ── login ────────────────────────────────────────────────────────────────────
 
 function Login({ onDone }: { onDone: () => void }) {
+  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [discipline, setDiscipline] = useState<"coach" | "nutritionist">("coach");
+  const [organizationName, setOrganizationName] = useState("");
+  const [signupCode, setSignupCode] = useState("");
+  const [requiresCode, setRequiresCode] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [charging, setCharging] = useState(false);
   const reducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    api<{ requiresCode: boolean }>("/api/portal/signup")
+      .then(result => setRequiresCode(result.requiresCode))
+      .catch(() => undefined);
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      await api("/api/auth/sign-in/email", { method: "POST", body: JSON.stringify({ email, password }) });
+      if (mode === "signup") {
+        if (password !== confirmPassword) {
+          setError("Las contraseñas no coinciden");
+          setBusy(false);
+          return;
+        }
+        await api("/api/portal/signup", {
+          method: "POST",
+          body: JSON.stringify({ name, email, password, discipline, organizationName, signupCode }),
+        });
+      } else {
+        await api("/api/auth/sign-in/email", { method: "POST", body: JSON.stringify({ email, password }) });
+      }
       if (reducedMotion) {
         onDone();
       } else {
         setCharging(true);
         window.setTimeout(onDone, 320);
       }
-    } catch {
-      setError("Email o contraseña incorrectos");
+    } catch (cause) {
+      const status = cause instanceof Error ? cause.message : "";
+      setError(mode === "login"
+        ? "Email o contraseña incorrectos"
+        : status === "422"
+          ? "Ya existe una cuenta con ese email"
+          : status === "403"
+            ? "El código de registro no es válido"
+            : "No se pudo crear la cuenta. Revisá los datos e intentá de nuevo");
       setBusy(false);
     }
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden">
+    <div className="relative min-h-screen overflow-x-hidden">
       {reducedMotion ? <LightningBg /> : <LightningStrikes />}
-      <form onSubmit={submit} className="relative z-10 mx-auto mt-[12vh] max-w-90 px-5">
+      <form onSubmit={submit} className="relative z-10 mx-auto max-w-105 px-5 py-[8vh]">
         <div className="mb-2.5 font-mono-app text-[11px] tracking-[2.4px] text-volt">
           PULSO · PORTAL PROFESIONAL
         </div>
-        <h1 className="mb-6 text-[28px] font-semibold text-fg">Ingresar</h1>
+        <h1 className="mb-2 text-[28px] font-semibold text-fg">
+          {mode === "login" ? "Ingresar" : "Crear cuenta profesional"}
+        </h1>
+        <p className="mb-6 text-sm leading-6 text-fg-sec">
+          {mode === "login" ? "Accedé a tu espacio de trabajo clínico." : "Configurá tu espacio profesional y empezá con una biblioteca lista para usar."}
+        </p>
+        {mode === "signup" && (
+          <input required minLength={2} maxLength={80} value={name} onChange={e => setName(e.target.value)} placeholder="Nombre completo" autoComplete="name" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />
+        )}
         <input
+          required
           value={email}
           onChange={e => setEmail(e.target.value)}
           type="email"
+          autoComplete="email"
           placeholder="tu@email.com"
           className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none"
         />
         <input
+          required
+          minLength={6}
           value={password}
           onChange={e => setPassword(e.target.value)}
           type="password"
+          autoComplete={mode === "login" ? "current-password" : "new-password"}
           placeholder="Contraseña"
           className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none"
         />
+        {mode === "signup" && (
+          <>
+            <input required minLength={6} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} type="password" autoComplete="new-password" placeholder="Confirmar contraseña" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />
+            <div className="mb-3 grid grid-cols-2 gap-2" role="group" aria-label="Disciplina profesional">
+              {(["coach", "nutritionist"] as const).map(value => (
+                <button key={value} type="button" onClick={() => setDiscipline(value)} aria-pressed={discipline === value} className={`cursor-pointer border px-3 py-3 text-left transition ${discipline === value ? "border-volt bg-card text-fg" : "border-line bg-elev text-fg-sec hover:border-fg-ter"}`}>
+                  <span className="block font-mono-app text-[10px] tracking-[1px] text-volt">{value === "coach" ? "ENTRENAMIENTO" : "NUTRICIÓN"}</span>
+                  <span className="mt-1 block text-sm">{value === "coach" ? "Entrenador/a" : "Nutricionista"}</span>
+                </button>
+              ))}
+            </div>
+            <input value={organizationName} onChange={e => setOrganizationName(e.target.value)} maxLength={100} placeholder="Nombre de tu consultorio o equipo (opcional)" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />
+            {requiresCode && <input required value={signupCode} onChange={e => setSignupCode(e.target.value)} placeholder="Código de registro profesional" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />}
+          </>
+        )}
         {error && <div className="mb-3 font-mono-app text-xs text-danger">{error}</div>}
         <button
           type="submit"
@@ -271,8 +332,12 @@ function Login({ onDone }: { onDone: () => void }) {
             charging ? "animate-[chargeUp_320ms_ease-out_forwards]" : ""
           }`}
         >
-          {busy ? "..." : "INGRESAR"}
+          {busy ? "PROCESANDO…" : mode === "login" ? "INGRESAR" : "CREAR MI ESPACIO"}
         </button>
+        <button type="button" onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(null); }} className="mt-4 w-full cursor-pointer py-2 text-sm text-fg-sec hover:text-volt">
+          {mode === "login" ? "¿Primera vez? Crear cuenta profesional" : "Ya tengo una cuenta · Ingresar"}
+        </button>
+        {mode === "signup" && <p className="mt-3 text-center font-mono-app text-[9px] leading-4 text-fg-ter">EL ALTA CREA UN ESPACIO PRIVADO. NO OTORGA PERMISOS ADMINISTRATIVOS GLOBALES.</p>}
       </form>
     </div>
   );
@@ -281,15 +346,22 @@ function Login({ onDone }: { onDone: () => void }) {
 // ── nav ──────────────────────────────────────────────────────────────────────
 
 const NAV = [
-  { href: "/portal", label: "ATLETAS", icon: "◆" },
+  { href: "/portal/atencion", label: "ATENCIÓN", icon: "⚡" },
+  { href: "/portal/atletas", label: "ATLETAS", icon: "◆" },
   { href: "/portal/alimentos", label: "ALIMENTOS", icon: "✚" },
   { href: "/portal/ejercicios", label: "EJERCICIOS", icon: "▲" },
+];
+
+const ACCOUNT_NAV = [
+  { href: "/portal/perfil", label: "PERFIL" },
+  { href: "/portal/configuracion", label: "CONFIGURACIÓN" },
 ];
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SessionUser | null | undefined>(undefined);
   const [surging, setSurging] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
   const reducedMotion = useReducedMotion();
 
   const loadSession = useCallback(async () => {
@@ -302,6 +374,11 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   }, []);
 
   useEffect(() => { loadSession(); }, [loadSession]);
+  useEffect(() => {
+    if (user && (user.role === "coach" || user.role === "nutritionist") && !canAccessPortalPath(user.role, pathname)) {
+      router.replace("/portal/alimentos");
+    }
+  }, [pathname, router, user]);
 
   /** Bridges Login unmounting into the authenticated shell mounting: the flash
       (rendered here, outside either branch) survives the swap and masks the cut. */
@@ -348,11 +425,14 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       </div>
     );
   } else {
+    const role = user.role as ProfessionalRole;
+    const visibleNav = NAV.filter(item => canAccessPortalPath(role, item.href));
+    const routeAllowed = canAccessPortalPath(role, pathname);
     content = (
-      <PortalContext.Provider value={{ user, logout }}>
-        <div className="flex h-screen">
+      <PortalContext.Provider value={{ user, logout, refreshUser: loadSession }}>
+        <div className="min-h-screen md:flex md:h-screen">
           {/* sidebar */}
-          <aside className="flex w-60 shrink-0 flex-col border-r border-line">
+          <aside className="hidden w-60 shrink-0 flex-col border-r border-line md:flex">
             <div className="border-b border-line p-4.5">
               <div className="mb-1.5 font-mono-app text-[10px] tracking-[2px] text-volt">
                 PULSO · {user.role === "coach" ? "ENTRENADOR" : "NUTRICIONISTA"}
@@ -362,8 +442,8 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             </div>
 
             <nav className="flex-1 py-2">
-              {NAV.map(item => {
-                const active = pathname === item.href;
+              {visibleNav.map(item => {
+                const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
                 return (
                   <Link
                     key={item.href}
@@ -381,6 +461,17 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
               })}
             </nav>
 
+            <nav className="border-t border-line py-2">
+              {ACCOUNT_NAV.map(item => {
+                const active = pathname === item.href;
+                return (
+                  <Link key={item.href} href={item.href} className={`block px-4.5 py-2.5 font-mono-app text-[10px] tracking-[1.2px] transition ${active ? "text-volt" : "text-fg-sec hover:text-fg"}`}>
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+
             <button
               type="button"
               onClick={logout}
@@ -390,8 +481,24 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             </button>
           </aside>
 
-          {/* content */}
-          <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>
+          <div className="min-w-0 flex-1 md:overflow-y-auto">
+            <header className="sticky top-0 z-40 border-b border-line bg-ink/95 md:hidden">
+              <div className="flex items-center justify-between px-4 py-3">
+                <div>
+                  <div className="font-mono-app text-[9px] tracking-[1.8px] text-volt">PULSO · PROFESIONAL</div>
+                  <div className="text-sm font-semibold text-fg">{user.name}</div>
+                </div>
+                <Link href="/portal/perfil" className="border border-line px-3 py-2 font-mono-app text-[10px] text-fg-sec">PERFIL</Link>
+              </div>
+              <nav className="flex overflow-x-auto border-t border-line-soft px-2">
+                {visibleNav.map(item => {
+                  const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                  return <Link key={item.href} href={item.href} className={`shrink-0 border-b-2 px-3 py-2.5 font-mono-app text-[9px] tracking-[1px] ${active ? "border-volt text-volt" : "border-transparent text-fg-ter"}`}>{item.label}</Link>;
+                })}
+              </nav>
+            </header>
+            <main className="min-w-0">{routeAllowed ? children : <div className="p-8 font-mono-app text-xs text-fg-ter">ABRIENDO TU BIBLIOTECA DE ALIMENTOS…</div>}</main>
+          </div>
         </div>
       </PortalContext.Provider>
     );

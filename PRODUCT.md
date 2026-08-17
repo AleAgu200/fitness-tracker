@@ -19,7 +19,7 @@ Language is Spanish throughout both surfaces (confirmed in mobile UI copy and po
 
 ## Product Purpose
 
-A fitness-tracking app that stays local-first (workout logs, nutrition, checkins, and measurements live in on-device SQLite for speed, offline use, and privacy) while still supporting real professional supervision: a coach can assign workout templates and message their athlete, a nutritionist can assign meal plans and message their athlete, without the athlete losing local ownership of their day-to-day data. Success is an athlete who trains and eats on a plan a real professional set for them, tracked entirely inside one system.
+A fitness-tracking app that stays local-first (workout logs, nutrition, check-ins, and measurements originate in on-device SQLite for speed and offline use) while still supporting real professional supervision. Authorized categories are replicated incrementally after server acknowledgement so the professional portal, recovery, and future devices can use a canonical server copy; the athlete retains control over which organization can access each category. Success is an athlete who trains and eats on a plan a real professional set for them, tracked entirely inside one system.
 
 ## Positioning
 
@@ -29,14 +29,16 @@ Most solo logging apps (Strong, Hevy, MyFitnessPal) have no professional-supervi
 
 - **Mobile app (athlete):** used daily/multiple times a day around workouts, meals, and weigh-ins; must work fully offline (local-first SQLite via Drizzle), syncing opportunistically.
 - **Web portal (coach/nutritionist):** used to manage a roster of linked athletes — assign workout templates and meal plans, message athletes, review adherence/progress dashboards. Requires connectivity (standard web app).
-- **Sync model:** phone pulls assigned workouts/meal plans and messages via polling; pushes only daily summary snapshots (adherence, tonnage, weight, streak) up — raw log detail stays on-device. Assigned plans lock local editing on the phone (shown as "asignado por tu coach/nutricionista"); athletes can still substitute a meal with a note.
-- **Roles:** athlete, coach, nutritionist, admin (`user.role` in Better Auth, default `athlete`; professional accounts are provisioned by invite/admin, not self-registered from the app). An athlete has at most one active coach and one active nutritionist at a time; messaging only between linked accounts.
-- **External data:** WorkoutX API integrated server-side for exercise search/import (Spanish query translation, 24h cache); library edit rights split by role — nutritionists edit the food library, coaches edit the exercise library, both can read.
+- **Professional onboarding:** coaches and nutritionists can create their own professional account and private organization. The signup endpoint only grants a professional discipline, never a global administrator role, and deployments may require `PROFESSIONAL_SIGNUP_CODE`. Profile, notification preferences, landing section, and password management live in the portal.
+- **Sync model:** SQLite remains the athlete's offline operational store. The phone sends ordered, idempotent domain mutations through a durable outbox and pulls server changes by opaque sequence cursor. After acknowledgement, the server replica is canonical for the professional portal and recovery. The first cut permits one active writer device per athlete; assignments and permissions are always server-authoritative.
+- **Privacy and consent:** professional access requires an active organization membership, an active care assignment with a compatible discipline, and athlete consent for the organization + category (`training`, `nutrition`, `metrics`, `checkins`, or `photos`). Revocation blocks professional reads and future uploads immediately and is never represented as zero adherence. Photos and free-form notes are never shared by default. Historical payload deletion after revocation remains an explicit pre-release retention decision; audit metadata is preserved.
+- **Roles:** `user.role` remains temporarily for Better Auth compatibility. Effective authorization uses organization roles (`owner`, `admin`, `professional`), professional capabilities (`coach`, `nutritionist`), care assignments, and consent. An athlete may belong to multiple organizations with separate consent and one primary professional per discipline in each care relationship; one-to-one messages remain private to their participants.
+- **External data:** WorkoutX API integrated server-side for exercise search/import (Spanish query translation, 24h cache); imported exercises preserve source, external ID, visual reference, and technical context. Library edit rights are split by role — nutritionists edit the food library, coaches edit the exercise library, both can read.
 
 ## Capabilities and Constraints
 
 - Mobile: Expo SDK 56, expo-router, Drizzle + expo-sqlite, migrations applied at startup.
-- Server: Next.js 16 + Better Auth on better-sqlite3, doubling as auth provider and sync hub (not just auth).
+- Server: Next.js 16 + Better Auth + PostgreSQL/Drizzle, acting as auth provider, professional portal, audit store, and incremental sync hub.
 - Mobile and server must agree on the same LAN IP (`EXPO_PUBLIC_SERVER_URL`, `BETTER_AUTH_URL`, `TRUSTED_ORIGINS`) during development; this is a known dev-environment fragility, not a product constraint.
 - Tab icons on mobile must be MaterialCommunityIcons (@expo/vector-icons) — expo-symbols/SF Symbols do not render on Android, so icon choices must work cross-platform even though the platform value is "adaptive."
 - Undecided: whether/when this moves beyond the current personal + small-client scale toward a public release; no positioning or onboarding claims should be built assuming strangers yet.
@@ -58,7 +60,7 @@ Most solo logging apps (Strong, Hevy, MyFitnessPal) have no professional-supervi
 2. Supervision augments, it doesn't replace athlete agency — assigned plans are visible and trackable, but substitution-with-note and the athlete's own log stay intact.
 3. Design for named, known users (current real clients) before anonymous-scale onboarding — polish for the relationships that exist today, not a hypothetical funnel.
 4. One system, two audiences — the athlete app and the professional portal are one product; features on either side should assume the other exists.
-5. Raw personal data stays on-device — only summarized snapshots leave the phone, by design, not as a current limitation to fix later.
+5. Sharing is explicit and scoped — detailed domain data may replicate to the server only for consented categories; the phone remains the offline operational store and the athlete can revoke future professional access.
 
 ## Accessibility & Inclusion
 

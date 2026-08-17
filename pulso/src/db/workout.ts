@@ -2,8 +2,10 @@ import { and, asc, desc, eq, gte, lt, sql } from 'drizzle-orm';
 
 import { nanoid } from '@/lib/id';
 import { dayStart } from '@/lib/dates';
+import { enqueueSyncMutation } from './sync';
 import { db } from './index';
 import {
+  exercises,
   loggedExercises,
   loggedSets,
   personalRecords,
@@ -127,54 +129,6 @@ export async function getTodaySession(athleteId: string): Promise<TodaySession |
   return { sessionId: session.id, completed: session.status === 'completed', log };
 }
 
-async function getOrCreateSession(athleteId: string, templateId: string | null): Promise<string> {
-  const existing = await getTodaySession(athleteId);
-  if (existing) {
-    // Logging a set into a finished session reopens it
-    if (existing.completed) {
-      await db.update(workoutSessions)
-        .set({ status: 'in_progress', finishedAt: null })
-        .where(eq(workoutSessions.id, existing.sessionId));
-    }
-    return existing.sessionId;
-  }
-  const id = nanoid();
-  const now = new Date();
-  await db.insert(workoutSessions).values({
-    id,
-    athleteId,
-    templateId,
-    startedAt: now,
-    status: 'in_progress',
-    totalTonnageKg: 0,
-    createdAt: now,
-  });
-  return id;
-}
-
-async function getOrCreateLoggedExercise(sessionId: string, exerciseId: string, slotId: string): Promise<string> {
-  const rows = await db
-    .select({ id: loggedExercises.id })
-    .from(loggedExercises)
-    .where(and(eq(loggedExercises.sessionId, sessionId), eq(loggedExercises.slotId, slotId)))
-    .limit(1);
-  if (rows[0]) return rows[0].id;
-
-  const existing = await db
-    .select({ id: loggedExercises.id })
-    .from(loggedExercises)
-    .where(eq(loggedExercises.sessionId, sessionId));
-  const id = nanoid();
-  await db.insert(loggedExercises).values({
-    id,
-    sessionId,
-    exerciseId,
-    slotId,
-    exerciseOrder: existing.length,
-  });
-  return id;
-}
-
 export interface LogSetResult {
   sessionId: string;
   isPR: boolean;
@@ -186,71 +140,98 @@ export async function logSet(
   slot: { slotId: string; exerciseId: string },
   set: { peso: number; reps: number; rpe: number },
 ): Promise<LogSetResult> {
-  const sessionId = await getOrCreateSession(athleteId, templateId);
-  const loggedExerciseId = await getOrCreateLoggedExercise(sessionId, slot.exerciseId, slot.slotId);
-
-  const prior = await db
-    .select({ n: sql<number>`count(*)` })
-    .from(loggedSets)
-    .where(eq(loggedSets.loggedExerciseId, loggedExerciseId));
-  const setNumber = (prior[0]?.n ?? 0) + 1;
-
-  // PR check against the persisted record for this exercise
-  const prRows = await db
-    .select()
-    .from(personalRecords)
-    .where(and(
-      eq(personalRecords.athleteId, athleteId),
-      eq(personalRecords.exerciseId, slot.exerciseId),
-    ))
-    .limit(1);
-  // First set on an exercise establishes a baseline record silently; only beating it is a PR
-  const hasRecord = !!prRows[0];
-  const isPR = hasRecord && set.peso > prRows[0].weightKg;
-  const now = new Date();
-
-  await db.insert(loggedSets).values({
-    id: nanoid(),
-    loggedExerciseId,
-    setNumber,
-    weightKg: set.peso,
-    reps: set.reps,
-    rpe: set.rpe,
-    isPR,
-    completedAt: now,
-  });
-
-  if (isPR || !hasRecord) {
-    const e1rm = +(set.peso * (1 + set.reps / 30)).toFixed(1);
-    if (prRows[0]) {
-      await db.update(personalRecords)
-        .set({ weightKg: set.peso, reps: set.reps, e1rm, achievedAt: now, sessionId })
-        .where(eq(personalRecords.id, prRows[0].id));
-    } else {
-      await db.insert(personalRecords).values({
-        id: nanoid(),
-        athleteId,
-        exerciseId: slot.exerciseId,
-        weightKg: set.peso,
-        reps: set.reps,
-        e1rm,
-        achievedAt: now,
-        sessionId,
-      });
+  return db.transaction(async tx => {
+    const start = dayStart(new Date());
+    let [session] = await tx.select().from(workoutSessions).where(and(
+      eq(workoutSessions.athleteId, athleteId),
+      gte(workoutSessions.createdAt, start),
+    )).limit(1);
+    if (!session) {
+      const now = new Date();
+      const id = nanoid();
+      await tx.insert(workoutSessions).values({ id, athleteId, templateId, startedAt: now, status: 'in_progress', totalTonnageKg: 0, createdAt: now });
+      [session] = await tx.select().from(workoutSessions).where(eq(workoutSessions.id, id)).limit(1);
+    } else if (session.status === 'completed') {
+      await tx.update(workoutSessions).set({ status: 'in_progress', finishedAt: null }).where(eq(workoutSessions.id, session.id));
     }
-  }
+    const sessionId = session.id;
 
-  await db.update(workoutSessions)
-    .set({ totalTonnageKg: sql`${workoutSessions.totalTonnageKg} + ${set.peso * set.reps}` })
-    .where(eq(workoutSessions.id, sessionId));
+    let [loggedExercise] = await tx.select().from(loggedExercises).where(and(
+      eq(loggedExercises.sessionId, sessionId), eq(loggedExercises.slotId, slot.slotId),
+    )).limit(1);
+    if (!loggedExercise) {
+      const existing = await tx.select({ id: loggedExercises.id }).from(loggedExercises).where(eq(loggedExercises.sessionId, sessionId));
+      const id = nanoid();
+      await tx.insert(loggedExercises).values({ id, sessionId, exerciseId: slot.exerciseId, slotId: slot.slotId, exerciseOrder: existing.length });
+      [loggedExercise] = await tx.select().from(loggedExercises).where(eq(loggedExercises.id, id)).limit(1);
+    }
 
-  return { sessionId, isPR };
+    const prior = await tx.select({ n: sql<number>`count(*)` }).from(loggedSets)
+      .where(eq(loggedSets.loggedExerciseId, loggedExercise.id));
+    const setNumber = (prior[0]?.n ?? 0) + 1;
+    const prRows = await tx.select().from(personalRecords).where(and(
+      eq(personalRecords.athleteId, athleteId), eq(personalRecords.exerciseId, slot.exerciseId),
+    )).limit(1);
+    const hasRecord = !!prRows[0];
+    const isPR = hasRecord && set.peso > prRows[0].weightKg;
+    const now = new Date();
+    const setId = nanoid();
+    await tx.insert(loggedSets).values({
+      id: setId, loggedExerciseId: loggedExercise.id, setNumber, weightKg: set.peso,
+      reps: set.reps, rpe: set.rpe, isPR, completedAt: now,
+    });
+    if (isPR || !hasRecord) {
+      const e1rm = +(set.peso * (1 + set.reps / 30)).toFixed(1);
+      if (prRows[0]) {
+        await tx.update(personalRecords).set({ weightKg: set.peso, reps: set.reps, e1rm, achievedAt: now, sessionId })
+          .where(eq(personalRecords.id, prRows[0].id));
+      } else {
+        await tx.insert(personalRecords).values({
+          id: nanoid(), athleteId, exerciseId: slot.exerciseId, weightKg: set.peso,
+          reps: set.reps, e1rm, achievedAt: now, sessionId,
+        });
+      }
+    }
+    await tx.update(workoutSessions)
+      .set({ totalTonnageKg: sql`${workoutSessions.totalTonnageKg} + ${set.peso * set.reps}` })
+      .where(eq(workoutSessions.id, sessionId));
+    const [exercise] = await tx.select({ name: exercises.name }).from(exercises).where(eq(exercises.id, slot.exerciseId)).limit(1);
+    await enqueueSyncMutation(tx, {
+      athleteId, entityType: 'training_set', entityId: setId, operation: 'create', occurredAt: now,
+      payload: {
+        sessionId, exerciseName: exercise?.name ?? 'Ejercicio', setIndex: setNumber,
+        reps: set.reps, weightKg: set.peso, isPersonalRecord: isPR,
+        completedAt: now.getTime(), version: 1,
+      },
+    });
+    return { sessionId, isPR };
+  });
 }
 
 export async function finishSession(sessionId: string): Promise<void> {
-  await db.update(workoutSessions)
-    .set({ status: 'completed', finishedAt: new Date() })
-    .where(eq(workoutSessions.id, sessionId));
+  await db.transaction(async tx => {
+    const [session] = await tx.select().from(workoutSessions).where(eq(workoutSessions.id, sessionId)).limit(1);
+    if (!session || session.status === 'completed') return;
+    const finishedAt = new Date();
+    await tx.update(workoutSessions).set({ status: 'completed', finishedAt }).where(eq(workoutSessions.id, sessionId));
+    const startedAt = session.startedAt ?? session.createdAt;
+    await enqueueSyncMutation(tx, {
+      athleteId: session.athleteId,
+      entityType: 'training_session',
+      entityId: session.id,
+      operation: 'create',
+      occurredAt: finishedAt,
+      payload: {
+        plannedSessionId: session.templateId,
+        status: 'completed',
+        startedAt: startedAt.getTime(),
+        completedAt: finishedAt.getTime(),
+        durationSeconds: Math.max(0, Math.round((finishedAt.getTime() - startedAt.getTime()) / 1000)),
+        totalVolumeKg: session.totalTonnageKg,
+        version: 1,
+      },
+    });
+  });
 }
 
 export interface PRHistoryItem {

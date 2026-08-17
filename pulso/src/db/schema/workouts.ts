@@ -46,6 +46,8 @@ export const exercises = sqliteTable('exercises', {
   // Public path into the local exercise-catalog media (server/public/exercises/gifs/<file>.gif),
   // e.g. "/exercises/gifs/0001-2gPfomN.gif". Preferred over wxId for new exercises.
   gifPath:         text('gif_path'),
+  // Spanish step-by-step technique guide shown next to the exercise animation.
+  instructions:    text('instructions'),
 });
 
 export const personalRecords = sqliteTable('personal_records', {

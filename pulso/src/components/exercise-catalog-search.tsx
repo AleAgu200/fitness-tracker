@@ -1,75 +1,83 @@
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeInDown, ReduceMotion } from 'react-native-reanimated';
 
+import { ExerciseAnimationModal } from '@/components/exercise-animation-modal';
 import { PressableScale } from '@/components/ui/kit';
 import { F, useColors, withAlpha } from '@/constants/colors';
 import { usePreferences } from '@/context/preferences';
 import { CatalogSuggestion, catalogMediaUrl, searchExerciseCatalog } from '@/lib/exercise-catalog';
 
-function CatalogResult({ suggestion, onSelect }: {
+function CatalogResult({ suggestion, index, onPreview }: {
   suggestion: CatalogSuggestion;
-  onSelect: (suggestion: CatalogSuggestion) => void;
+  index: number;
+  onPreview: (suggestion: CatalogSuggestion) => void;
 }) {
   const C = useColors();
   const [imageFailed, setImageFailed] = useState(false);
 
   return (
-    <PressableScale
-      haptic="light"
-      onPress={() => onSelect(suggestion)}
-      style={{
-        flexDirection: 'row',
-        minHeight: 92,
-        borderTopWidth: 1,
-        borderTopColor: C.borderLight,
-        backgroundColor: C.bgEl,
-      }}
-    >
-      <View style={{ width: 92, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-        {!imageFailed ? (
-          <Image
-            source={{ uri: catalogMediaUrl(suggestion.gifPath) }}
-            style={{ width: 92, height: 92 }}
-            contentFit="contain"
-            autoplay
-            cachePolicy="memory-disk"
-            transition={150}
-            recyclingKey={suggestion.id}
-            accessibilityLabel={`Demostración de ${suggestion.name}`}
-            onError={() => setImageFailed(true)}
-          />
-        ) : (
-          <Text style={{ fontFamily: F.monoBold, fontSize: 10, color: C.textTertiary }}>SIN GIF</Text>
-        )}
-      </View>
-      <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 10, gap: 5 }}>
-        <Text style={{ fontFamily: F.interSemi, fontSize: 13, color: C.textPrimary, lineHeight: 18 }}>
-          {suggestion.name}
-        </Text>
-        <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textTertiary }}>
-          {suggestion.muscleGroup} · {suggestion.equipment}
-        </Text>
-        <Text style={{ fontFamily: F.monoBold, fontSize: 9, letterSpacing: 0.6, color: C.cyan }}>
-          SELECCIONAR EJERCICIO
-        </Text>
-      </View>
-    </PressableScale>
+    <Animated.View entering={FadeInDown.duration(180).delay(index * 35).easing(Easing.out(Easing.cubic)).reduceMotion(ReduceMotion.System)}>
+      <PressableScale
+        haptic="light"
+        onPress={() => onPreview(suggestion)}
+        accessibilityLabel={`Ver demostración e instrucciones de ${suggestion.name}`}
+        style={{
+          flexDirection: 'row',
+          minHeight: 98,
+          borderTopWidth: 1,
+          borderTopColor: C.borderLight,
+          backgroundColor: C.bgEl,
+        }}
+      >
+        <View style={{ width: 98, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+          {!imageFailed ? (
+            <Image
+              source={{ uri: catalogMediaUrl(suggestion.gifPath) }}
+              style={{ width: 98, height: 98 }}
+              contentFit="contain"
+              autoplay
+              cachePolicy="memory-disk"
+              transition={150}
+              recyclingKey={suggestion.id}
+              accessibilityLabel={`Demostración de ${suggestion.name}`}
+              onError={() => setImageFailed(true)}
+            />
+          ) : (
+            <Text style={{ fontFamily: F.monoBold, fontSize: 10, color: C.textTertiary }}>SIN GIF</Text>
+          )}
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 10, gap: 5 }}>
+          <Text style={{ fontFamily: F.interSemi, fontSize: 13, color: C.textPrimary, lineHeight: 18 }} numberOfLines={2}>
+            {suggestion.name}
+          </Text>
+          <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textTertiary, textTransform: 'uppercase' }} numberOfLines={1}>
+            {suggestion.muscleGroup} · {suggestion.equipment}
+          </Text>
+          <Text style={{ fontFamily: F.monoBold, fontSize: 8, letterSpacing: 0.5, color: C.cyan }}>
+            VER GIF + INSTRUCCIONES  →
+          </Text>
+        </View>
+      </PressableScale>
+    </Animated.View>
   );
 }
 
-function SelectedCatalogResult({ suggestion }: { suggestion: CatalogSuggestion }) {
+function SelectedCatalogResult({ suggestion, onPreview }: {
+  suggestion: CatalogSuggestion;
+  onPreview: () => void;
+}) {
   const { accent } = usePreferences();
   const C = useColors();
   const [imageFailed, setImageFailed] = useState(false);
 
   return (
     <Animated.View
-      entering={FadeIn.duration(200)}
+      entering={FadeIn.duration(200).reduceMotion(ReduceMotion.System)}
       style={{
         flexDirection: 'row',
-        minHeight: 108,
+        minHeight: 116,
         marginTop: -4,
         marginBottom: 12,
         borderWidth: 1,
@@ -78,11 +86,16 @@ function SelectedCatalogResult({ suggestion }: { suggestion: CatalogSuggestion }
         overflow: 'hidden',
       }}
     >
-      <View style={{ width: 108, backgroundColor: C.bgEl, alignItems: 'center', justifyContent: 'center' }}>
+      <PressableScale
+        haptic="light"
+        onPress={onPreview}
+        accessibilityLabel={`Ver la guía de ${suggestion.name}`}
+        style={{ width: 116, minHeight: 116, backgroundColor: C.bgEl, alignItems: 'center', justifyContent: 'center' }}
+      >
         {!imageFailed ? (
           <Image
             source={{ uri: catalogMediaUrl(suggestion.gifPath) }}
-            style={{ width: 108, height: 108 }}
+            style={{ width: 116, height: 116 }}
             contentFit="contain"
             autoplay
             cachePolicy="memory-disk"
@@ -93,20 +106,27 @@ function SelectedCatalogResult({ suggestion }: { suggestion: CatalogSuggestion }
         ) : (
           <Text style={{ fontFamily: F.monoBold, fontSize: 10, color: C.textTertiary }}>SIN GIF</Text>
         )}
-      </View>
+      </PressableScale>
       <View style={{ flex: 1, justifyContent: 'center', padding: 12, gap: 5 }}>
         <Text style={{ fontFamily: F.monoBold, fontSize: 8, letterSpacing: 1, color: accent }}>
           ✓ EJERCICIO SELECCIONADO
         </Text>
-        <Text style={{ fontFamily: F.interSemi, fontSize: 14, color: C.textPrimary, lineHeight: 19 }}>
+        <Text style={{ fontFamily: F.interSemi, fontSize: 14, color: C.textPrimary, lineHeight: 19 }} numberOfLines={2}>
           {suggestion.name}
         </Text>
-        <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textTertiary }}>
+        <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textTertiary, textTransform: 'uppercase' }} numberOfLines={1}>
           {suggestion.muscleGroup} · {suggestion.equipment}
         </Text>
-        <Text style={{ fontFamily: F.inter, fontSize: 10, color: C.textSecondary, lineHeight: 14 }}>
-          Configurá series, repeticiones y peso abajo.
-        </Text>
+        <PressableScale
+          haptic="light"
+          onPress={onPreview}
+          accessibilityLabel={`Volver a ver la guía de ${suggestion.name}`}
+          style={{ alignSelf: 'flex-start', borderWidth: 1, borderColor: C.cyan, paddingHorizontal: 9, paddingVertical: 6, marginTop: 2 }}
+        >
+          <Text style={{ fontFamily: F.monoBold, fontSize: 8, letterSpacing: 0.5, color: C.cyan }}>
+            ▶  VER CÓMO SE HACE
+          </Text>
+        </PressableScale>
       </View>
     </Animated.View>
   );
@@ -123,21 +143,19 @@ export function ExerciseCatalogSearch({ query, enabled, onSelect }: {
   const [error, setError] = useState<string | null>(null);
   const [searchedQuery, setSearchedQuery] = useState('');
   const [selected, setSelected] = useState<CatalogSuggestion | null>(null);
+  const [preview, setPreview] = useState<CatalogSuggestion | null>(null);
   const q = query.trim();
 
   useEffect(() => {
     if (!enabled || q.length < 2 || q === selected?.name) {
-      setResults([]);
-      setLoading(false);
-      setError(null);
       return;
     }
 
     const controller = new AbortController();
-    setLoading(true);
-    setError(null);
 
     const timer = setTimeout(() => {
+      setLoading(true);
+      setError(null);
       searchExerciseCatalog(q, controller.signal)
         .then(data => {
           setResults(data.slice(0, 5));
@@ -160,48 +178,75 @@ export function ExerciseCatalogSearch({ query, enabled, onSelect }: {
     };
   }, [enabled, q, selected?.name]);
 
+  const visibleResults = searchedQuery === q ? results : [];
+
   if (!enabled || q.length < 2) return null;
   if (selected && q === selected.name) {
-    return <SelectedCatalogResult suggestion={selected} />;
+    return (
+      <>
+        <SelectedCatalogResult suggestion={selected} onPreview={() => setPreview(selected)} />
+        {preview && (
+          <ExerciseAnimationModal
+            nombre={preview.name}
+            gifPath={preview.gifPath}
+            instructions={preview.instructions}
+            muscleGroup={preview.muscleGroup}
+            equipment={preview.equipment}
+            onClose={() => setPreview(null)}
+          />
+        )}
+      </>
+    );
   }
 
   return (
-    <Animated.View
-      entering={FadeIn.duration(180)}
-      style={{ marginTop: -4, marginBottom: 10, borderWidth: 1, borderColor: C.cyan, backgroundColor: C.bgEl }}
-    >
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 8 }}>
-        <Text style={{ fontFamily: F.mono, fontSize: 8, letterSpacing: 1.2, color: C.cyan }}>
-          RESULTADOS · CATÁLOGO
-        </Text>
-        {loading && (
-          <Text style={{ fontFamily: F.mono, fontSize: 8, color: C.textTertiary }}>BUSCANDO…</Text>
+    <>
+      <Animated.View
+        entering={FadeIn.duration(180).reduceMotion(ReduceMotion.System)}
+        style={{ marginTop: -4, marginBottom: 10, borderWidth: 1, borderColor: C.cyan, backgroundColor: C.bgEl }}
+      >
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 8 }}>
+          <Text style={{ fontFamily: F.mono, fontSize: 8, letterSpacing: 1.2, color: C.cyan }}>
+            RESULTADOS · TOCÁ PARA APRENDER
+          </Text>
+          {loading && (
+            <Text style={{ fontFamily: F.mono, fontSize: 8, color: C.textTertiary }}>BUSCANDO…</Text>
+          )}
+        </View>
+
+        {!loading && error && (
+          <Text selectable style={{ padding: 10, borderTopWidth: 1, borderTopColor: C.borderLight, fontFamily: F.inter, fontSize: 12, color: C.red }}>
+            {error}
+          </Text>
         )}
-      </View>
 
-      {!loading && error && (
-        <Text selectable style={{ padding: 10, borderTopWidth: 1, borderTopColor: C.borderLight, fontFamily: F.inter, fontSize: 12, color: C.red }}>
-          {error}
-        </Text>
-      )}
+        {!loading && !error && searchedQuery === q && results.length === 0 && (
+          <Text style={{ padding: 10, borderTopWidth: 1, borderTopColor: C.borderLight, fontFamily: F.inter, fontSize: 12, color: C.textSecondary }}>
+            No encontramos ejercicios con “{q}”.
+          </Text>
+        )}
 
-      {!loading && !error && searchedQuery === q && results.length === 0 && (
-        <Text style={{ padding: 10, borderTopWidth: 1, borderTopColor: C.borderLight, fontFamily: F.inter, fontSize: 12, color: C.textSecondary }}>
-          No encontramos ejercicios con “{q}”.
-        </Text>
-      )}
+        {visibleResults.map((result, index) => (
+          <CatalogResult key={result.id} suggestion={result} index={index} onPreview={setPreview} />
+        ))}
+      </Animated.View>
 
-      {results.map(result => (
-        <CatalogResult
-          key={result.id}
-          suggestion={result}
-          onSelect={suggestion => {
-            setSelected(suggestion);
+      {preview && (
+        <ExerciseAnimationModal
+          nombre={preview.name}
+          gifPath={preview.gifPath}
+          instructions={preview.instructions}
+          muscleGroup={preview.muscleGroup}
+          equipment={preview.equipment}
+          onClose={() => setPreview(null)}
+          onSelect={() => {
+            setSelected(preview);
             setResults([]);
-            onSelect(suggestion);
+            onSelect(preview);
+            setPreview(null);
           }}
         />
-      ))}
-    </Animated.View>
+      )}
+    </>
   );
 }

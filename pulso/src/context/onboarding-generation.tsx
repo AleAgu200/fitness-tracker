@@ -46,10 +46,6 @@ export interface RawGenerationRequest {
   preferredMealTimes?: string[];
   cookingTimeBudget?: CookingTimeBudget;
   budgetLevel?: BudgetLevel;
-  hondurasLatinPreference?: boolean;
-  isPregnantOrBreastfeeding?: boolean;
-  hasEatingDisorderHistory?: boolean;
-  hasUncontrolledMedicalCondition?: boolean;
 }
 
 export interface EligibleFood {
@@ -68,6 +64,8 @@ export interface EligibleExercise {
   name: string;
   muscleGroup: string;
   equipment: string;
+  gifPath: string;
+  instructions: string;
 }
 
 export interface GeneratedExercise {

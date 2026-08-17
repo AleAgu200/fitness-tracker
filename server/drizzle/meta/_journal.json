@@ -15,6 +15,27 @@
       "when": 1786646527858,
       "tag": "0001_freezing_fabian_cortez",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786888592806,
+      "tag": "0002_portal_professional",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786892250527,
+      "tag": "0003_professional_profile_and_exercises",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786900000000,
+      "tag": "0004_food_catalog_and_role_navigation",
+      "breakpoints": true
     }
   ]
 }

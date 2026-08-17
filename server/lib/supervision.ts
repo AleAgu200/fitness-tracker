@@ -3,7 +3,14 @@ import { randomBytes } from "crypto";
 import { and, desc, eq } from "drizzle-orm";
 
 import { db } from "@/db";
-import { supervisionLinks, user } from "@/db/schema";
+import {
+  careAssignments,
+  organizationClients,
+  organizationMemberships,
+  supervisionLinks,
+  user,
+} from "@/db/schema";
+import { ensureProfessionalOrganization, projectAcceptedLink } from "@/lib/organizations";
 
 export type LinkKind = "coach" | "nutritionist";
 
@@ -46,6 +53,9 @@ export function roleToKind(role: string): LinkKind | null {
 
 /** Professional creates an open invite; returns the code the athlete types in the app */
 export async function createInvite(professionalId: string, kind: LinkKind): Promise<string> {
+  const [professional] = await db.select({ name: user.name }).from(user).where(eq(user.id, professionalId));
+  if (!professional) throw new Error("professional_not_found");
+  await ensureProfessionalOrganization({ professionalId, professionalName: professional.name, discipline: kind });
   // Retry on the (unlikely) code collision
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = newInviteCode();
@@ -96,8 +106,18 @@ export async function acceptInvite(athleteId: string, code: string): Promise<Acc
     ));
   if (existing) return { ok: false, error: "already_linked" };
 
+  const acceptedAt = Date.now();
+  await projectAcceptedLink({
+    linkId: link.id,
+    professionalId: link.professionalId,
+    professionalName: link.professionalName,
+    athleteId,
+    discipline: link.kind as LinkKind,
+    acceptedAt,
+  });
+
   await db.update(supervisionLinks)
-    .set({ athleteId, status: "active", acceptedAt: Date.now() })
+    .set({ athleteId, status: "active", acceptedAt })
     .where(eq(supervisionLinks.id, link.id));
 
   return { ok: true, kind: link.kind as LinkKind, professionalName: link.professionalName };
@@ -105,6 +125,28 @@ export async function acceptInvite(athleteId: string, code: string): Promise<Acc
 
 /** Athlete's active team (coach and/or nutritionist) */
 export async function getTeam(athleteId: string): Promise<TeamMember[]> {
+  const projected = await db
+    .select({
+      linkId: careAssignments.id,
+      kind: careAssignments.discipline,
+      userId: user.id,
+      name: user.name,
+      email: user.email,
+      since: careAssignments.createdAt,
+    })
+    .from(organizationClients)
+    .innerJoin(careAssignments, eq(careAssignments.organizationClientId, organizationClients.id))
+    .innerJoin(organizationMemberships, eq(organizationMemberships.id, careAssignments.professionalMembershipId))
+    .innerJoin(user, eq(user.id, organizationMemberships.userId))
+    .where(and(
+      eq(organizationClients.athleteId, athleteId),
+      eq(organizationClients.status, "active"),
+      eq(careAssignments.status, "active"),
+      eq(organizationMemberships.status, "active"),
+    ))
+    .orderBy(careAssignments.discipline);
+  if (projected.length) return projected as TeamMember[];
+
   const rows = await db
     .select({
       linkId: supervisionLinks.id,
@@ -123,6 +165,28 @@ export async function getTeam(athleteId: string): Promise<TeamMember[]> {
 
 /** Professional's active athletes */
 export async function getAthletes(professionalId: string): Promise<LinkedAthlete[]> {
+  const projected = await db
+    .select({
+      linkId: careAssignments.id,
+      kind: careAssignments.discipline,
+      userId: user.id,
+      name: user.name,
+      email: user.email,
+      since: careAssignments.createdAt,
+    })
+    .from(organizationMemberships)
+    .innerJoin(careAssignments, eq(careAssignments.professionalMembershipId, organizationMemberships.id))
+    .innerJoin(organizationClients, eq(organizationClients.id, careAssignments.organizationClientId))
+    .innerJoin(user, eq(user.id, organizationClients.athleteId))
+    .where(and(
+      eq(organizationMemberships.userId, professionalId),
+      eq(organizationMemberships.status, "active"),
+      eq(careAssignments.status, "active"),
+      eq(organizationClients.status, "active"),
+    ))
+    .orderBy(desc(careAssignments.createdAt));
+  if (projected.length) return projected as LinkedAthlete[];
+
   const rows = await db
     .select({
       linkId: supervisionLinks.id,

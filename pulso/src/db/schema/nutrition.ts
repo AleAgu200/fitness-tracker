@@ -64,6 +64,7 @@ export const mealLogEntries = sqliteTable('meal_log_entries', {
                   }).notNull().default('pending'),
   substituteNote: text('substitute_note'),
   loggedAt:       integer('logged_at', { mode: 'timestamp_ms' }),
+  syncVersion:    integer('sync_version').notNull().default(0),
 }, t => [
   uniqueIndex('meal_entry_log_slot').on(t.dailyLogId, t.slotId),
 ]);

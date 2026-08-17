@@ -19,6 +19,7 @@ interface FoodSearchResult {
   id: string;
   source: "pulso" | "usda";
   name: string;
+  category: string;
   /** per 100 g */
   kcal: number;
   proteinG: number;
@@ -28,6 +29,17 @@ interface FoodSearchResult {
 
 function normalize(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
+function inferCategory(name: string, proteinG: number, carbsG: number, fatG: number): string {
+  const value = normalize(name);
+  if (/leche|queso|yogur|cream|milk|cheese/.test(value)) return "lácteo";
+  if (/manzana|banana|platano|naranja|fresa|mango|pina|sandia|papaya|uva|pear|apple|fruit/.test(value)) return "fruta";
+  if (/brocoli|espinaca|tomate|zanahoria|cebolla|lechuga|pepino|repollo|coliflor|vegetable/.test(value)) return "verdura";
+  if (fatG >= proteinG && fatG >= carbsG && fatG >= 8) return "grasa";
+  if (proteinG >= carbsG * 0.55 && proteinG >= 8) return "proteína";
+  if (carbsG >= 8) return "carbohidrato";
+  return "otro";
 }
 
 /** USDA returns the same food under several fdcIds ("pupusas con frijoles" came
@@ -73,6 +85,7 @@ export async function GET(request: Request) {
     id: food.id,
     source: "pulso",
     name: food.name,
+    category: food.category,
     kcal: food.kcal,
     proteinG: food.proteinG,
     carbsG: food.carbsG,
@@ -87,6 +100,7 @@ export async function GET(request: Request) {
       id: food.id,
       source: "usda" as const,
       name: food.name,
+      category: inferCategory(food.name, food.proteinG, food.carbsG, food.fatG),
       kcal: food.kcal,
       proteinG: food.proteinG,
       carbsG: food.carbsG,

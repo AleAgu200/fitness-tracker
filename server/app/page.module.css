@@ -361,7 +361,7 @@
 .ecgData line { stroke: currentColor; stroke-width: 1; stroke-dasharray: 3 4; }
 .ecgData circle { fill: var(--volt); stroke: currentColor; stroke-width: 2; }
 .ecgData text { fill: currentColor; }
-.offlineCopy { font: 700 clamp(3.5rem, 7vw, 5.5rem)/0.9 var(--font-pulso-display), sans-serif; letter-spacing: -0.04em; text-transform: uppercase; overflow-wrap: break-word; }
+.offlineCopy { font: 700 clamp(2.8rem, 5.5vw, 4rem)/0.9 var(--font-pulso-display), sans-serif; letter-spacing: -0.04em; text-transform: uppercase; }
 .offlineCondition { display: block; color: oklch(0.38 0.08 111); font-size: 0.58em; line-height: 1; letter-spacing: -0.02em; }
 .offlinePromise { display: block; margin-top: 0.16em; }
 .offlineSection p { max-width: 50ch; margin: 0; font-size: clamp(1.1rem, 1.6vw, 1.35rem); font-weight: 600; line-height: 1.62; text-align: justify; text-align-last: left; text-wrap: pretty; hyphens: auto; }
@@ -507,7 +507,7 @@
   .timelineCopy { padding-left: 12px; }
   .lockBadge { width: 58px; height: 58px; }
   .dataNodePrimary, .dataNodeSecondary { min-height: 300px; }
-  .offlineCopy { font-size: clamp(3rem, 16vw, 4.8rem); }
+  .offlineCopy { font-size: clamp(2.5rem, 12vw, 3.5rem); }
   .offlineCondition { font-size: 0.55em; }
   .offlineSection { min-height: 620px; }
   .ecgBackdrop { inset: 12% -52% 0 -18%; }

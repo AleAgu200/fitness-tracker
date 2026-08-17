@@ -24,7 +24,12 @@ function columnsOf(table) {
   return sqlite.prepare(`PRAGMA table_info("${table}")`).all().map((c) => c.name);
 }
 
+function tableExists(table) {
+  return !!sqlite.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?`).get(table);
+}
+
 function rowsOf(table) {
+  if (!tableExists(table)) return [];
   return sqlite.prepare(`SELECT * FROM "${table}"`).all();
 }
 

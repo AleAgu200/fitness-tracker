@@ -6,3 +6,6 @@ export * from "./schema/supervision";
 export * from "./schema/messaging";
 export * from "./schema/assignments";
 export * from "./schema/notifications";
+export * from "./schema/organizations";
+export * from "./schema/care";
+export * from "./schema/tracking";

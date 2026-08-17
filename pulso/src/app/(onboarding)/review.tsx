@@ -79,11 +79,6 @@ function listOrNone(value: string[] | undefined): string {
   return value?.length ? value.join(', ') : 'Ninguno';
 }
 
-function yesNo(value: boolean | undefined): string {
-  if (value === undefined) return '—';
-  return value ? 'Sí' : 'No';
-}
-
 function parseStoredDob(value: string | null): Date | null {
   if (!value) return null;
   const local = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value.trim());
@@ -202,13 +197,8 @@ export default function OnboardingReviewScreen() {
   if (!profile?.sex || !birthDate || age == null || age < 1 || age >= 120 || !profile.heightCm || !weightKg) missing.push('datos corporales');
   if (!draft?.goal || !draft.pace) missing.push('objetivo');
   if (!draft?.experienceLevel || !draft.daysPerWeek || !draft.sessionMinutes || !draft.activityOutsideTraining || !draft.trainingLocation || !draft.availableEquipment?.length) missing.push('entrenamiento');
-  if (!draft?.dietaryStyle || !draft.mealsPerDay || !draft.cookingTimeBudget || !draft.budgetLevel || draft.hondurasLatinPreference === undefined) missing.push('alimentación');
-  if (
-    draft?.isPregnantOrBreastfeeding === undefined ||
-    draft?.hasEatingDisorderHistory === undefined ||
-    draft?.hasUncontrolledMedicalCondition === undefined ||
-    !draft?.consentedToExternalProcessing
-  ) missing.push('seguridad y consentimiento');
+  if (!draft?.dietaryStyle || !draft.mealsPerDay || !draft.cookingTimeBudget || !draft.budgetLevel) missing.push('alimentación');
+  if (!draft?.consentedToExternalProcessing) missing.push('permiso para generar el plan');
 
   async function generatePlan() {
     if (!userId || missing.length || busy) return;
@@ -258,13 +248,9 @@ export default function OnboardingReviewScreen() {
     { label: 'ALIMENTOS A EVITAR', value: listOrNone(draft?.dislikedFoods) },
     { label: 'TIEMPO DE COCINA', value: draft?.cookingTimeBudget ? COOKING_LABELS[draft.cookingTimeBudget] : '—' },
     { label: 'PRESUPUESTO', value: draft?.budgetLevel ? BUDGET_LABELS[draft.budgetLevel] : '—' },
-    { label: 'PREFERENCIA REGIONAL', value: draft?.hondurasLatinPreference === undefined ? '—' : draft.hondurasLatinPreference ? 'Sí' : 'No' },
   ];
 
-  const safetyRows = [
-    { label: 'EMBARAZO O LACTANCIA', value: yesNo(draft?.isPregnantOrBreastfeeding) },
-    { label: 'ANTECEDENTE ALIMENTARIO', value: yesNo(draft?.hasEatingDisorderHistory) },
-    { label: 'CONDICIÓN NO CONTROLADA', value: yesNo(draft?.hasUncontrolledMedicalCondition) },
+  const consentRows = [
     { label: 'PROCESAMIENTO EXTERNO', value: draft?.consentedToExternalProcessing ? 'Autorizado' : 'Pendiente' },
   ];
 
@@ -289,7 +275,7 @@ export default function OnboardingReviewScreen() {
           <ReviewSection title="TU OBJETIVO" editPath="/(onboarding)/goal" rows={goalRows} index={1} />
           <ReviewSection title="ENTRENAMIENTO" editPath="/(onboarding)/training" rows={trainingRows} index={2} />
           <ReviewSection title="ALIMENTACIÓN" editPath="/(onboarding)/nutrition" rows={nutritionRows} index={3} />
-          <ReviewSection title="SEGURIDAD" editPath="/(onboarding)/safety" rows={safetyRows} index={4} />
+          <ReviewSection title="GENERACIÓN CON IA" editPath="/(onboarding)/safety" rows={consentRows} index={4} />
 
           {missing.length ? (
             <View style={{ padding: 13, borderWidth: 1, borderColor: C.orange, backgroundColor: withAlpha(C.orange, 0.07) }}>

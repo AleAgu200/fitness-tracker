@@ -34,6 +34,8 @@ export interface Food {
   proteinG: number;
   carbsG: number;
   fatG: number;
+  source: "base" | "custom" | "usda";
+  externalId: string | null;
   createdBy: string | null;
 }
 
@@ -42,6 +44,10 @@ export interface LibraryExercise {
   name: string;
   muscleGroup: string;
   equipment: string;
+  instructions: string | null;
+  source: "base" | "custom" | "workoutx";
+  externalId: string | null;
+  mediaUrl: string | null;
   createdBy: string | null;
 }
 

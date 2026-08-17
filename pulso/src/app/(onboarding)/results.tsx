@@ -56,7 +56,7 @@ export default function ResultsScreen() {
     setError(null);
 
     try {
-      const exerciseMap = new Map(result.eligibleExercises.map(exercise => [exercise.id, exercise.name]));
+      const exerciseMap = new Map(result.eligibleExercises.map(exercise => [exercise.id, exercise]));
       const foodMap = new Map(
         result.eligibleFoods.map(food => [catalogKey(food.source, food.id), food]),
       );
@@ -66,15 +66,17 @@ export default function ResultsScreen() {
       const exercisesByWeekday = new Map<number, AssignedExercise[]>();
       for (const day of result.plan.workout.days) {
         const items: AssignedExercise[] = day.exercises.map(exercise => {
-          const name = exerciseMap.get(exercise.exerciseId);
-          if (!name) throw new Error('exercise_not_found');
+          const catalogExercise = exerciseMap.get(exercise.exerciseId);
+          if (!catalogExercise) throw new Error('exercise_not_found');
           return {
-            nombre: name,
+            nombre: catalogExercise.name,
             target: exercise.sets,
             reps: exercise.repsMin,
             peso: 0,
             step: exercise.progressionIncrementKg,
             restSeconds: exercise.restSeconds,
+            gifPath: catalogExercise.gifPath,
+            instructions: catalogExercise.instructions,
           };
         });
         const mobileWeekday = toMobileWeekday(day.weekday);

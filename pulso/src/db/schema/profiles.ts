@@ -33,6 +33,7 @@ export const bodyMeasurements = sqliteTable('body_measurements', {
   bodyFatPct:    real('body_fat_pct'),
   muscleMassPct: real('muscle_mass_pct'),
   notes:         text('notes'),
+  syncVersion:   integer('sync_version').notNull().default(0),
 });
 
 export const progressPhotos = sqliteTable('progress_photos', {

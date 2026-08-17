@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { api, Athlete, Food } from "./lib";
 
@@ -56,38 +57,70 @@ function mealMacros(items: Item[], foodsById: Map<string, Food>) {
 
 function AddFoodRow({ foods, onAdd }: { foods: Food[]; onAdd: (item: Item) => void }) {
   const [foodId, setFoodId] = useState("");
+  const [query, setQuery] = useState("");
   const [grams, setGrams] = useState("100");
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const listboxId = useId();
+
+  const matches = useMemo(() => {
+    const term = query.trim().toLocaleLowerCase("es");
+    return foods.filter(food => !term || food.name.toLocaleLowerCase("es").includes(term)).slice(0, 8);
+  }, [foods, query]);
+  const selected = foods.find(food => food.id === foodId);
+
+  useEffect(() => {
+    function close(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, []);
+
+  function choose(food: Food) {
+    setFoodId(food.id); setQuery(food.name); setOpen(false); setActiveIndex(0);
+  }
+
+  function add() {
+    const food = foods.find(item => item.id === foodId);
+    const amount = Number(grams);
+    if (!food || !(amount > 0)) return;
+    onAdd({ foodId: food.id, name: food.name, grams: Math.round(amount) });
+    setFoodId(""); setQuery(""); setOpen(false);
+  }
 
   return (
-    <div className="mt-2 flex gap-2">
-      <select aria-label="Alimento" value={foodId} onChange={e => setFoodId(e.target.value)} className={`flex-1 ${inputCls}`}>
-        <option value="">— agregar alimento —</option>
-        {foods.map(f => (
-          <option key={f.id} value={f.id}>{f.name} · {f.kcal} kcal/100g</option>
-        ))}
-      </select>
-      <input
-        aria-label="Gramos"
-        type="number"
-        min="1"
-        value={grams}
-        onChange={e => setGrams(e.target.value)}
-        className={`w-20 ${inputCls}`}
-      />
-      <span className="self-center font-mono-app text-[10px] text-fg-ter">g</span>
-      <button
-        type="button"
-        onClick={() => {
-          const f = foods.find(x => x.id === foodId);
-          const g = Number(grams);
-          if (!f || !(g > 0)) return;
-          onAdd({ foodId: f.id, name: f.name, grams: Math.round(g) });
-          setFoodId("");
-        }}
-        className="cursor-pointer border border-neon px-3 font-mono-app text-[10px] font-bold text-neon hover:bg-neon hover:text-ink"
-      >
-        AGREGAR
-      </button>
+    <div className="mt-3 border-t border-line-soft pt-3" ref={rootRef}>
+      <div className="grid gap-2 sm:grid-cols-[minmax(220px,1fr)_100px_auto]">
+        <div className="relative">
+          <label className="mb-1.5 block font-mono-app text-[9px] tracking-[.7px] text-fg-ter">BUSCAR ALIMENTO</label>
+          <div className="relative">
+            <input
+              role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={listboxId}
+              value={query}
+              onFocus={() => setOpen(true)}
+              onChange={event => { setQuery(event.target.value); setFoodId(""); setOpen(true); setActiveIndex(0); }}
+              onKeyDown={event => {
+                if (event.key === "ArrowDown") { event.preventDefault(); setOpen(true); setActiveIndex(index => Math.min(Math.max(0, matches.length - 1), index + 1)); }
+                if (event.key === "ArrowUp") { event.preventDefault(); setActiveIndex(index => Math.max(0, index - 1)); }
+                if (event.key === "Enter" && open && matches[activeIndex]) { event.preventDefault(); choose(matches[activeIndex]); }
+                if (event.key === "Escape") setOpen(false);
+              }}
+              placeholder="Escribí arroz, pollo, frijol…"
+              className={`w-full pl-9 ${inputCls}`}
+            />
+            <span aria-hidden className="absolute left-3 top-2 text-neon">⌕</span>
+          </div>
+          {open && <div id={listboxId} role="listbox" className="exercise-combobox-enter absolute z-30 mt-1 max-h-64 w-full overflow-y-auto border border-line bg-card shadow-2xl">
+            {matches.map((food, index) => <button key={food.id} type="button" role="option" aria-selected={index === activeIndex} onPointerMove={() => setActiveIndex(index)} onClick={() => choose(food)} className={`grid min-h-14 w-full cursor-pointer grid-cols-[1fr_auto] items-center gap-3 border-b border-line-soft px-3 py-2 text-left last:border-b-0 ${index === activeIndex ? "bg-elev" : "bg-card hover:bg-elev"}`}><span className="min-w-0"><span className="block truncate text-sm text-fg">{food.name}</span><span className="mt-1 block font-mono-app text-[8px] uppercase text-fg-ter">{food.category} · /100 g</span></span><span className="font-mono-app text-[9px] tabular-nums text-fg-sec">{Math.round(food.kcal)} kcal</span></button>)}
+            {!matches.length && <div className="p-3"><p className="text-xs text-fg-sec">No está en tu biblioteca.</p><Link href="/portal/alimentos" className="mt-2 inline-block font-mono-app text-[9px] text-volt underline underline-offset-4">CREAR O IMPORTAR ALIMENTO →</Link></div>}
+          </div>}
+        </div>
+        <label><span className="mb-1.5 block font-mono-app text-[9px] tracking-[.7px] text-fg-ter">PORCIÓN</span><div className="relative"><input aria-label="Gramos" type="number" min="1" value={grams} onChange={event => setGrams(event.target.value)} className={`w-full pr-8 tabular-nums ${inputCls}`} /><span className="absolute right-3 top-2 font-mono-app text-[9px] text-fg-ter">g</span></div></label>
+        <button type="button" onClick={add} disabled={!selected || !(Number(grams) > 0)} className="min-h-11 cursor-pointer self-end border border-neon px-4 font-mono-app text-[10px] font-bold text-neon transition-colors duration-150 hover:bg-neon hover:text-ink disabled:cursor-not-allowed disabled:border-line disabled:text-fg-ter motion-reduce:transition-none">AGREGAR</button>
+      </div>
+      {selected && <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono-app text-[9px] text-fg-ter"><span className="text-fg-sec">{selected.name}</span><span>{Math.round(selected.kcal * Number(grams || 0) / 100)} kcal en esta porción</span><span className="text-danger">P {Math.round(selected.proteinG * Number(grams || 0) / 100)}</span><span className="text-warn">C {Math.round(selected.carbsG * Number(grams || 0) / 100)}</span><span className="text-volt">G {Math.round(selected.fatG * Number(grams || 0) / 100)}</span></div>}
     </div>
   );
 }
@@ -166,7 +199,7 @@ export function AssignMeals({ athlete, onDirtyChange }: { athlete: Athlete; onDi
       });
       const res = await api<{ version: number }>("/api/assignments/meal-plan", {
         method: "POST",
-        body: JSON.stringify({ athleteId: athlete.userId, meals: payloadMeals }),
+        body: JSON.stringify({ athleteId: athlete.userId, meals: payloadMeals, baseVersion: current?.version ?? 0 }),
       });
       setStatus(`✓ Dieta v${res.version} asignada — ${athlete.name.split(" ")[0]} la recibe al abrir la app`);
       setCurrent({ version: res.version, payload: { nutritionistName: "", meals: payloadMeals }, createdAt: Date.now() });

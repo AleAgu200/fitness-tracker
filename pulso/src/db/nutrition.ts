@@ -3,6 +3,7 @@ import { and, asc, eq } from 'drizzle-orm';
 import { nanoid } from '@/lib/id';
 import { todayStr } from '@/lib/dates';
 import { db } from './index';
+import { enqueueSyncMutation } from './sync';
 import {
   dailyNutritionLogs,
   mealLogEntries,
@@ -227,26 +228,6 @@ export async function replaceWeekMealSlots(
   }
 }
 
-async function getOrCreateDailyLog(athleteId: string, mealPlanId: string): Promise<string> {
-  const date = todayStr();
-  const rows = await db
-    .select({ id: dailyNutritionLogs.id })
-    .from(dailyNutritionLogs)
-    .where(and(eq(dailyNutritionLogs.athleteId, athleteId), eq(dailyNutritionLogs.date, date)))
-    .limit(1);
-  if (rows[0]) return rows[0].id;
-
-  const id = nanoid();
-  await db.insert(dailyNutritionLogs).values({
-    id,
-    athleteId,
-    date,
-    mealPlanId,
-    createdAt: new Date(),
-  });
-  return id;
-}
-
 export async function getTodayMealEntries(
   athleteId: string,
 ): Promise<{ status: Record<string, MealStatusDb>; notes: Record<string, string> }> {
@@ -278,28 +259,40 @@ export async function setMealEntry(
   slotId: string,
   data: { status?: MealStatusDb; note?: string },
 ): Promise<void> {
-  const dailyLogId = await getOrCreateDailyLog(athleteId, mealPlanId);
-  const existing = await db
-    .select({ id: mealLogEntries.id })
-    .from(mealLogEntries)
-    .where(and(eq(mealLogEntries.dailyLogId, dailyLogId), eq(mealLogEntries.slotId, slotId)))
-    .limit(1);
-
-  if (existing[0]) {
-    await db.update(mealLogEntries).set({
-      ...(data.status !== undefined ? { status: data.status, loggedAt: new Date() } : {}),
-      ...(data.note !== undefined ? { substituteNote: data.note } : {}),
-    }).where(eq(mealLogEntries.id, existing[0].id));
-  } else {
-    await db.insert(mealLogEntries).values({
-      id: nanoid(),
-      dailyLogId,
-      slotId,
-      status: data.status ?? 'pending',
-      substituteNote: data.note ?? null,
-      loggedAt: new Date(),
+  await db.transaction(async tx => {
+    const date = todayStr();
+    let [dailyLog] = await tx.select().from(dailyNutritionLogs)
+      .where(and(eq(dailyNutritionLogs.athleteId, athleteId), eq(dailyNutritionLogs.date, date))).limit(1);
+    if (!dailyLog) {
+      const id = nanoid();
+      await tx.insert(dailyNutritionLogs).values({ id, athleteId, date, mealPlanId, createdAt: new Date() });
+      [dailyLog] = await tx.select().from(dailyNutritionLogs).where(eq(dailyNutritionLogs.id, id)).limit(1);
+    }
+    const [existing] = await tx.select().from(mealLogEntries)
+      .where(and(eq(mealLogEntries.dailyLogId, dailyLog.id), eq(mealLogEntries.slotId, slotId))).limit(1);
+    const now = new Date();
+    const id = existing?.id ?? nanoid();
+    const version = (existing?.syncVersion ?? 0) + 1;
+    const status = data.status ?? existing?.status ?? 'pending';
+    const note = data.note !== undefined ? data.note : existing?.substituteNote ?? null;
+    if (existing) {
+      await tx.update(mealLogEntries).set({ status, substituteNote: note, loggedAt: now, syncVersion: version })
+        .where(eq(mealLogEntries.id, id));
+    } else {
+      await tx.insert(mealLogEntries).values({
+        id, dailyLogId: dailyLog.id, slotId, status, substituteNote: note, loggedAt: now, syncVersion: version,
+      });
+    }
+    await enqueueSyncMutation(tx, {
+      athleteId,
+      entityType: 'nutrition_entry',
+      entityId: id,
+      operation: existing && existing.syncVersion > 0 ? 'update' : 'create',
+      baseVersion: existing && existing.syncVersion > 0 ? existing.syncVersion : null,
+      occurredAt: now,
+      payload: { mealKey: slotId, status, note, occurredAt: now.getTime(), version },
     });
-  }
+  });
 }
 
 export async function getTodayWater(athleteId: string): Promise<number> {

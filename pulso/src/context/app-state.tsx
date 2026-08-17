@@ -53,7 +53,7 @@ import {
 } from '@/db/workout';
 import { CLEARED_REST_STATE, loadRestTimerState, RestTimerState, saveRestTimerState } from '@/lib/rest-timer-store';
 import { addWidgetRestListener } from '@/modules/pulso-widget';
-import { getStoredAssignmentMeta, syncAssignments } from '@/lib/sync';
+import { getStoredAssignmentMeta, syncAssignments, syncMobileData } from '@/lib/sync';
 import { pushAthleteProfile, syncAthleteProfile } from '@/lib/profile-sync';
 import { formatWeight } from '@/lib/units';
 import { EMPTY_WIDGET_DATA, syncWorkoutWidgets } from '@/lib/widget-bridge';
@@ -95,6 +95,7 @@ export interface Exercise {
   muscleGroup: 'chest' | 'back' | 'legs' | 'shoulders' | 'arms' | 'core' | 'full' | null;
   wxId: string | null;
   gifPath: string | null;
+  instructions: string | null;
 }
 
 export interface Meal {
@@ -273,6 +274,8 @@ interface AppContextValue {
     reps: number;
     weight: number;
     step: number;
+    gifPath?: string | null;
+    instructions?: string | null;
   }) => Promise<void>;
   // progress
   setMetric: (m: MetricKey) => void;
@@ -350,6 +353,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           assignedWorkoutBy = meta.workoutBy;
           assignedMealsBy = meta.mealsBy;
         }
+        await syncMobileData(userId);
 
         const [profile, session, entries, water, histories, photos] =
           await Promise.all([
@@ -387,6 +391,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           muscleGroup: e.muscleGroup,
           wxId: e.wxId,
           gifPath: e.gifPath,
+          instructions: e.instructions,
         }));
         const prMap: Record<string, number> = {};
         for (const e of exercises) prMap[e.id] = e.basePR;
@@ -540,6 +545,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         muscleGroup: e.muscleGroup,
         wxId: e.wxId,
         gifPath: e.gifPath,
+        instructions: e.instructions,
       }));
       const prMap: Record<string, number> = {};
       for (const e of exercises) prMap[e.id] = Math.max(e.basePR, s.prMap[e.id] ?? 0);
@@ -810,7 +816,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     reconcile();
     const subscription = RNAppState.addEventListener('change', nextAppState => {
-      if (nextAppState === 'active') reconcile();
+      if (nextAppState === 'active') {
+        reconcile();
+        const uid = userRef.current;
+        if (uid) syncMobileData(uid).catch(() => {});
+      }
     });
     // Covers the case the AppState listener misses: a widget button tapped while the app
     // is alive but backgrounded, so it never transitions back to 'active'.
@@ -940,6 +950,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       step: values.step || 2.5,
       wxId: values.wxId,
       gifPath: values.gifPath,
+      instructions: values.instructions,
     };
     setState(st => ({ ...st, editingEx: false }));
     updatePlanExercise(uid, cur.id, data)
@@ -963,6 +974,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       step: values.step || 2.5,
       wxId: values.wxId,
       gifPath: values.gifPath,
+      instructions: values.instructions,
     };
     setState(st => ({ ...st, addingEx: false }));
     addPlanExercise(uid, templateId, data)
@@ -1030,6 +1042,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     weight: number;
     step: number;
     gifPath?: string | null;
+    instructions?: string | null;
   }) => {
     const uid = userRef.current;
     const templateId = templateIdRef.current;
@@ -1043,6 +1056,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       peso: exercise.weight,
       step: exercise.step,
       gifPath: exercise.gifPath,
+      instructions: exercise.instructions,
     });
     await reloadPlan();
   }, [reloadPlan]);

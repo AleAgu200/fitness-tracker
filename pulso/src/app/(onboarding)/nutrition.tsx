@@ -37,11 +37,6 @@ const BUDGET_OPTIONS = [
   { label: 'Flexible', value: 'high' },
 ];
 
-const LATIN_OPTIONS = [
-  { label: 'Sí, priorizalos', value: 'yes' },
-  { label: 'No es necesario', value: 'no' },
-];
-
 function MealsStepper({ value, onChange }: { value: number; onChange: (next: number) => void }) {
   const { accent } = usePreferences();
   const C = useColors();
@@ -87,7 +82,6 @@ export default function OnboardingNutritionScreen() {
   const [preferredMealTimes, setPreferredMealTimes] = useState<string[]>([]);
   const [cookingTime, setCookingTime] = useState<CookingTimeBudget | null>(null);
   const [budget, setBudget] = useState<BudgetLevel | null>(null);
-  const [latinPreference, setLatinPreference] = useState<boolean | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,7 +104,6 @@ export default function OnboardingNutritionScreen() {
         setPreferredMealTimes(draft?.preferredMealTimes ?? []);
         setCookingTime(draft?.cookingTimeBudget ?? null);
         setBudget(draft?.budgetLevel ?? null);
-        setLatinPreference(draft?.hondurasLatinPreference ?? null);
         setLoaded(true);
       })
       .catch(() => {
@@ -127,8 +120,8 @@ export default function OnboardingNutritionScreen() {
 
   async function saveAndContinue() {
     if (!userId || saving) return;
-    if (!dietaryStyle || !cookingTime || !budget || latinPreference == null) {
-      setError('Completá el estilo de alimentación, tiempo de cocina, presupuesto y preferencia regional.');
+    if (!dietaryStyle || !cookingTime || !budget) {
+      setError('Completá el estilo de alimentación, tiempo de cocina y presupuesto.');
       return;
     }
     const invalidTime = preferredMealTimes.find(time => !validMealTime(time));
@@ -149,7 +142,6 @@ export default function OnboardingNutritionScreen() {
         preferredMealTimes,
         cookingTimeBudget: cookingTime,
         budgetLevel: budget,
-        hondurasLatinPreference: latinPreference,
       });
       router.push('/(onboarding)/safety' as never);
     } catch {
@@ -159,7 +151,7 @@ export default function OnboardingNutritionScreen() {
     }
   }
 
-  const complete = Boolean(dietaryStyle && cookingTime && budget && latinPreference != null);
+  const complete = Boolean(dietaryStyle && cookingTime && budget);
 
   return (
     <WizardShell
@@ -220,13 +212,6 @@ export default function OnboardingNutritionScreen() {
             options={BUDGET_OPTIONS}
             selected={budget ?? ''}
             onChange={next => setBudget(typeof next === 'string' ? next as BudgetLevel : null)}
-          />
-          <View style={{ height: 15 }} />
-          <FieldLabel>¿PRIORIZAR SABORES E INGREDIENTES DE HONDURAS Y LATINOAMÉRICA?</FieldLabel>
-          <ChipSelect
-            options={LATIN_OPTIONS}
-            selected={latinPreference == null ? '' : latinPreference ? 'yes' : 'no'}
-            onChange={next => setLatinPreference(next === 'yes')}
           />
         </>
       ) : null}

@@ -163,7 +163,7 @@ function buildSystemPrompt(foodCount: number, exerciseCount: number): string {
     "- Los `grams` son una porción razonable y realista para cada alimento. El servidor los reajusta después para cuadrar con los objetivos calóricos, así que prioriza proporciones sensatas por encima de sumas exactas.",
     "- No calcules ni menciones calorías ni macronutrientes: no hay campo para ellos.",
     "- No asignes horarios de comida ni días de la semana: el servidor los asigna.",
-    "- Cuando estén presentes, trata `trainingLocation`, `cookingTimeBudget`, `budgetLevel` y `hondurasLatinPreference` como preferencias obligatorias dentro del catálogo permitido.",
+    "- Cuando estén presentes, trata `trainingLocation`, `cookingTimeBudget` y `budgetLevel` como preferencias obligatorias dentro del catálogo permitido.",
     "- No prescribas peso inicial (no hay campo para eso); usa progressionIncrementKg para la progresión futura.",
     "- Devuelve `assumptions` (supuestos que hiciste) y `safetyNotes` (advertencias o límites que el usuario debería conocer) siempre, aunque estén vacíos.",
     "- Responde siempre en español.",

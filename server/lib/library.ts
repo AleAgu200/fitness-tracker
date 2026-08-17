@@ -13,6 +13,8 @@ export interface Food {
   proteinG: number;
   carbsG: number;
   fatG: number;
+  source: string;
+  externalId: string | null;
   createdBy: string | null;
   createdAt: number;
 }
@@ -22,6 +24,10 @@ export interface LibraryExercise {
   name: string;
   muscleGroup: string;
   equipment: string;
+  instructions: string | null;
+  source: string;
+  externalId: string | null;
+  mediaUrl: string | null;
   createdBy: string | null;
   createdAt: number;
 }
@@ -36,7 +42,7 @@ function newId(): string {
 
 // ── seed (per 100 g for foods) ───────────────────────────────────────────────
 
-const SEED_FOODS: Omit<Food, "id" | "createdBy" | "createdAt">[] = [
+const SEED_FOODS: Omit<Food, "id" | "createdBy" | "createdAt" | "source" | "externalId">[] = [
   { name: "Pechuga de pollo",   category: "proteína",     kcal: 165, proteinG: 31,   carbsG: 0,    fatG: 3.6 },
   { name: "Carne magra (nalga)",category: "proteína",     kcal: 155, proteinG: 28,   carbsG: 0,    fatG: 4.5 },
   { name: "Huevo entero",       category: "proteína",     kcal: 143, proteinG: 12.6, carbsG: 0.7,  fatG: 9.5 },
@@ -121,7 +127,7 @@ const SEED_FOODS: Omit<Food, "id" | "createdBy" | "createdAt">[] = [
   { name: "Mantequilla",        category: "grasa",        kcal: 717, proteinG: 0.9,  carbsG: 0.1,  fatG: 81.1 },
 ];
 
-const SEED_EXERCISES: Omit<LibraryExercise, "id" | "createdBy" | "createdAt">[] = [
+const SEED_EXERCISES: Omit<LibraryExercise, "id" | "createdBy" | "createdAt" | "instructions" | "source" | "externalId" | "mediaUrl">[] = [
   { name: "Sentadilla",             muscleGroup: "piernas",   equipment: "barra" },
   { name: "Sentadilla frontal",     muscleGroup: "piernas",   equipment: "barra" },
   { name: "Peso muerto",            muscleGroup: "espalda",   equipment: "barra" },
@@ -189,11 +195,43 @@ export async function listFoods(q = ""): Promise<Food[]> {
     .orderBy(asc(libraryFoods.category), asc(libraryFoods.name));
 }
 
-export async function createFood(userId: string, f: { name: string; category: string; kcal: number; proteinG: number; carbsG: number; fatG: number }): Promise<Food> {
+export interface FoodInput {
+  name: string;
+  category: string;
+  kcal: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+  source?: "custom" | "usda";
+  externalId?: string | null;
+}
+
+export async function createFood(userId: string, f: FoodInput): Promise<{ food: Food; duplicate: boolean }> {
   await ensureSeeded();
-  const food: Food = { id: newId(), ...f, createdBy: userId, createdAt: Date.now() };
+  const source = f.source ?? "custom";
+  if (source === "usda" && f.externalId) {
+    const [existing] = await db.select().from(libraryFoods).where(and(
+      eq(libraryFoods.createdBy, userId),
+      eq(libraryFoods.source, source),
+      eq(libraryFoods.externalId, f.externalId),
+    ));
+    if (existing) return { food: existing, duplicate: true };
+  }
+  const food: Food = {
+    id: newId(),
+    name: f.name,
+    category: f.category,
+    kcal: f.kcal,
+    proteinG: f.proteinG,
+    carbsG: f.carbsG,
+    fatG: f.fatG,
+    source,
+    externalId: f.externalId ?? null,
+    createdBy: userId,
+    createdAt: Date.now(),
+  };
   await db.insert(libraryFoods).values(food);
-  return food;
+  return { food, duplicate: false };
 }
 
 /** Only the creator can modify custom items; seeded items are read-only */
@@ -218,16 +256,46 @@ export async function listExercises(q = ""): Promise<LibraryExercise[]> {
     .orderBy(asc(libraryExercises.muscleGroup), asc(libraryExercises.name));
 }
 
-export async function createExercise(userId: string, e: { name: string; muscleGroup: string; equipment: string }): Promise<LibraryExercise> {
-  await ensureSeeded();
-  const ex: LibraryExercise = { id: newId(), ...e, createdBy: userId, createdAt: Date.now() };
-  await db.insert(libraryExercises).values(ex);
-  return ex;
+export interface ExerciseInput {
+  name: string;
+  muscleGroup: string;
+  equipment: string;
+  instructions?: string | null;
+  source?: "custom" | "workoutx";
+  externalId?: string | null;
+  mediaUrl?: string | null;
 }
 
-export async function updateExercise(userId: string, id: string, e: { name: string; muscleGroup: string; equipment: string }): Promise<boolean> {
+export async function createExercise(userId: string, e: ExerciseInput): Promise<{ exercise: LibraryExercise; duplicate: boolean }> {
+  await ensureSeeded();
+  const source = e.source ?? "custom";
+  if (source === "workoutx" && e.externalId) {
+    const [existing] = await db.select().from(libraryExercises).where(and(
+      eq(libraryExercises.createdBy, userId),
+      eq(libraryExercises.source, source),
+      eq(libraryExercises.externalId, e.externalId),
+    ));
+    if (existing) return { exercise: existing, duplicate: true };
+  }
+  const ex: LibraryExercise = {
+    id: newId(),
+    name: e.name,
+    muscleGroup: e.muscleGroup,
+    equipment: e.equipment,
+    instructions: e.instructions ?? null,
+    source,
+    externalId: e.externalId ?? null,
+    mediaUrl: e.mediaUrl ?? null,
+    createdBy: userId,
+    createdAt: Date.now(),
+  };
+  await db.insert(libraryExercises).values(ex);
+  return { exercise: ex, duplicate: false };
+}
+
+export async function updateExercise(userId: string, id: string, e: Pick<ExerciseInput, "name" | "muscleGroup" | "equipment" | "instructions">): Promise<boolean> {
   const result = await db.update(libraryExercises)
-    .set(e)
+    .set({ ...e, instructions: e.instructions ?? null })
     .where(and(eq(libraryExercises.id, id), eq(libraryExercises.createdBy, userId)));
   return (result.count ?? 0) > 0;
 }

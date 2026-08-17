@@ -3,7 +3,7 @@ import { randomBytes } from "crypto";
 import { and, asc, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "@/db";
-import { messages, supervisionLinks } from "@/db/schema";
+import { careAssignments, messages, organizationClients, organizationMemberships, supervisionLinks } from "@/db/schema";
 
 export interface Message {
   id: string;
@@ -16,6 +16,22 @@ export interface Message {
 
 /** Messaging is only allowed between users with an active supervision link */
 export async function areLinked(a: string, b: string): Promise<boolean> {
+  const [projected] = await db
+    .select({ id: careAssignments.id })
+    .from(careAssignments)
+    .innerJoin(organizationClients, eq(organizationClients.id, careAssignments.organizationClientId))
+    .innerJoin(organizationMemberships, eq(organizationMemberships.id, careAssignments.professionalMembershipId))
+    .where(and(
+      eq(careAssignments.status, "active"),
+      eq(organizationClients.status, "active"),
+      eq(organizationMemberships.status, "active"),
+      or(
+        and(eq(organizationMemberships.userId, a), eq(organizationClients.athleteId, b)),
+        and(eq(organizationMemberships.userId, b), eq(organizationClients.athleteId, a)),
+      ),
+    ));
+  if (projected) return true;
+
   const [row] = await db
     .select({ id: supervisionLinks.id })
     .from(supervisionLinks)

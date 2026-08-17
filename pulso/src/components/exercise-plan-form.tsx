@@ -35,6 +35,7 @@ interface MapSuggestion {
   weight: number;
   step: number;
   gifPath?: string | null;
+  instructions?: string | null;
 }
 
 const MUSCLES: { key: MuscleGroup; label: string }[] = [
@@ -57,6 +58,8 @@ export interface ExercisePlanValues {
   wxId?: string | null;
   /** Local exercise-catalog GIF path, for the demo animation — undefined on initial values means "unknown/new" */
   gifPath?: string | null;
+  /** Spanish technique guide paired with the GIF. */
+  instructions?: string | null;
 }
 
 /** An exercise already in whichever day's plan is being edited, for the muscle
@@ -148,7 +151,15 @@ export function ExercisePlanForm({
   // vocabulary; otherwise the small hand-picked fallback (no GIF) for the two
   // muscles the free dataset doesn't cover (tibialis, neck).
   const selectedSuggestions: MapSuggestion[] = catalogTargets
-    ? catalogSuggestions.map(ex => ({ name: ex.name, sets: 3, reps: 8, weight: 0, step: 2.5, gifPath: ex.gifPath }))
+    ? catalogSuggestions.map(ex => ({
+        name: ex.name,
+        sets: 3,
+        reps: 8,
+        weight: 0,
+        step: 2.5,
+        gifPath: ex.gifPath,
+        instructions: ex.instructions,
+      }))
     : selectedMuscleKey ? POPULAR_EXERCISES[selectedMuscleKey] ?? [] : [];
   const selectedExercises = selectedMuscle?.exercises.filter(exercise =>
     !selectedMuscleDetail ||
@@ -208,6 +219,11 @@ export function ExercisePlanForm({
       : unchangedName
         ? initial.wxId ?? null
         : null;
+    const instructions = selectedCatalog
+      ? selectedCatalog.instructions
+      : unchangedName
+        ? initial.instructions ?? null
+        : null;
     onSave({
       nombre: nombre.trim(),
       target: Math.max(1, +target || 1),
@@ -216,6 +232,7 @@ export function ExercisePlanForm({
       step: +step || 2.5,
       wxId,
       gifPath,
+      instructions,
     });
   }
 

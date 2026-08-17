@@ -5,3 +5,4 @@ export * from './nutrition';
 export * from './habits';
 export * from './ai';
 export * from './onboarding';
+export * from './sync';

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-import { listExercises, listFoods } from "@/lib/library";
-import { listAllWgerExercises } from "@/lib/wger";
+import { listGenerationCatalog } from "@/lib/exercise-catalog";
+import { listFoods } from "@/lib/library";
 
 import {
   calculateTargets,
@@ -48,10 +48,6 @@ export interface RawGenerationRequest {
   preferredMealTimes?: string[];
   cookingTimeBudget?: "minimal" | "moderate" | "flexible";
   budgetLevel?: "low" | "medium" | "high";
-  hondurasLatinPreference?: boolean;
-  isPregnantOrBreastfeeding?: boolean;
-  hasEatingDisorderHistory?: boolean;
-  hasUncontrolledMedicalCondition?: boolean;
 }
 
 const nonEmptyText = z.string().trim().min(1);
@@ -79,10 +75,6 @@ export const rawGenerationRequestSchema: z.ZodType<RawGenerationRequest> = z.obj
   preferredMealTimes: z.array(z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)).max(8).optional(),
   cookingTimeBudget: z.enum(["minimal", "moderate", "flexible"]).optional(),
   budgetLevel: z.enum(["low", "medium", "high"]).optional(),
-  hondurasLatinPreference: z.boolean().optional(),
-  isPregnantOrBreastfeeding: z.boolean().optional(),
-  hasEatingDisorderHistory: z.boolean().optional(),
-  hasUncontrolledMedicalCondition: z.boolean().optional(),
 });
 
 export type AssembleAndGenerateResult =
@@ -117,9 +109,6 @@ export async function assembleAndGenerate(
     heightCm: input.heightCm,
     weightKg: input.weightKg,
     goal: input.goal,
-    isPregnantOrBreastfeeding: input.isPregnantOrBreastfeeding,
-    hasEatingDisorderHistory: input.hasEatingDisorderHistory,
-    hasUncontrolledMedicalCondition: input.hasUncontrolledMedicalCondition,
   });
 
   if (!safety.eligibleForAutoGeneration) {
@@ -141,8 +130,7 @@ export async function assembleAndGenerate(
   });
 
   const pulsoFoods = await listFoods();
-  const pulsoExercises = await listExercises();
-  const wgerExercises = await listAllWgerExercises();
+  const animatedExercises = listGenerationCatalog();
 
   const eligibleFoods: EligibleFood[] = filterEligibleFoods(pulsoFoods, {
     dietaryStyle: input.dietaryStyle,
@@ -163,22 +151,18 @@ export async function assembleAndGenerate(
     excludedMuscleGroups: mapLimitationsToExcludedMuscleGroups(input.injuriesAndLimitations),
     excludedExerciseNames: input.excludedExercises,
   };
-  const eligibleExercises: EligibleExercise[] = [
-    ...filterEligibleExercises(pulsoExercises, exerciseRestrictions).map((exercise) => ({
-      id: exercise.id,
-      source: "pulso" as const,
-      name: exercise.name,
-      muscleGroup: exercise.muscleGroup,
-      equipment: exercise.equipment,
-    })),
-    ...filterEligibleExercises(wgerExercises, exerciseRestrictions).map((exercise) => ({
-      id: exercise.id,
-      source: "wger" as const,
-      name: exercise.name,
-      muscleGroup: exercise.muscleGroup,
-      equipment: exercise.equipment,
-    })),
-  ];
+  const eligibleExercises: EligibleExercise[] = filterEligibleExercises(
+    animatedExercises,
+    exerciseRestrictions,
+  ).map((exercise) => ({
+    id: exercise.id,
+    source: "pulso" as const,
+    name: exercise.name,
+    muscleGroup: exercise.muscleGroup,
+    equipment: exercise.equipment,
+    gifPath: exercise.gifPath,
+    instructions: exercise.instructions,
+  }));
 
   const generationInput: GenerationInput = {
     targets: {
@@ -198,7 +182,6 @@ export async function assembleAndGenerate(
       preferredMealTimes: input.preferredMealTimes,
       cookingTimeBudget: input.cookingTimeBudget,
       budgetLevel: input.budgetLevel,
-      hondurasLatinPreference: input.hondurasLatinPreference,
     },
     eligibleFoods,
     eligibleExercises,
@@ -207,5 +190,9 @@ export async function assembleAndGenerate(
   const plan = await generatePlan(generationInput, {
     onProgress: options.onProgress,
   });
-  return { ok: true, plan, eligibleFoods, eligibleExercises };
+  const usedExerciseIds = new Set(
+    plan.workout.days.flatMap((day) => day.exercises.map((exercise) => exercise.exerciseId)),
+  );
+  const usedExercises = eligibleExercises.filter((exercise) => usedExerciseIds.has(exercise.id));
+  return { ok: true, plan, eligibleFoods, eligibleExercises: usedExercises };
 }

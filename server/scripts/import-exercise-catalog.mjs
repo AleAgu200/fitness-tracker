@@ -123,6 +123,7 @@ for (const ex of raw) {
     equipment,
     target: ex.target,
     secondaryMuscles: ex.secondary_muscles,
+    instructions: ex.instructions?.es?.trim() || ex.instructions?.en?.trim() || "",
     imagePath: `/exercises/images/${imageFile}`,
     gifPath: `/exercises/gifs/${gifFile}`,
   });

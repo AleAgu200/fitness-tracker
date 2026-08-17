@@ -213,10 +213,6 @@ export default function GeneratingScreen() {
         preferredMealTimes: generationProfile.preferredMealTimes,
         cookingTimeBudget: generationProfile.cookingTimeBudget,
         budgetLevel: generationProfile.budgetLevel,
-        hondurasLatinPreference: generationProfile.hondurasLatinPreference,
-        isPregnantOrBreastfeeding: generationProfile.isPregnantOrBreastfeeding,
-        hasEatingDisorderHistory: generationProfile.hasEatingDisorderHistory,
-        hasUncontrolledMedicalCondition: generationProfile.hasUncontrolledMedicalCondition,
       };
 
       await startGeneration(body);

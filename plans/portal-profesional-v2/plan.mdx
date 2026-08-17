@@ -1,0 +1,608 @@
+---
+title: "PULSO — Portal profesional centrado en seguimiento individual"
+brief: "Plan de mejora para interacción uno a uno, sincronización detallada y colaboración entre varios profesionales."
+kind: "plan"
+status: "draft"
+localOnly: true
+---
+
+# PULSO — Portal profesional centrado en seguimiento individual
+
+## Recomendación
+
+Convertir el portal actual —lista de atletas, chat y editor de un único plan activo— en un **espacio de seguimiento profesional**. La unidad principal deja de ser “un plan asignado” y pasa a ser “una relación de acompañamiento”: el profesional detecta quién requiere atención, abre un expediente con contexto longitudinal, interviene mediante mensaje, check-in, tarea o ajuste de plan y registra el resultado.
+
+El primer corte debe cerrar ese ciclo para un atleta antes de añadir pagos, clases grupales o automatizaciones avanzadas. La arquitectura, sin embargo, debe nacer con organizaciones, varios profesionales, un responsable principal por disciplina y colaboradores con permisos explícitos.
+
+**Terminado significa que:**
+
+- Coach o nutriólogo abre el portal y ve una bandeja ordenada por señales explicables: check-in pendiente, caída de adherencia, inactividad, plan por terminar o mensaje sin responder.
+- El expediente individual reúne resumen, progreso, check-ins, plan vigente e historial, conversación, notas y tareas sin perder el contexto al cambiar de herramienta.
+- La app móvil sincroniza actividad detallada mediante una cola local resistente a conexión intermitente; el atleta controla qué categorías comparte.
+- Una organización puede invitar profesionales, asignarlos a atletas, transferir responsabilidad y auditar quién vio o modificó información.
+- Las reglas de acceso se prueban en el servidor; ocultar una pestaña en la interfaz nunca cuenta como autorización.
+
+<Callout id="decision-product-model" tone="decision">
+
+**Decisión de producto:** conservar SQLite como base operativa offline del atleta, pero dejar de tratar toda la actividad como exclusivamente local. El dispositivo origina la actividad; después del acuse de recibo, el servidor mantiene la réplica canónica para portal, recuperación y futuros dispositivos. Asignaciones, permisos y configuración profesional son autoritativos en servidor. El primer corte permite un solo dispositivo móvil escritor por atleta; una reinstalación recupera del servidor y el soporte para dos escritores concurrentes queda diferido.
+
+</Callout>
+
+## Qué existe hoy y qué falta
+
+PULSO ya cuenta con Better Auth, roles `coach` y `nutritionist`, vínculos por invitación, mensajería, notificaciones push, bibliotecas de ejercicios/alimentos y asignación versionada de entrenamiento o dieta. El portal concentra casi todo en `server/app/portal/page.tsx`; el detalle de progreso todavía muestra el placeholder de la fase 5. En móvil ya existen las fuentes locales necesarias: sesiones, sets, tonelaje, PRs, estados de comidas, notas de sustitución, agua, check-ins, rachas y mediciones.
+
+<Table
+  id="current-target"
+  columns={["Área", "Situación actual", "Resultado objetivo"]}
+  rows={[
+    ["Inicio", "Conteos de atletas, mensajes y vínculos", "Bandeja priorizada por necesidad de intervención"],
+    ["Atleta", "Editor de plan + chat en una sola página", "Expediente longitudinal con acciones contextuales"],
+    ["Progreso", "Placeholder sin snapshots", "Series de 7/28/90 días, causas y frescura del dato"],
+    ["Check-ins", "Check-in local implícito", "Formularios recurrentes, revisión y seguimiento"],
+    ["Planes", "Un payload activo; asignar reemplaza", "Borrador, publicación, vigencia, historial y siguiente fase"],
+    ["Equipo", "Rol global y vínculo directo", "Organización, membresías, responsables, colaboradores y auditoría"],
+    ["Sincronización", "Pull de asignaciones + perfil parcial", "Push/pull incremental de actividad autorizada"],
+  ]}
+/>
+
+## Hallazgos del research
+
+Los productos más maduros convergen en funciones que ayudan a decidir y actuar, no solo a almacenar datos:
+
+- TrueCoach permite ordenar clientes por próximo plan requerido y cumplimiento, y usar grupos para segmentar trabajo. Esto valida que la vista principal debe responder “¿a quién atiendo primero?”. [TrueCoach — Managing Your Clients](https://help.truecoach.co/en/articles/2403919-managing-your-clients)
+- Trainerize combina cumplimiento semanal de entrenamiento, nutrición y hábitos con agenda y tendencias por rango temporal. Sus check-ins recurrentes recogen energía, dolor, motivación, obstáculos y necesidad de ajustes. [Insights Dashboard](https://help.trainerize.com/hc/en-us/articles/46648417703956-Using-the-Client-Insights-Dashboard-Early-Access) · [Check-In Forms](https://help.trainerize.com/hc/en-us/articles/31369316335124-Sharing-Check-In-Forms-with-Clients)
+- Nutrium distingue comida cumplida, sustituida, añadida, omitida o sin datos y conserva notas/fotos; esa semántica es mucho más accionable que un porcentaje aislado. [Nutrium — Food diary follow-up](https://help.nutrium.com/en/articles/5415241-when-can-my-clients-register-their-food-diary-and-how-can-i-analyze-it)
+- Everfit agrupa “en riesgo”, “requiere atención”, formularios por revisar, programa por terminar e inactividad; además mantiene notas privadas dentro del mismo flujo de revisión. [Everfit — Coach Check-in Dashboard](https://help.everfit.io/en/articles/14495409-introducing-coach-check-in-dashboard-beta)
+- Practice Better separa el acceso a expedientes reales del uso de plantillas compartidas. Esa separación es importante para PULSO: colaborar sobre un atleta y reutilizar recursos son permisos distintos. [Practice Better — Team Member Access](https://help.practicebetter.io/hc/en-us/articles/360040868352-Understanding-Team-Member-Access-to-Client-Work)
+- TrueCoach y Trainerize muestran que un equipo necesita propietario/administrador, reasignación de clientes y visibilidad limitada para profesionales regulares. [TrueCoach — Team Accounts](https://help.truecoach.co/en/articles/2403964-team-accounts) · [Trainerize — Staff Permissions](https://help.trainerize.com/hc/en-us/articles/360000695586-Trainer-Manager-and-Staff-Permissions)
+
+La oportunidad de PULSO no es replicar todos esos productos. Es unir sus mejores patrones de seguimiento con la fortaleza existente de PULSO: registro rápido y offline en el teléfono.
+
+## Modelo operativo propuesto
+
+### 1. Bandeja de atención
+
+La ruta inicial será `/portal/atencion`. Cada fila explica la señal y ofrece la siguiente acción; no se mostrará un “score de riesgo” opaco.
+
+Señales iniciales calculadas por reglas auditables:
+
+- **Seguimiento:** check-in nuevo sin revisar, check-in vencido o tarea vencida.
+- **Entrenamiento:** sesión programada omitida, adherencia 7 días bajo el umbral personal, caída relevante frente a sus 28 días o plan por terminar.
+- **Nutrición:** aumento de sustituciones/omisiones, varios días sin registro o nota que pide ayuda.
+- **Bienestar:** dolor, fatiga, sueño o estrés reportado fuera del rango acordado. PULSO presenta el dato; no diagnostica.
+- **Relación:** mensaje sin responder, ausencia de actividad o intervención profesional sin seguimiento.
+
+Cada señal tendrá `reasonCode`, evidencia visible, fecha, severidad, profesional responsable y estados `open | acknowledged | resolved | dismissed`. Resolver exige registrar una acción o una nota breve; así la bandeja representa trabajo real y no alertas decorativas.
+
+### 2. Expediente individual
+
+La ruta `/portal/atletas/[athleteId]` será el centro de la relación:
+
+- **Resumen:** objetivo, plan/fase, equipo responsable, señales activas, último check-in, próxima acción y frescura del sync.
+- **Progreso:** adherencia de entrenamiento y nutrición, sesiones, volumen, PRs, peso y bienestar en 7/28/90 días. Siempre se muestran denominador, periodo y datos faltantes.
+- **Check-ins:** respuestas actuales, comparación con semanas previas, estado de revisión y acción tomada.
+- **Plan:** entrenamiento o nutrición según disciplina; borrador, vista previa, publicación con fecha efectiva, historial y reversión.
+- **Mensajes:** conversación existente, ahora con posibilidad de responder desde una señal, check-in o cambio de plan.
+- **Notas y tareas:** notas privadas del autor, notas visibles al equipo, tareas para el atleta o un profesional y vencimiento.
+- **Actividad:** línea de tiempo con check-ins, mensajes relevantes, publicaciones de plan, PRs, mediciones, notas y resoluciones.
+
+### 3. Interacciones uno a uno
+
+<Table
+  id="interaction-priority"
+  columns={["Prioridad", "Funcionalidad", "Por qué entra"]}
+  rows={[
+    ["P0", "Check-in semanal configurable", "Da contexto humano a los números y crea una cadencia de seguimiento"],
+    ["P0", "Respuesta contextual + acción de seguimiento", "Convierte observación en intervención trazable"],
+    ["P0", "Notas privadas, notas de equipo y tareas", "Evita que decisiones y compromisos queden perdidos en el chat"],
+    ["P0", "Historial de planes y fecha efectiva", "Permite ajustar sin perder la versión anterior ni sorprender al atleta"],
+    ["P0", "Bandeja de atención explicable", "Reduce el tiempo para decidir a quién contactar"],
+    ["P1", "Agenda 1:1 y recordatorios", "Conecta revisión, conversación y próxima cita"],
+    ["P1", "Plantillas de check-in, notas y mensajes", "Reduce repetición sin despersonalizar la relación"],
+    ["P1", "Documentos y fotos con visibilidad", "Mantiene recursos relevantes dentro del expediente"],
+    ["P1", "Exportación de progreso y resumen de consulta", "Facilita revisión conjunta y portabilidad"],
+    ["P2", "Pagos, paquetes y suscripciones", "Importante al escalar, pero no mejora todavía el núcleo de acompañamiento"],
+    ["P2", "Grupos, retos, video y automatizaciones complejas", "Aportan escala después de validar el flujo individual"],
+  ]}
+/>
+
+### 4. Colaboración entre profesionales
+
+Separar dos conceptos que hoy están mezclados en `user.role`:
+
+- **Rol organizacional:** `owner | admin | professional`. Controla equipo, configuración y transferencias.
+- **Disciplina profesional:** `coach | nutritionist` inicialmente; una persona puede tener una o ambas.
+
+Un atleta puede tener varios miembros de equipo, con **un responsable principal por disciplina** y colaboradores opcionales. El responsable recibe por defecto las señales de su dominio; colaboradores solo ven los dominios y atletas autorizados. Las plantillas compartidas pertenecen a la organización, mientras que notas privadas y trabajo sobre un expediente obedecen permisos separados.
+
+<Callout id="decision-permissions" tone="decision">
+
+**Modelo de permisos recomendado:** acceso mínimo por defecto. `owner/admin` administra equipo pero no recibe acceso clínico automático a todos los expedientes; ese acceso se concede por asignación o por un permiso explícito de supervisión. Coach puede editar entrenamiento; nutriólogo puede editar nutrición. Ambos pueden ver un resumen cruzado cuando el atleta lo autoriza, pero no modificar el dominio del otro.
+
+</Callout>
+
+En el primer corte, el consentimiento se concede por **organización + categoría** y el acceso efectivo exige además una asignación activa cuya disciplina incluya esa categoría. Un cambio de profesional no amplía categorías por sí mismo y siempre se comunica al atleta. Los mensajes existentes siguen siendo uno a uno y privados entre sus participantes; la colaboración sucede mediante notas marcadas explícitamente como `author | care_team | athlete`, no exponiendo automáticamente conversaciones cruzadas.
+
+## Datos y sincronización
+
+La sincronización detallada requiere dejar atrás el snapshot JSON diario como único contrato. Se propone una capa incremental con tablas de dominio y un resumen derivado para consultas rápidas.
+
+<Diagram id="sync-architecture" caption="Propiedad y flujo de datos de PULSO.">
+
+```html
+<div class="diagram-panel" data-rough>
+  <div class="diagram-card">
+    <strong>App del atleta</strong>
+    <div class="diagram-muted">SQLite sigue funcionando offline</div>
+    <div class="diagram-node">outbox de mutaciones</div>
+    <div class="diagram-node">planes recibidos</div>
+  </div>
+  <div class="diagram-card">
+    <strong>Contrato de sync</strong>
+    <div class="diagram-node">push idempotente</div>
+    <div class="diagram-node">pull por cursor</div>
+    <div class="diagram-node">consentimiento por categoría</div>
+  </div>
+  <div class="diagram-card">
+    <strong>Servidor PULSO</strong>
+    <div class="diagram-node">tablas de actividad</div>
+    <div class="diagram-node">resúmenes diarios derivados</div>
+    <div class="diagram-node">señales explicables</div>
+  </div>
+  <div class="diagram-card">
+    <strong>Portal profesional</strong>
+    <div class="diagram-node">bandeja de atención</div>
+    <div class="diagram-node">expediente individual</div>
+    <div class="diagram-node">acciones + auditoría</div>
+  </div>
+</div>
+```
+
+```css
+.diagram-panel { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.diagram-card { display:flex; flex-direction:column; gap:8px; padding:14px; border:1.4px solid var(--wf-line); background:var(--wf-card); }
+.diagram-node { padding:8px 10px; border:1.4px solid var(--wf-line); background:var(--wf-paper); }
+.diagram-muted { color:var(--wf-muted); }
+```
+
+</Diagram>
+
+Reglas del contrato:
+
+1. El servidor registra un `deviceId` por instalación y solo permite un dispositivo escritor activo por atleta en el primer corte. La clave idempotente es única por `(athleteId, deviceId, mutationId)`.
+2. Cada escritura de dominio y su registro en `sync_outbox` ocurren en la misma transacción SQLite. Si no se puede registrar la mutación, tampoco se confirma el cambio local.
+3. `POST /api/sync/push` recibe como máximo 100 mutaciones ordenadas, con `schemaVersion`, `mutationId`, `entityType`, `entityId`, `operation`, `baseVersion`, `occurredAt` y payload validado. Responde por elemento con `acked | retryable | rejected`, una secuencia monotónica de servidor y el error seguro cuando corresponda. Los reintentos conservan el orden por entidad.
+4. `GET /api/sync/pull?cursor=` usa un cursor opaco respaldado por `serverSequence`, nunca por la hora del dispositivo. Entrega cambios de servidor, acuses parciales pendientes y el siguiente cursor solo después de confirmar la página actual.
+5. Sesiones, sets y respuestas de check-in confirmadas son inmutables; una corrección crea una versión sucesora. Comidas y mediciones editables conservan `version`, `supersedesId` y tombstones. Los planes exigen `baseVersion`; un conflicto devuelve `409` sin perder el borrador.
+6. El servidor acepta la versión actual y la inmediatamente anterior del contrato durante una ventana de migración. Versiones más antiguas reciben una actualización requerida, sin aplicar parcialmente el lote.
+7. El servidor deriva `athlete_daily_summaries`; el portal nunca calcula adherencia recorriendo miles de sets o comidas en el navegador.
+8. La app muestra último sync, errores pendientes y categorías compartidas. Revocar una categoría bloquea de inmediato nuevas lecturas profesionales y futuros envíos; la retención o eliminación de copias históricas queda como decisión explícita de producto.
+
+<DataModel
+  id="portal-core-data-model"
+  entities={[
+    {
+      id: "organizations",
+      name: "organizations",
+      fields: [
+        { name: "id", type: "text", pk: true },
+        { name: "name", type: "text" },
+      ],
+    },
+    {
+      id: "organization_memberships",
+      name: "organization_memberships",
+      fields: [
+        { name: "id", type: "text", pk: true },
+        { name: "organizationId", type: "text", fk: "organizations.id" },
+        { name: "userId", type: "text", fk: "user.id" },
+        { name: "orgRole", type: "owner|admin|professional" },
+        { name: "status", type: "invited|active|revoked" },
+      ],
+    },
+    {
+      id: "professional_capabilities",
+      name: "professional_capabilities",
+      fields: [
+        { name: "membershipId", type: "text", fk: "organization_memberships.id" },
+        { name: "discipline", type: "coach|nutritionist" },
+      ],
+    },
+    {
+      id: "organization_clients",
+      name: "organization_clients",
+      fields: [
+        { name: "id", type: "text", pk: true },
+        { name: "organizationId", type: "text", fk: "organizations.id" },
+        { name: "athleteId", type: "text", fk: "user.id" },
+        { name: "status", type: "invited|active|paused|revoked" },
+      ],
+    },
+    {
+      id: "care_assignments",
+      name: "care_assignments",
+      fields: [
+        { name: "id", type: "text", pk: true },
+        { name: "organizationClientId", type: "text", fk: "organization_clients.id" },
+        { name: "professionalMembershipId", type: "text", fk: "organization_memberships.id" },
+        { name: "discipline", type: "coach|nutritionist" },
+        { name: "primary", type: "boolean" },
+        { name: "status", type: "active|revoked" },
+      ],
+    },
+    {
+      id: "sharing_consents",
+      name: "sharing_consents",
+      fields: [
+        { name: "id", type: "text", pk: true },
+        { name: "organizationClientId", type: "text", fk: "organization_clients.id" },
+        { name: "category", type: "training|nutrition|metrics|checkins|photos" },
+        { name: "grantedAt", type: "bigint" },
+        { name: "revokedAt", type: "bigint", nullable: true },
+      ],
+    },
+    {
+      id: "checkin_template_versions",
+      name: "checkin_template_versions",
+      fields: [
+        { name: "id", type: "text", pk: true },
+        { name: "organizationId", type: "text", fk: "organizations.id" },
+        { name: "discipline", type: "coach|nutritionist" },
+        { name: "schemaVersion", type: "integer" },
+        { name: "questions", type: "jsonb" },
+      ],
+    },
+    {
+      id: "checkin_requests",
+      name: "checkin_requests",
+      fields: [
+        { name: "id", type: "text", pk: true },
+        { name: "careAssignmentId", type: "text", fk: "care_assignments.id" },
+        { name: "athleteId", type: "text", fk: "user.id" },
+        { name: "templateVersionId", type: "text", fk: "checkin_template_versions.id" },
+        { name: "dueAt", type: "bigint" },
+        { name: "status", type: "pending|submitted|reviewed" },
+      ],
+    },
+    {
+      id: "checkin_responses",
+      name: "checkin_responses",
+      fields: [
+        { name: "id", type: "text", pk: true },
+        { name: "requestId", type: "text", fk: "checkin_requests.id" },
+        { name: "schemaVersion", type: "integer" },
+        { name: "answers", type: "jsonb" },
+        { name: "submittedAt", type: "bigint" },
+      ],
+    },
+    {
+      id: "attention_signals",
+      name: "attention_signals",
+      fields: [
+        { name: "id", type: "text", pk: true },
+        { name: "organizationId", type: "text", fk: "organizations.id" },
+        { name: "ownerAssignmentId", type: "text", fk: "care_assignments.id" },
+        { name: "checkinRequestId", type: "text", fk: "checkin_requests.id", nullable: true },
+        { name: "athleteId", type: "text", fk: "user.id" },
+        { name: "reasonCode", type: "text" },
+        { name: "severity", type: "info|attention|urgent" },
+        { name: "status", type: "open|acknowledged|resolved|dismissed" },
+      ],
+    },
+    {
+      id: "follow_up_tasks",
+      name: "follow_up_tasks",
+      fields: [
+        { name: "id", type: "text", pk: true },
+        { name: "organizationId", type: "text", fk: "organizations.id" },
+        { name: "attentionSignalId", type: "text", fk: "attention_signals.id", nullable: true },
+        { name: "athleteId", type: "text", fk: "user.id" },
+        { name: "assigneeMembershipId", type: "text", fk: "organization_memberships.id" },
+        { name: "dueAt", type: "bigint", nullable: true },
+        { name: "status", type: "open|done|cancelled" },
+      ],
+    },
+    {
+      id: "professional_notes",
+      name: "professional_notes",
+      fields: [
+        { name: "id", type: "text", pk: true },
+        { name: "organizationId", type: "text", fk: "organizations.id" },
+        { name: "athleteId", type: "text", fk: "user.id" },
+        { name: "authorMembershipId", type: "text", fk: "organization_memberships.id" },
+        { name: "visibility", type: "author|care_team|athlete" },
+        { name: "body", type: "text" },
+      ],
+    },
+    {
+      id: "sync_devices",
+      name: "sync_devices",
+      fields: [
+        { name: "id", type: "text", pk: true },
+        { name: "athleteId", type: "text", fk: "user.id" },
+        { name: "status", type: "active_writer|replaced|revoked" },
+        { name: "lastAckSequence", type: "bigint" },
+      ],
+    },
+    {
+      id: "sync_mutations",
+      name: "sync_mutations",
+      fields: [
+        { name: "id", type: "text", pk: true },
+        { name: "athleteId", type: "text", fk: "user.id" },
+        { name: "deviceId", type: "text", fk: "sync_devices.id" },
+        { name: "mutationId", type: "text" },
+        { name: "serverSequence", type: "bigint" },
+        { name: "schemaVersion", type: "integer" },
+      ],
+    },
+    {
+      id: "audit_events",
+      name: "audit_events",
+      fields: [
+        { name: "id", type: "text", pk: true },
+        { name: "organizationId", type: "text", fk: "organizations.id" },
+        { name: "actorMembershipId", type: "text", fk: "organization_memberships.id", nullable: true },
+        { name: "action", type: "text" },
+        { name: "subjectId", type: "text" },
+        { name: "occurredAt", type: "bigint" },
+      ],
+    },
+  ]}
+  relations={[
+    { from: "organizations", to: "organization_memberships", kind: "1-n" },
+    { from: "organization_memberships", to: "professional_capabilities", kind: "1-n" },
+    { from: "organizations", to: "organization_clients", kind: "1-n" },
+    { from: "organization_clients", to: "care_assignments", kind: "1-n" },
+    { from: "organization_clients", to: "sharing_consents", kind: "1-n" },
+    { from: "organizations", to: "checkin_template_versions", kind: "1-n" },
+    { from: "checkin_template_versions", to: "checkin_requests", kind: "1-n" },
+    { from: "care_assignments", to: "checkin_requests", kind: "1-n" },
+    { from: "checkin_requests", to: "checkin_responses", kind: "1-1" },
+    { from: "checkin_requests", to: "attention_signals", kind: "1-n" },
+    { from: "attention_signals", to: "follow_up_tasks", kind: "1-n" },
+    { from: "organization_memberships", to: "professional_notes", kind: "1-n" },
+    { from: "sync_devices", to: "sync_mutations", kind: "1-n" },
+    { from: "organizations", to: "audit_events", kind: "1-n" },
+  ]}
+/>
+
+Las tablas sincronizadas de entrenamiento, nutrición y mediciones se mantienen por dominio, no como un blob universal. `athlete_daily_summaries` es una proyección reconstruible, no la fuente de verdad. `audit_events` registra acceso sensible, cambios de permisos, publicación de planes y transferencias.
+
+Restricciones indispensables del esquema:
+
+- Una sola relación activa por `(organizationId, athleteId)` en `organization_clients` y una sola capacidad por `(membershipId, discipline)`.
+- `care_assignments` solo acepta una membresía profesional y un cliente de la misma organización. Hay como máximo un responsable principal activo por `(organizationClientId, discipline)`; colaboradores adicionales no son principales.
+- La disciplina de la asignación debe existir en `professional_capabilities`. Las consultas de expediente verifican en servidor membresía activa, asignación activa y consentimiento de categoría.
+- Las señales tienen una clave de deduplicación por atleta, organización, regla y ventana; toda señal y tarea conserva organización, propietario y actor histórico.
+- `sync_devices` permite un solo `active_writer` por atleta en el primer corte y `sync_mutations` impone unicidad sobre `(athleteId, deviceId, mutationId)` y sobre `serverSequence`.
+- Revocar usa estados y marcas de tiempo, no borrado en cascada. Planes, mensajes, notas, revisiones y auditoría mantienen sus autores aunque una membresía se desactive.
+- Tombstones y ledger idempotente se retienen por una ventana documentada superior al máximo periodo offline; la política exacta se fija antes de liberar el sync.
+
+## API propuesta
+
+<Table
+  id="api-plan"
+  columns={["Contrato", "Responsabilidad", "Autorización"]}
+  rows={[
+    ["POST /api/sync/push", "Lote idempotente de actividad móvil", "Atleta autenticado; solo su userId"],
+    ["GET /api/sync/pull?cursor=", "Cambios desde el último cursor", "Usuario autenticado; filtro server-side"],
+    ["GET /api/portal/attention", "Señales y siguiente acción", "Membresía + asignación al atleta"],
+    ["GET /api/portal/athletes/:id/overview", "Resumen, frescura, equipo y permisos", "Asignación activa"],
+    ["GET /api/portal/athletes/:id/progress", "Series agregadas por periodo", "Consentimiento de categoría"],
+    ["POST /api/check-ins/requests", "Solicitar o programar check-in", "Profesional asignado"],
+    ["POST /api/check-ins/:id/review", "Revisar y enlazar acción", "Profesional asignado"],
+    ["POST /api/portal/athletes/:id/tasks", "Crear tarea para atleta/profesional", "Asignación + disciplina"],
+    ["POST /api/organizations/:id/members", "Invitar profesional", "Owner/admin"],
+    ["POST /api/care-assignments", "Asignar o transferir responsabilidad", "Owner/admin o política delegada"],
+  ]}
+/>
+
+Todas las respuestas del portal deben incluir `dataFreshness` y `permissions`; esto permite representar datos parciales o revocados sin confundirlos con adherencia cero.
+
+## Migración desde el modelo actual
+
+La transición no debe reinterpretar ni borrar el historial existente:
+
+1. Crear una organización inicial por cuenta profesional existente; las uniones entre cuentas se hacen después mediante una acción explícita, no por heurística.
+2. Crear `organization_memberships` y `professional_capabilities` a partir de `user.role`, manteniendo temporalmente el rol global para compatibilidad.
+3. Convertir cada `supervision_link` activo en `organization_client` + `care_assignment`; si existen dos vínculos de la misma disciplina, exigir elegir responsable principal antes del corte.
+4. Asociar cada registro de `assigned_workouts` y `assigned_meal_plans` a organización, autor y asignación histórica. Añadir desde Fase 0 `version`, `effectiveAt`, `endsAt` y propietario, sin esperar al editor completo de Fase 3.
+5. Desplegar una versión de dual-read/dual-write: escribir ambos modelos, comparar conteos y permisos, ejecutar backfill idempotente y cambiar lecturas por bandera. Después del corte, el modelo anterior queda solo lectura durante una ventana de rollback.
+6. Desactivar vínculos mediante estado y `revokedAt`; no usar cascadas que eliminen planes, mensajes o auditoría. Retirar tablas y el rol global únicamente en una migración posterior verificada.
+
+## Roadmap recomendado
+
+### Fase 0 — Fundaciones y corte vertical
+
+**Objetivo:** probar el modelo completo con un atleta, un coach y un nutriólogo.
+
+- Añadir organización, membresías, capacidades, asignaciones, consentimiento y auditoría, junto con una pantalla/API mínima para invitar y asignar profesionales.
+- Ejecutar backfill y dual-read/dual-write del modelo actual; proteger autores e historial antes de cambiar las lecturas.
+- Diseñar y versionar el contrato push/pull; añadir `sync_outbox` transaccional local, registro de dispositivo y ledger idempotente servidor.
+- Crear un check-in semanal fijo y versionado con energía, sueño, dolor, estrés, motivación, obstáculos y nota libre. Su constructor configurable se mantiene en Fase 2.
+- Sincronizar ese check-in, sesiones terminadas, comidas `completed | substituted | pending` y peso. `added | omitted` no se usa hasta que el registro móvil lo produzca explícitamente.
+- Añadir a los planes actuales propietario, versión, vigencia y fin; crear un resumen individual mínimo y señales soportadas: check-in por revisar, error/sync desactualizado y plan por terminar cuando exista `endsAt`.
+
+**Salida:** una respuesta enviada offline aparece en el expediente correcto; ambos profesionales ven únicamente lo permitido, pueden ser asignados sin tocar la base manualmente y la revisión queda auditada.
+
+### Fase 1 — Bandeja de atención + expediente
+
+- Separar el monolito `server/app/portal/page.tsx` en rutas de Atención, Atletas y detalle.
+- Calcular resúmenes 7/28 días y únicamente señales respaldadas por los datos sincronizados: check-in pendiente, sesión programada sin completar, comidas pendientes/sustituidas, ausencia de datos, plan por terminar y mensaje sin responder.
+- Construir Resumen, Progreso y Actividad del expediente.
+- Añadir estado de sincronización, datos faltantes, error y acceso revocado.
+
+**Salida:** el profesional puede decidir a quién atender y entender por qué sin abrir cada atleta.
+
+### Fase 2 — Check-ins, notas y tareas
+
+- Evolucionar el check-in fijo de Fase 0 a un constructor pequeño de plantillas y programación semanal/quincenal.
+- Pantalla móvil para responder con energía, sueño, dolor, estrés, motivación, obstáculos y nota libre.
+- Revisión profesional con comparación previa y acciones: mensaje, tarea, ajuste de plan o marcar sin cambios.
+- Notas privadas del autor y notas compartidas con el equipo; toda nota muestra autor y visibilidad.
+
+**Salida:** cada check-in completa el ciclo solicitud → respuesta → revisión → acción → seguimiento.
+
+### Fase 3 — Planes profesionales de verdad
+
+- Sustituir “editar el payload activo” por borradores versionados, fecha efectiva, publicación y archivo.
+- Añadir planes semanales, fases, duplicación desde plantilla y vista previa de lo que recibirá el atleta.
+- Permitir cambios individuales sin alterar la plantilla maestra.
+- Señalar plan por terminar y preparar la siguiente fase desde la bandeja.
+
+**Salida:** ningún cambio sobrescribe silenciosamente la versión vigente y el atleta conoce cuándo entra en efecto.
+
+### Fase 4 — Operación con varios profesionales
+
+- Completar la pantalla Equipo iniciada en Fase 0: desactivar, cambiar disciplina, revisar carga de atletas y administrar colaboradores.
+- Responsable principal y colaboradores por disciplina; cobertura temporal y transferencia con historial.
+- Biblioteca organizacional separada de recursos privados.
+- Filtros “mis atletas / todos los autorizados” y asignación de tareas entre profesionales.
+
+**Salida:** retirar o transferir un profesional no borra historial ni deja atletas sin responsable.
+
+### Fase 5 — Agenda y negocio
+
+- Agenda 1:1, disponibilidad, recordatorios y resumen de consulta.
+- Documentos y exportación antes de agregar facturación.
+- Pagos, paquetes y suscripciones después de validar que el seguimiento aumenta retención y reduce trabajo manual.
+
+**Salida:** la operación comercial se apoya en el expediente existente en vez de crear un segundo sistema paralelo.
+
+## Mapa de implementación
+
+<FileTree
+  id="implementation-file-tree"
+  title="Áreas previstas"
+  entries={[
+    { path: "server/db/schema/organizations.ts", change: "added", note: "Organizaciones, membresías, disciplinas y roles organizacionales." },
+    { path: "server/db/schema/care.ts", change: "added", note: "Asignaciones, consentimientos, notas, tareas, señales y auditoría." },
+    { path: "server/db/schema/tracking.ts", change: "added", note: "Actividad sincronizada y resúmenes diarios derivados." },
+    { path: "server/db/schema.ts", change: "modified", note: "Exportar las tablas nuevas y mantener compatibilidad durante el corte." },
+    { path: "server/drizzle/000x_portal_professional.sql", change: "added", note: "DDL, índices únicos parciales y backfill idempotente." },
+    { path: "server/db/schema/assignments.ts", change: "modified", note: "Borrador, publicación, fecha efectiva e historial." },
+    { path: "server/lib/supervision.ts", change: "modified", note: "Migrar vínculo directo a asignaciones de equipo." },
+    { path: "server/lib/attention.ts", change: "added", note: "Reglas explicables y estados de resolución." },
+    { path: "server/lib/sync.ts", change: "added", note: "Push idempotente, cursor y proyecciones." },
+    { path: "server/lib/permissions.ts", change: "added", note: "Autorización central por organización, asignación, disciplina y consentimiento." },
+    { path: "server/lib/permissions.test.ts", change: "added", note: "Matriz de rol, disciplina, asignación, consentimiento y revocación." },
+    { path: "server/lib/sync.test.ts", change: "added", note: "Idempotencia, ACK parcial, orden, conflicto, cursor y compatibilidad de esquema." },
+    { path: "server/app/api/sync/push/route.ts", change: "added", note: "Entrada de mutaciones móviles." },
+    { path: "server/app/api/sync/pull/route.ts", change: "added", note: "Cambios incrementales hacia la app." },
+    { path: "server/app/api/portal/attention/route.ts", change: "added", note: "Lectura paginada y autorizada de señales." },
+    { path: "server/app/api/portal/athletes/[athleteId]/overview/route.ts", change: "added", note: "Resumen con permisos y frescura por categoría." },
+    { path: "server/app/api/check-ins/requests/route.ts", change: "added", note: "Solicitud del check-in fijo y después plantillas versionadas." },
+    { path: "server/app/api/check-ins/[requestId]/review/route.ts", change: "added", note: "Revisión profesional y acción asociada." },
+    { path: "server/app/api/organizations/[organizationId]/members/route.ts", change: "added", note: "Invitación y administración mínima del equipo." },
+    { path: "server/app/portal/atencion/page.tsx", change: "added", note: "Bandeja de trabajo priorizada." },
+    { path: "server/app/portal/atletas/[athleteId]/page.tsx", change: "added", note: "Shell del expediente individual." },
+    { path: "server/app/portal/page.tsx", change: "modified", note: "Redirigir a Atención y extraer chat/editores a componentes." },
+    { path: "pulso/src/db/schema/sync.ts", change: "added", note: "Outbox, cursor y errores pendientes." },
+    { path: "pulso/src/db/schema/index.ts", change: "modified", note: "Exportar sync y check-ins versionados." },
+    { path: "pulso/drizzle/000x_sync_outbox.sql", change: "added", note: "Migración local de outbox, cursor y dispositivo escritor." },
+    { path: "pulso/src/lib/sync.ts", change: "modified", note: "Evolucionar de pull de asignaciones a sync bidireccional." },
+    { path: "pulso/src/app/check-in.tsx", change: "added", note: "Respuesta móvil offline y revisión antes de enviar." },
+    { path: "pulso/src/app/equipo.tsx", change: "modified", note: "Equipo completo, permisos y categorías compartidas." },
+  ]}
+/>
+
+La implementación reutiliza los puntos existentes —`getSessionUser`, `getAthletes`/`getTeam`, `areLinked`, `assignWorkout`, `assignMealPlan` y el cliente `server/app/portal/lib.ts::api`— durante la migración. La autorización se centraliza gradualmente en `server/lib/permissions.ts`; ningún helper heredado se considera suficiente por sí solo después del corte.
+
+Antes de implementar cada fase se deben revisar las guías locales de Next.js 16 indicadas por `server/AGENTS.md`; las rutas propuestas expresan intención de producto, no autorizan asumir APIs antiguas del framework.
+
+## Riesgos y límites
+
+- **Privacidad:** sincronizar más detalle cambia un principio vigente de `PRODUCT.md`. Después de aprobar el plan, actualizar ese documento para reflejar consentimiento granular, retención, exportación y revocación. Nunca habilitar fotos o notas libres por defecto.
+- **Conflictos:** planes y permisos necesitan control de versión estricto; registros append-only pueden reintentarse por ID. Evitar una política global de “última escritura gana”.
+- **Alertas incorrectas:** adherencia baja no equivale a riesgo médico. Mostrar evidencia y permitir descartar/ajustar umbrales; no generar diagnósticos ni recomendaciones clínicas automáticas.
+- **Sobrecarga:** limitar señales iniciales, agrupar eventos relacionados y usar recordatorios con enfriamiento. “Todo lo sincronizado” no significa “todo genera una alerta”.
+- **Responsabilidad compartida:** un responsable principal por disciplina evita que todos crean que otro atenderá al atleta. Toda señal y tarea tiene dueño.
+- **Escala prematura:** pagos, retos, videollamada e IA quedan fuera del primer corte. El objetivo inicial es mejorar calidad y velocidad de interacción individual.
+
+## Métricas de éxito
+
+Medir durante cuatro semanas con clientes reales:
+
+- Mediana entre señal abierta y primera acción profesional.
+- Porcentaje de check-ins revisados dentro de 48 horas.
+- Porcentaje de semanas con al menos una interacción profesional significativa por atleta.
+- Tasa de tareas de seguimiento completadas en fecha.
+- Tiempo para preparar y publicar la siguiente fase de un plan.
+- Porcentaje de mutaciones sincronizadas sin intervención y antigüedad del último dato.
+- Incidentes de acceso denegado, permiso incorrecto o conflicto no resuelto: objetivo cero.
+
+No usar cantidad de mensajes como métrica primaria; una conversación breve que resuelve el problema vale más que actividad artificial.
+
+## Verificación antes de liberar
+
+<Checklist
+  id="verification-checklist"
+  items={[
+    { id: "test-authz", label: "Pruebas de autorización por rol organizacional, disciplina, asignación y consentimiento." },
+    { id: "test-sync-idempotency", label: "Repetir el mismo lote de sync no duplica sesiones, sets, comidas ni check-ins." },
+    { id: "test-sync-offline", label: "Registrar offline, cerrar app, reconectar y comprobar que la outbox termina vacía." },
+    { id: "test-conflict", label: "Dos editores publican sobre la misma versión: uno recibe 409 y conserva su borrador." },
+    { id: "test-team", label: "Coach y nutriólogo ven el mismo atleta con permisos de edición distintos; un colaborador no asignado recibe 403." },
+    { id: "test-revoke", label: "Revocar nutrición detiene nuevos envíos y el portal representa acceso revocado, no 0% de adherencia." },
+    { id: "test-attention", label: "Check-in enviado crea señal; revisión + tarea resuelve la señal y deja evento de auditoría." },
+    { id: "test-ui-states", label: "Validar loading, vacío, error, stale, parcial, sin permiso y 100+ atletas en portal responsive." },
+    { id: "test-build", label: "Ejecutar typecheck/build de server y pulso, migraciones desde base existente y smoke de login por los tres roles." },
+  ]}
+/>
+
+El smoke final usa una organización con dos coaches, un nutriólogo y dos atletas. Un atleta registra entrenamiento, sustituye una comida, responde un check-in offline y sincroniza. La bandeja debe explicar qué requiere atención; coach y nutriólogo deben ver únicamente sus dominios permitidos; la acción de revisión debe aparecer en la línea de tiempo y mantenerse tras recargar ambos clientes.
+
+## Próxima entrega recomendada
+
+Implementar Fase 0 junto con el corte mínimo de Fase 1: **check-in sincronizado → señal en Atención → expediente → revisión → tarea o mensaje**. Es el tramo más pequeño que demuestra la nueva promesa del portal sin construir todavía todo el catálogo de funciones.
+
+### Open Questions
+
+<QuestionForm
+  id="portal-open-questions"
+  questions={[
+    {
+      id: "revoked-data-retention",
+      title: "¿Qué debe ocurrir con las copias históricas cuando el atleta revoca una categoría?",
+      subtitle: "En ambos casos el profesional pierde acceso inmediatamente y se detienen nuevos envíos.",
+      mode: "single",
+      options: [
+        {
+          id: "grace-period-delete",
+          label: "Eliminar tras periodo de gracia",
+          detail: "Mantiene una ventana corta de recuperación y después elimina payloads detallados, conservando solo auditoría mínima.",
+          recommended: true,
+        },
+        {
+          id: "retain-until-request",
+          label: "Conservar hasta solicitud explícita",
+          detail: "Bloquea el acceso, pero retiene las copias hasta que el atleta solicite borrado.",
+        },
+      ],
+      required: true,
+    },
+    {
+      id: "multiple-organizations",
+      title: "¿Un atleta puede pertenecer a varias organizaciones simultáneamente?",
+      subtitle: "La decisión afecta invitaciones, consentimiento y separación de datos.",
+      mode: "single",
+      options: [
+        {
+          id: "multiple-orgs-separate-consent",
+          label: "Varias, con consentimiento separado",
+          detail: "Permite coach y nutriólogo de negocios distintos sin compartir datos entre organizaciones.",
+          recommended: true,
+        },
+        {
+          id: "one-active-org",
+          label: "Una organización activa",
+          detail: "Simplifica el primer corte, pero limita casos reales y obliga a transferencias.",
+        },
+      ],
+      required: true,
+    },
+  ]}
+  submitLabel="Guardar decisiones"
+/>

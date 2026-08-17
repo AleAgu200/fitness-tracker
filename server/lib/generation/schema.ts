@@ -50,6 +50,8 @@ export const eligibleExerciseSchema = z.object({
   name: z.string(),
   muscleGroup: z.string(),
   equipment: z.string(),
+  gifPath: z.string().min(1),
+  instructions: z.string().min(1),
 });
 export type EligibleExercise = z.infer<typeof eligibleExerciseSchema>;
 
@@ -72,7 +74,6 @@ export const generationProfileSummarySchema = z.object({
   preferredMealTimes: z.array(z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)).max(8).optional(),
   cookingTimeBudget: z.enum(["minimal", "moderate", "flexible"]).optional(),
   budgetLevel: z.enum(["low", "medium", "high"]).optional(),
-  hondurasLatinPreference: z.boolean().optional(),
 });
 export type GenerationProfileSummary = z.infer<typeof generationProfileSummarySchema>;
 
