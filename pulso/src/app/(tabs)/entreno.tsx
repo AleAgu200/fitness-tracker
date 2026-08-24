@@ -4,6 +4,7 @@ import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { EntrenoAdGate } from '@/components/entreno-ad-gate';
 import { ExerciseAnimationModal } from '@/components/exercise-animation-modal';
 import { ExercisePlanForm, ExercisePlanValues, ExistingPlanExercise } from '@/components/exercise-plan-form';
 import { AnimatedBar, Card, GlowPulse, Label, PressableScale } from '@/components/ui/kit';
@@ -315,9 +316,10 @@ export default function EntrenoScreen() {
     const durationChanged = previousRestTotal.current !== restTotal;
 
     if (restActive && (!wasActive || durationChanged)) {
+      const restEndAt = Date.now() + restLeft * 1000;
       loadRestTimerOverlayPreference()
         .then(enabled => enabled
-          ? showRestTimerNotification(restLeft, activeEx?.nombre)
+          ? showRestTimerNotification(restEndAt, activeEx?.nombre)
           : false)
         .catch(() => {});
     } else if (wasActive && !restActive) {
@@ -642,8 +644,10 @@ export default function EntrenoScreen() {
               </View>
             </View>
 
-            <PressableScale onPress={guardarSet} haptic="success" style={{ padding: 15, backgroundColor: accent, alignItems: 'center' }}>
-              <Text style={{ fontFamily: F.monoXBold, fontSize: 12, letterSpacing: 0.8, color: C.bg, textTransform: 'uppercase' }}>✓ GUARDAR SET</Text>
+            <PressableScale onPress={guardarSet} disabled={restActive} haptic="success" style={{ padding: 15, backgroundColor: accent, alignItems: 'center' }}>
+              <Text style={{ fontFamily: F.monoXBold, fontSize: 12, letterSpacing: 0.8, color: C.bg, textTransform: 'uppercase' }}>
+                {restActive ? 'SALTÁ EL DESCANSO PARA GUARDAR' : '✓ GUARDAR SET'}
+              </Text>
             </PressableScale>
 
             {/* LOGGED SETS */}
@@ -660,6 +664,9 @@ export default function EntrenoScreen() {
                       {formatWeight(s.peso, weightUnit)} × {s.reps}
                     </Text>
                     <Text style={{ fontFamily: F.mono, fontSize: 10, color: C.textSecondary }}>RPE {s.rpe}</Text>
+                    {s.workingSeconds != null && (
+                      <Text style={{ fontFamily: F.mono, fontSize: 10, color: C.textTertiary }}>⏱ {s.workingSeconds}s</Text>
+                    )}
                     {s.pr ? (
                       <View style={{ borderWidth: 1, borderColor: C.red, paddingHorizontal: 5, paddingVertical: 1 }}>
                         <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.red }}>PR</Text>
@@ -784,6 +791,9 @@ export default function EntrenoScreen() {
         onClose={() => setViewingAnimation(null)}
       />
     )}
+    {/* Last child on purpose: it's an absolutely-positioned overlay that has to
+        paint above the whole screen until the ad is done. */}
+    <EntrenoAdGate />
     </>
   );
 }

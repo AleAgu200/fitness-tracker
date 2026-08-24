@@ -1,0 +1,1 @@
+ALTER TABLE `logged_sets` ADD `working_seconds` integer;

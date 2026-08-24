@@ -40,12 +40,17 @@ enum class PulsoWidgetVariant(
   val hasPrimaryAction: Boolean,
   val hasRestAdjustments: Boolean,
   val showsSessionData: Boolean,
+  // Quick-logs the current set from the idle-state label. Separate from hasPrimaryAction,
+  // which also gates the resting-state pulso_rest_actions/pulso_btn_skip row — LARGE is
+  // only 40dp tall and has no room for that row, but its idle pulso_rest_idle label can
+  // still double as a tap target without adding any new views to the layout.
+  val hasQuickLogButton: Boolean,
   val provider: Class<out AppWidgetProvider>,
 ) {
-  SMALL(R.layout.pulso_widget_small, false, false, false, false, false, PulsoWidgetSmallProvider::class.java),
-  LARGE(R.layout.pulso_widget_large, true, true, false, false, false, PulsoWidgetLargeProvider::class.java),
-  DASHBOARD(R.layout.pulso_widget_dashboard, true, true, true, false, false, PulsoWidgetDashboardProvider::class.java),
-  SESSION(R.layout.pulso_widget_session, true, true, true, true, true, PulsoWidgetSessionProvider::class.java),
+  SMALL(R.layout.pulso_widget_small, false, false, false, false, false, false, PulsoWidgetSmallProvider::class.java),
+  LARGE(R.layout.pulso_widget_large, true, true, false, false, false, true, PulsoWidgetLargeProvider::class.java),
+  DASHBOARD(R.layout.pulso_widget_dashboard, true, true, true, false, false, true, PulsoWidgetDashboardProvider::class.java),
+  SESSION(R.layout.pulso_widget_session, true, true, true, true, true, true, PulsoWidgetSessionProvider::class.java),
 }
 
 /**
@@ -234,10 +239,10 @@ abstract class PulsoWidgetProvider(private val variant: PulsoWidgetVariant) : Ap
         views.setChronometer(R.id.pulso_chronometer, SystemClock.elapsedRealtime(), null, false)
         views.setViewVisibility(R.id.pulso_chronometer, View.GONE)
         views.setViewVisibility(R.id.pulso_rest_idle, View.VISIBLE)
-        if (variant.hasPrimaryAction) {
-          views.setViewVisibility(R.id.pulso_rest_actions, View.GONE)
-          // "✓ LISTO" quick-logs the displayed exercise — the widget can't write to the
-          // app's database itself, so this just opens the app, which performs the log the
+        if (variant.hasPrimaryAction) views.setViewVisibility(R.id.pulso_rest_actions, View.GONE)
+        if (variant.hasQuickLogButton) {
+          // Quick-logs the displayed exercise — the widget can't write to the app's
+          // database itself, so this just opens the app, which performs the log the
           // instant it mounts (see the `action=done` deep-link handling in entreno.tsx).
           val slotId = snapshot.currentSlotId
           if (slotId != null) {

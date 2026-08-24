@@ -8,7 +8,11 @@
     "scheme": "pulso",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.lalomaster.pulso",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -26,6 +30,7 @@
     },
     "plugins": [
       "./plugins/withShortCxxPath",
+      "./plugins/withAdsKotlinMetadata",
       "expo-router",
       [
         "expo-splash-screen",
@@ -57,7 +62,11 @@
               "displayName": "Pulso · Entreno",
               "description": "Ejercicio actual, siguiente y descanso.",
               "ios": {
-                "supportedFamilies": ["systemSmall", "systemMedium", "systemLarge"],
+                "supportedFamilies": [
+                  "systemSmall",
+                  "systemMedium",
+                  "systemLarge"
+                ],
                 "configuration": {
                   "title": "Vista del widget",
                   "description": "Elegí el nivel de detalle para el tamaño mediano.",
@@ -67,8 +76,14 @@
                       "type": "enum",
                       "default": "control",
                       "values": [
-                        { "name": "Control activo", "value": "control" },
-                        { "name": "Panel de rutina", "value": "routine" }
+                        {
+                          "name": "Control activo",
+                          "value": "control"
+                        },
+                        {
+                          "name": "Panel de rutina",
+                          "value": "routine"
+                        }
                       ]
                     }
                   }
@@ -76,6 +91,13 @@
               }
             }
           ]
+        }
+      ],
+      "expo-image",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-8542922303101158~6914743738"
         }
       ]
     ],

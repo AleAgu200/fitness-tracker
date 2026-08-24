@@ -17,6 +17,7 @@ export interface LoggedSetRow {
   peso: number;
   rpe: number;
   pr: boolean;
+  workingSeconds: number | null;
 }
 
 export interface TodaySession {
@@ -64,6 +65,7 @@ export async function getPreviousExerciseSession(
       peso: loggedSets.weightKg,
       rpe: loggedSets.rpe,
       pr: loggedSets.isPR,
+      workingSeconds: loggedSets.workingSeconds,
       setNumber: loggedSets.setNumber,
     })
     .from(loggedSets)
@@ -80,6 +82,7 @@ export async function getPreviousExerciseSession(
     peso: row.peso,
     rpe: row.rpe ?? 8,
     pr: row.pr,
+    workingSeconds: row.workingSeconds,
   }));
   const e1rm = (set: LoggedSetRow) => set.peso * (1 + set.reps / 30);
   const bestSet = sets.reduce((best, set) => e1rm(set) > e1rm(best) ? set : best);
@@ -114,6 +117,7 @@ export async function getTodaySession(athleteId: string): Promise<TodaySession |
       peso: loggedSets.weightKg,
       rpe: loggedSets.rpe,
       pr: loggedSets.isPR,
+      workingSeconds: loggedSets.workingSeconds,
       setNumber: loggedSets.setNumber,
     })
     .from(loggedSets)
@@ -124,7 +128,7 @@ export async function getTodaySession(athleteId: string): Promise<TodaySession |
   const log: Record<string, LoggedSetRow[]> = {};
   for (const r of rows) {
     if (!r.slotId) continue;
-    (log[r.slotId] ??= []).push({ reps: r.reps, peso: r.peso, rpe: r.rpe ?? 8, pr: r.pr });
+    (log[r.slotId] ??= []).push({ reps: r.reps, peso: r.peso, rpe: r.rpe ?? 8, pr: r.pr, workingSeconds: r.workingSeconds });
   }
   return { sessionId: session.id, completed: session.status === 'completed', log };
 }
@@ -138,7 +142,7 @@ export async function logSet(
   athleteId: string,
   templateId: string | null,
   slot: { slotId: string; exerciseId: string },
-  set: { peso: number; reps: number; rpe: number },
+  set: { peso: number; reps: number; rpe: number; workingSeconds?: number | null },
 ): Promise<LogSetResult> {
   return db.transaction(async tx => {
     const start = dayStart(new Date());
@@ -178,7 +182,7 @@ export async function logSet(
     const setId = nanoid();
     await tx.insert(loggedSets).values({
       id: setId, loggedExerciseId: loggedExercise.id, setNumber, weightKg: set.peso,
-      reps: set.reps, rpe: set.rpe, isPR, completedAt: now,
+      reps: set.reps, rpe: set.rpe, isPR, workingSeconds: set.workingSeconds ?? null, completedAt: now,
     });
     if (isPR || !hasRecord) {
       const e1rm = +(set.peso * (1 + set.reps / 30)).toFixed(1);

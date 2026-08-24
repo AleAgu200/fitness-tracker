@@ -53,7 +53,8 @@
       "PowerShell(& \"C:\\\\Users\\\\aless\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" reverse --list)",
       "PowerShell(& \"C:\\\\Users\\\\aless\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" reverse tcp:8081 tcp:8081)",
       "PowerShell(& \"C:\\\\Users\\\\aless\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" shell am start -a android.intent.action.VIEW -d \"exp://127.0.0.1:8081\")",
-      "Bash(node scripts/setup-db.mjs)"
+      "Bash(node scripts/setup-db.mjs)",
+      "WebFetch(domain:docs.expo.dev)"
     ],
     "additionalDirectories": [
       "\\tmp"

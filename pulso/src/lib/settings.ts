@@ -12,7 +12,9 @@ export const ACCENT_PRESETS = [
   { key: 'violet', label: 'Violeta', hex: '#B98CFF' },
 ] as const;
 
-export const DEFAULT_ACCENT = ACCENT_PRESETS[0].hex;
+// Yellow (#E8FF59) has weak contrast against light backgrounds, so it's kept as a
+// selectable preset but isn't the default for new users.
+export const DEFAULT_ACCENT: string = ACCENT_PRESETS[1].hex;
 export const DEFAULT_WEIGHT_UNIT: WeightUnit = 'kg';
 export const DEFAULT_THEME_MODE: ThemeMode = 'system';
 

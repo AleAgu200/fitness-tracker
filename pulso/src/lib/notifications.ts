@@ -187,9 +187,10 @@ async function cancelScheduledRestCompletion(Notifications: NotificationsModule)
 }
 
 export async function showRestTimerNotification(
-  seconds: number,
+  restEndAt: number,
   exerciseName?: string,
 ): Promise<boolean> {
+  const seconds = Math.round((restEndAt - Date.now()) / 1000);
   if (seconds <= 0) return false;
   await configureChannels();
   const Notifications = await getNotifications();
@@ -197,7 +198,12 @@ export async function showRestTimerNotification(
   if ((await Notifications.getPermissionsAsync()).status !== NOTIFICATION_PERMISSION.GRANTED) return false;
 
   await cancelScheduledRestCompletion(Notifications);
-  const endsAt = new Date(Date.now() + seconds * 1000);
+  // Anchored to the same absolute deadline the rest-timer widget alarm uses (restEndAt),
+  // instead of a relative "N seconds from now" trigger — a relative trigger only starts
+  // counting once scheduleNotificationAsync actually runs natively, so any delay in the
+  // awaited calls above (SecureStore, permission checks) pushed the notification later
+  // than the widget's countdown reaching zero.
+  const endsAt = new Date(restEndAt);
   const finishTime = endsAt.toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
@@ -228,8 +234,8 @@ export async function showRestTimerNotification(
       data: { type: 'rest-complete' },
     },
     trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-      seconds,
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: endsAt,
       channelId: 'pulso-reminders',
     },
   });

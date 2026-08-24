@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="180dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="3"
+    android:resizeMode="none"
+    android:widgetCategory="home_screen"
+    android:initialLayout="@layout/pulso_widget_session"
+    android:previewLayout="@layout/pulso_widget_session"
+    android:description="@string/pulso_widget_session_description"
+    android:updatePeriodMillis="0" />

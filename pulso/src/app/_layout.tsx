@@ -14,7 +14,7 @@ import {
   SpaceGrotesk_700Bold,
 } from '@expo-google-fonts/space-grotesk';
 import { useFonts } from 'expo-font';
-import { Slot, SplashScreen } from 'expo-router';
+import { Stack, SplashScreen } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -25,6 +25,7 @@ import { OnboardingGenerationProvider } from '@/context/onboarding-generation';
 import { PreferencesProvider } from '@/context/preferences';
 import { SessionProvider } from '@/context/session';
 import { runMigrations } from '@/db/migrate';
+import { initializeAds } from '@/lib/ads';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -52,6 +53,13 @@ export default function RootLayout() {
       });
   }, []);
 
+  // Warm the ads SDK at launch so the ENTRENO gate has a filled ad waiting
+  // instead of burning its load timeout on cold-starting the SDK. Never blocks
+  // render — initializeAds swallows its own failures.
+  useEffect(() => {
+    initializeAds();
+  }, []);
+
   useEffect(() => {
     if (fontsLoaded && dbReady) SplashScreen.hideAsync();
   }, [fontsLoaded, dbReady]);
@@ -66,7 +74,7 @@ export default function RootLayout() {
             <NotificationBootstrap />
             <AppProvider>
               <StatusBar style="auto" />
-              <Slot />
+              <Stack screenOptions={{ headerShown: false }} />
             </AppProvider>
           </OnboardingGenerationProvider>
         </SessionProvider>

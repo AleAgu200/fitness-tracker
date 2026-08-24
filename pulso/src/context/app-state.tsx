@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { AppState as RNAppState } from 'react-native';
+import { Alert, AppState as RNAppState } from 'react-native';
 
 import {
   evaluateAchievements,
@@ -80,6 +80,8 @@ export interface ExerciseSet {
   peso: number;
   rpe: number;
   pr: boolean;
+  /** Seconds spent doing the reps, measured from the moment the prior rest ended to this set's save tap. Null when there was no prior rest to measure from (e.g. the exercise's first set). */
+  workingSeconds: number | null;
 }
 
 export interface Exercise {
@@ -304,6 +306,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const restTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   /** Authoritative rest-timer end timestamp — mirrored to SecureStore so the widget can read/mutate it. */
   const restEndAtRef = useRef<number | null>(null);
+  /** Set the moment rest ends (naturally, skipped, or reduced to zero) — consumed by the next GUARDAR SET tap to measure rep time. */
+  const workStartedAtRef = useRef<number | null>(null);
   const prTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noteTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -321,6 +325,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (restTimer.current) clearInterval(restTimer.current);
       restTimer.current = null;
       restEndAtRef.current = null;
+      workStartedAtRef.current = null;
       saveRestTimerState(CLEARED_REST_STATE).catch(() => {});
       syncWorkoutWidgets(EMPTY_WIDGET_DATA);
       setState(initialState);
@@ -769,6 +774,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (left <= 0) {
         if (restTimer.current) clearInterval(restTimer.current);
         restEndAtRef.current = null;
+        workStartedAtRef.current = Date.now();
         saveRestTimerState(CLEARED_REST_STATE).catch(() => {});
         setState(s => ({ ...s, restLeft: 0, restActive: false }));
         return;
@@ -868,51 +874,76 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const idx = override ? s.exercises.findIndex(e => e.id === override.slotId) : s.exIndex;
     const ex = idx >= 0 ? s.exercises[idx] : undefined;
     if (!ex || !uid) return;
-    // Widget quick-log has no access to the live steppers, so it logs the plan's target
-    // weight/reps instead (RPE defaulted) — fine-tuning still means opening the app.
-    const peso = override ? ex.peso : s.curPeso;
-    const reps = override ? ex.reps : s.curReps;
-    const rpe = override ? 8 : s.curRpe;
-    const set: ExerciseSet = { reps, peso, rpe, pr: false };
+    // Can't log a set mid-rest — the UI disables the button for this too, so this is
+    // just defense in depth (the widget only wires its quick-log action while idle).
+    if (s.restActive) return;
 
-    // Optimistic append; PR flag arrives from the DB write. Auto-advancing past a
-    // completed exercise is scoped to the widget quick-log path (`override`) — manual
-    // in-app "GUARDAR SET" taps keep staying on the same exercise, as today.
-    setState(st => {
-      const log = { ...st.log, [ex.id]: [...(st.log[ex.id] || []), set] };
-      const advance = override != null && log[ex.id].length >= ex.target && idx < st.exercises.length - 1;
-      const nextIndex = advance ? idx + 1 : idx;
-      const nextEx = st.exercises[nextIndex];
-      return {
-        ...st,
-        log,
-        exIndex: nextIndex,
-        curPeso: advance ? nextEx.peso : peso,
-        curReps: advance ? nextEx.reps : reps,
-        curRpe: advance ? 8 : rpe,
-        sessionDone: false,
-      };
-    });
-    startRest(REST_DEFAULT);
+    const commit = () => {
+      // Widget quick-log has no access to the live steppers, so it logs the plan's target
+      // weight/reps instead (RPE defaulted) — fine-tuning still means opening the app.
+      const peso = override ? ex.peso : s.curPeso;
+      const reps = override ? ex.reps : s.curReps;
+      const rpe = override ? 8 : s.curRpe;
+      const workStartedAt = workStartedAtRef.current;
+      const workingSeconds = workStartedAt != null ? Math.round((Date.now() - workStartedAt) / 1000) : null;
+      workStartedAtRef.current = null;
+      const set: ExerciseSet = { reps, peso, rpe, pr: false, workingSeconds };
 
-    logSet(uid, templateIdRef.current, { slotId: ex.id, exerciseId: ex.exerciseId }, set)
-      .then(({ isPR }) => {
-        if (!isPR) return;
-        setState(st => {
-          const sets = [...(st.log[ex.id] || [])];
-          if (sets.length) sets[sets.length - 1] = { ...sets[sets.length - 1], pr: true };
-          return {
-            ...st,
-            log: { ...st.log, [ex.id]: sets },
-            prMap: { ...st.prMap, [ex.id]: Math.max(st.prMap[ex.id] ?? 0, set.peso) },
-            prFlash: { ej: ex.nombre, val: formatWeight(set.peso, weightUnitRef.current) },
-          };
-        });
-        if (prTimer.current) clearTimeout(prTimer.current);
-        prTimer.current = setTimeout(() => setState(st => ({ ...st, prFlash: null })), 4000);
-        return refreshDerived();
-      })
-      .catch(e => console.error('[set]', e));
+      // Optimistic append; PR flag arrives from the DB write. Auto-advancing past a
+      // completed exercise is scoped to the widget quick-log path (`override`) — manual
+      // in-app "GUARDAR SET" taps keep staying on the same exercise, as today.
+      setState(st => {
+        const log = { ...st.log, [ex.id]: [...(st.log[ex.id] || []), set] };
+        const advance = override != null && log[ex.id].length >= ex.target && idx < st.exercises.length - 1;
+        const nextIndex = advance ? idx + 1 : idx;
+        const nextEx = st.exercises[nextIndex];
+        return {
+          ...st,
+          log,
+          exIndex: nextIndex,
+          curPeso: advance ? nextEx.peso : peso,
+          curReps: advance ? nextEx.reps : reps,
+          curRpe: advance ? 8 : rpe,
+          sessionDone: false,
+        };
+      });
+      startRest(REST_DEFAULT);
+
+      logSet(uid, templateIdRef.current, { slotId: ex.id, exerciseId: ex.exerciseId }, { peso, reps, rpe, workingSeconds })
+        .then(({ isPR }) => {
+          if (!isPR) return;
+          setState(st => {
+            const sets = [...(st.log[ex.id] || [])];
+            if (sets.length) sets[sets.length - 1] = { ...sets[sets.length - 1], pr: true };
+            return {
+              ...st,
+              log: { ...st.log, [ex.id]: sets },
+              prMap: { ...st.prMap, [ex.id]: Math.max(st.prMap[ex.id] ?? 0, set.peso) },
+              prFlash: { ej: ex.nombre, val: formatWeight(set.peso, weightUnitRef.current) },
+            };
+          });
+          if (prTimer.current) clearTimeout(prTimer.current);
+          prTimer.current = setTimeout(() => setState(st => ({ ...st, prFlash: null })), 4000);
+          return refreshDerived();
+        })
+        .catch(e => console.error('[set]', e));
+    };
+
+    // Confirm before logging past the exercise's planned set count — skipped for the
+    // widget's one-tap quick-log path, which has no surface to show a dialog on.
+    const priorSets = s.log[ex.id]?.length ?? 0;
+    if (!override && priorSets >= ex.target) {
+      Alert.alert(
+        'Serie extra',
+        `Ya completaste las ${ex.target} series de ${ex.nombre}. ¿Querés guardar una serie extra?`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Guardar', onPress: commit },
+        ],
+      );
+      return;
+    }
+    commit();
   }, [startRest, refreshDerived]);
 
   const finishWorkout = useCallback(() => {
@@ -1015,6 +1046,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const left = Math.max(0, Math.round((endAt - Date.now()) / 1000));
     if (left <= 0) {
       restEndAtRef.current = null;
+      workStartedAtRef.current = Date.now();
       if (restTimer.current) clearInterval(restTimer.current);
       saveRestTimerState(CLEARED_REST_STATE).catch(() => {});
       setState(s => ({ ...s, restLeft: 0, restActive: false }));
@@ -1028,6 +1060,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const skipRest = useCallback(() => {
     if (restTimer.current) clearInterval(restTimer.current);
     restEndAtRef.current = null;
+    workStartedAtRef.current = Date.now();
     saveRestTimerState(CLEARED_REST_STATE).catch(() => {});
     setState(s => ({ ...s, restActive: false, restLeft: REST_DEFAULT, restTotal: REST_DEFAULT }));
   }, []);

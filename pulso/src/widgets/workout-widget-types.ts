@@ -51,5 +51,5 @@ export const EMPTY_WIDGET_DATA: WorkoutWidgetData = {
   restLeft: 0,
   restEndAt: null,
   restTotal: 0,
-  accent: '#E8FF59',
+  accent: '#3DDCFF',
 };

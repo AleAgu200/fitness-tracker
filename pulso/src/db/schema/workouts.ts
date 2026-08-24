@@ -142,6 +142,7 @@ export const loggedSets = sqliteTable('logged_sets', {
   reps:             integer('reps').notNull(),
   rpe:              integer('rpe'),
   isPR:             integer('is_pr', { mode: 'boolean' }).notNull().default(false),
+  workingSeconds:   integer('working_seconds'),
   completedAt:      integer('completed_at', { mode: 'timestamp_ms' }).notNull(),
 });
 

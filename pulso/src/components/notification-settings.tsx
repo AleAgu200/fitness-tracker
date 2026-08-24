@@ -54,7 +54,7 @@ function SettingSwitch({ label, detail, value, onValueChange, accent }: {
 }
 
 export function NotificationSettings() {
-  const { userId } = useSession();
+  const { userId, isSuperAdmin } = useSession();
   const { accent } = usePreferences();
   const C = useColors();
   const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
@@ -155,7 +155,7 @@ export function NotificationSettings() {
           </Text>
         </PressableScale>
       )}
-      {granted && (
+      {granted && isSuperAdmin && (
         <PressableScale
           onPress={() => sendTestNotification().catch(() => setError('No se pudo mostrar la notificación de prueba.'))}
           style={{ borderWidth: 1, borderColor: accent, padding: 10, alignItems: 'center', marginTop: 12 }}

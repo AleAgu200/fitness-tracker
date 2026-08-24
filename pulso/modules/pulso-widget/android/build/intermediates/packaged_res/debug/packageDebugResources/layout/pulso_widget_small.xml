@@ -1,15 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  1x1 tile. Roughly 68x78dp of usable space after padding, so everything is one line and
-  the countdown carries the widget. Same Chronometer, no rest controls — there is no room
-  for a 34dp button here, and taps fall through to the app.
--->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/pulso_widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:gravity="center_vertical"
+    android:gravity="center"
     android:background="@drawable/pulso_widget_card"
     android:padding="8dp">
 
@@ -17,33 +12,34 @@
         android:id="@+id/pulso_current"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textSize="11sp"
-        android:textStyle="bold"
-        android:textColor="#FAFAFA"
+        android:gravity="center"
         android:maxLines="1"
-        android:ellipsize="end" />
+        android:ellipsize="end"
+        android:textColor="#FAFAFA"
+        android:textSize="12sp"
+        android:textStyle="bold" />
 
     <Chronometer
         android:id="@+id/pulso_chronometer"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="2dp"
-        android:textSize="18sp"
-        android:textStyle="bold"
+        android:includeFontPadding="false"
         android:textColor="#3DDCFF"
-        android:includeFontPadding="false" />
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
 
     <TextView
         android:id="@+id/pulso_rest_idle"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="2dp"
-        android:text="LISTO"
-        android:textSize="11sp"
-        android:textStyle="bold"
-        android:letterSpacing="0.1"
-        android:textColor="#5A5A62"
         android:includeFontPadding="false"
+        android:text="LISTO"
+        android:textColor="#E8FF59"
+        android:textSize="12sp"
+        android:textStyle="bold"
         android:visibility="gone" />
 
     <TextView
@@ -51,8 +47,20 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="2dp"
-        android:textSize="8sp"
-        android:textColor="#5A5A62"
+        android:gravity="center"
         android:maxLines="1"
-        android:ellipsize="end" />
+        android:ellipsize="end"
+        android:textColor="#8A8A93"
+        android:textSize="9sp" />
+
+    <ProgressBar
+        android:id="@+id/pulso_set_progress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:layout_marginTop="5dp"
+        android:indeterminate="false"
+        android:progressBackgroundTint="#26262A"
+        android:progressTint="#E8FF59"
+        android:visibility="gone" />
 </LinearLayout>

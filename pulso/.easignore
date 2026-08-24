@@ -1,0 +1,31 @@
+# Dependencies and Expo caches
+node_modules/
+.expo/
+dist/
+web-build/
+
+# Generated native projects
+/android/
+/ios/
+
+# Local tooling and generated checks
+.git/
+.claude/
+.vscode/
+dist-modal-check/
+plans/
+
+# Local environment overrides
+.env.local
+.env.*.local
+
+# Local and platform files
+*.log
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+.DS_Store
+*.pem
+*.tsbuildinfo

@@ -79,7 +79,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:includeFontPadding="false"
-            android:text="TOCÁ PARA ABRIR"
+            android:text="REGISTRAR SERIE"
             android:textColor="#E8FF59"
             android:textSize="10sp"
             android:textStyle="bold"
