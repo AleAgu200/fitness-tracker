@@ -1,0 +1,188 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  PULSO backend on a single EC2 instance running the Next.js server and
+  PostgreSQL side by side. Chosen over App Runner/Fargate because the plan's
+  free tier excludes App Runner and an ALB alone would cost more per month
+  than the whole budget. The generation job system relies on a long-lived
+  process (after(), in-process leases, heartbeats), which a persistent
+  instance supports directly and serverless does not.
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t4g.small
+    Description: >
+      2 GB is deliberate: a Next.js build on a 1 GB t4g.micro routinely dies
+      out of memory. Downsize after the first successful deploy if desired.
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+
+  RootVolumeSizeGb:
+    Type: Number
+    Default: 20
+    MinValue: 12
+    Description: node_modules plus the PostgreSQL data directory outgrow the 8 GB default.
+
+  LatestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+    Description: Resolved at deploy time so the stack never pins a stale AMI.
+
+Resources:
+  WebSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Inbound HTTP/HTTPS for the PULSO backend.
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: HTTP, for redirects and ACME challenges
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: HTTPS
+      Tags:
+        - Key: Name
+          Value: pulso-backend
+      # Port 22 is intentionally absent. Shell access is through Session
+      # Manager, so there is no SSH key to lose and no open port to scan.
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Name
+          Value: pulso-backend
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+
+  BackendInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref LatestAmiId
+      SubnetId: !Ref SubnetId
+      IamInstanceProfile: !Ref InstanceProfile
+      SecurityGroupIds:
+        - !Ref WebSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: !Ref RootVolumeSizeGb
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: pulso-backend
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -uxo pipefail
+          exec > >(tee /var/log/pulso-bootstrap.log) 2>&1
+
+          # Swap first: the Next.js build and PostgreSQL together will exceed
+          # 2 GB of RAM, and an OOM kill mid-build is a confusing failure.
+          if [ ! -f /swapfile ]; then
+            dd if=/dev/zero of=/swapfile bs=1M count=2048
+            chmod 600 /swapfile
+            mkswap /swapfile
+            swapon /swapfile
+            echo '/swapfile none swap sw 0 0' >> /etc/fstab
+          fi
+
+          dnf update -y
+          dnf install -y git tar gzip
+
+          # Node 22 — Amazon Linux 2023 ships an older default.
+          curl -fsSL https://rpm.nodesource.com/setup_22.x | bash -
+          dnf install -y nodejs
+
+          # PostgreSQL: take the newest packaged major that resolves.
+          PG_PKG=""
+          for v in 17 16 15; do
+            if dnf list --available "postgresql$v-server" >/dev/null 2>&1; then
+              PG_PKG="postgresql$v-server postgresql$v"
+              PG_VER="$v"
+              break
+            fi
+          done
+          dnf install -y $PG_PKG
+          /usr/bin/postgresql-setup --initdb || true
+          systemctl enable --now postgresql
+
+          # Caddy terminates TLS and renews certificates on its own, which
+          # avoids running certbot on a cron and avoids an ALB entirely.
+          curl -fsSL -o /usr/local/bin/caddy \
+            "https://caddyserver.com/api/download?os=linux&arch=arm64"
+          chmod +x /usr/local/bin/caddy
+          useradd --system --home /var/lib/caddy --create-home --shell /usr/sbin/nologin caddy || true
+          mkdir -p /etc/caddy /var/log/caddy
+          chown -R caddy:caddy /var/lib/caddy /var/log/caddy
+
+          cat > /etc/systemd/system/caddy.service <<'UNIT'
+          [Unit]
+          Description=Caddy
+          After=network.target
+
+          [Service]
+          User=caddy
+          Group=caddy
+          ExecStart=/usr/local/bin/caddy run --environ --config /etc/caddy/Caddyfile
+          ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile --force
+          Restart=on-failure
+          AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+
+          systemctl daemon-reload
+          echo "BOOTSTRAP_COMPLETE" >> /var/log/pulso-bootstrap.log
+
+  BackendEip:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: pulso-backend
+
+  EipAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt BackendEip.AllocationId
+      InstanceId: !Ref BackendInstance
+
+Outputs:
+  InstanceId:
+    Description: Connect with 'aws ssm start-session --target <id>'
+    Value: !Ref BackendInstance
+
+  PublicIp:
+    Description: Point the domain's A record here.
+    Value: !Ref BackendEip
+
+  SecurityGroupId:
+    Value: !Ref WebSecurityGroup
