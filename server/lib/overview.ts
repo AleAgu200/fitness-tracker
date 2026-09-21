@@ -192,9 +192,27 @@ export async function createFollowUpTask(input: {
   detail?: string;
   dueAt?: number;
   attentionSignalId?: string;
+  /** Hand the task to a teammate; defaults to the creator. */
+  assigneeMembershipId?: string;
 }) {
   const access = (await getProfessionalAccess(input.professionalUserId, input.athleteId))[0];
   if (!access) return null;
+
+  let assigneeMembershipId = access.membershipId;
+  if (input.assigneeMembershipId && input.assigneeMembershipId !== access.membershipId) {
+    // Only an active member of the *same* organization may receive the task —
+    // otherwise this would leak the athlete's name into another org's inbox.
+    const [assignee] = await db.select({ id: organizationMemberships.id })
+      .from(organizationMemberships)
+      .where(and(
+        eq(organizationMemberships.id, input.assigneeMembershipId),
+        eq(organizationMemberships.organizationId, access.organizationId),
+        eq(organizationMemberships.status, "active"),
+      ));
+    if (!assignee) return null;
+    assigneeMembershipId = assignee.id;
+  }
+
   const now = Date.now();
   const id = newId("task");
   await db.transaction(async (tx) => {
@@ -203,7 +221,7 @@ export async function createFollowUpTask(input: {
       organizationId: access.organizationId,
       attentionSignalId: input.attentionSignalId,
       athleteId: input.athleteId,
-      assigneeMembershipId: access.membershipId,
+      assigneeMembershipId,
       createdByMembershipId: access.membershipId,
       title: input.title,
       detail: input.detail,
@@ -219,7 +237,7 @@ export async function createFollowUpTask(input: {
       action: "follow_up_task.created",
       subjectType: "athlete",
       subjectId: input.athleteId,
-      metadata: { taskId: id, attentionSignalId: input.attentionSignalId },
+      metadata: { taskId: id, attentionSignalId: input.attentionSignalId, assigneeMembershipId },
       occurredAt: now,
     });
   });

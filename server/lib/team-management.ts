@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto";
 
-import { and, eq } from "drizzle-orm";
+import { and, countDistinct, eq, inArray } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
@@ -33,11 +33,72 @@ export async function listOrganizationMembers(actorUserId: string, organizationI
   }).from(organizationMemberships)
     .innerJoin(user, eq(user.id, organizationMemberships.userId))
     .where(eq(organizationMemberships.organizationId, organizationId));
-  const capabilities = await db.select().from(professionalCapabilities);
+  if (!members.length) return [];
+
+  const membershipIds = members.map(member => member.id);
+  const [capabilities, loads] = await Promise.all([
+    db.select().from(professionalCapabilities).where(inArray(professionalCapabilities.membershipId, membershipIds)),
+    // Athlete load per professional, so an owner can see who is over-committed
+    // before assigning another client or revoking someone.
+    db.select({
+      membershipId: careAssignments.professionalMembershipId,
+      discipline: careAssignments.discipline,
+      athletes: countDistinct(careAssignments.organizationClientId),
+    })
+      .from(careAssignments)
+      .where(and(
+        inArray(careAssignments.professionalMembershipId, membershipIds),
+        eq(careAssignments.status, "active"),
+      ))
+      .groupBy(careAssignments.professionalMembershipId, careAssignments.discipline),
+  ]);
+
   return members.map(member => ({
     ...member,
     disciplines: capabilities.filter(capability => capability.membershipId === member.id).map(capability => capability.discipline),
+    load: loads
+      .filter(row => row.membershipId === member.id)
+      .map(row => ({ discipline: row.discipline as Discipline, athletes: Number(row.athletes) })),
   }));
+}
+
+/**
+ * Athletes in the organization whose coverage has a gap, so revoking or
+ * transferring a professional never silently leaves someone unattended.
+ */
+export async function listCoverageGaps(organizationId: string) {
+  const clients = await db.select({
+    organizationClientId: organizationClients.id,
+    athleteId: organizationClients.athleteId,
+    athleteName: user.name,
+  })
+    .from(organizationClients)
+    .innerJoin(user, eq(user.id, organizationClients.athleteId))
+    .where(and(eq(organizationClients.organizationId, organizationId), eq(organizationClients.status, "active")));
+  if (!clients.length) return [];
+
+  const assignments = await db.select({
+    organizationClientId: careAssignments.organizationClientId,
+    discipline: careAssignments.discipline,
+    primary: careAssignments.primary,
+  })
+    .from(careAssignments)
+    .where(and(
+      inArray(careAssignments.organizationClientId, clients.map(client => client.organizationClientId)),
+      eq(careAssignments.status, "active"),
+    ));
+
+  return clients.flatMap((client) => {
+    const own = assignments.filter(row => row.organizationClientId === client.organizationClientId);
+    return (["coach", "nutritionist"] as Discipline[]).flatMap((discipline) => {
+      const forDiscipline = own.filter(row => row.discipline === discipline);
+      // No assignment at all is a deliberate choice (not every athlete has a
+      // nutritionist); assignments without a primary is the real gap.
+      if (!forDiscipline.length) return [];
+      if (forDiscipline.some(row => row.primary)) return [];
+      return [{ ...client, discipline, reason: "no_primary" as const }];
+    });
+  });
 }
 
 export async function addOrganizationMember(input: {
@@ -173,6 +234,247 @@ export async function assignProfessional(input: {
     });
   });
   return { ok: true as const, assignment: { id: assignmentId, discipline: input.discipline, primary: input.primary, status: "active" as const } };
+}
+
+/** Every active athlete in the organization with who currently covers them. */
+export async function listOrganizationRoster(organizationId: string) {
+  const clients = await db.select({
+    organizationClientId: organizationClients.id,
+    athleteId: organizationClients.athleteId,
+    athleteName: user.name,
+    athleteEmail: user.email,
+  })
+    .from(organizationClients)
+    .innerJoin(user, eq(user.id, organizationClients.athleteId))
+    .where(and(eq(organizationClients.organizationId, organizationId), eq(organizationClients.status, "active")));
+  if (!clients.length) return [];
+
+  const assignments = await db.select({
+    assignmentId: careAssignments.id,
+    organizationClientId: careAssignments.organizationClientId,
+    membershipId: careAssignments.professionalMembershipId,
+    discipline: careAssignments.discipline,
+    primary: careAssignments.primary,
+    professionalName: user.name,
+  })
+    .from(careAssignments)
+    .innerJoin(organizationMemberships, eq(organizationMemberships.id, careAssignments.professionalMembershipId))
+    .innerJoin(user, eq(user.id, organizationMemberships.userId))
+    .where(and(
+      inArray(careAssignments.organizationClientId, clients.map(client => client.organizationClientId)),
+      eq(careAssignments.status, "active"),
+    ));
+
+  return clients.map(client => ({
+    ...client,
+    team: assignments
+      .filter(row => row.organizationClientId === client.organizationClientId)
+      .map(({ organizationClientId: _ignored, ...row }) => ({ ...row, discipline: row.discipline as Discipline })),
+  }));
+}
+
+/**
+ * Deactivate a member. Uses status + revokedAt rather than deleting: their
+ * published plans, notes, reviews and audit trail must keep their author.
+ * Their active care assignments are revoked in the same transaction so a
+ * deactivated professional cannot keep reading athlete records.
+ */
+export async function revokeOrganizationMember(input: {
+  actorUserId: string;
+  organizationId: string;
+  membershipId: string;
+}) {
+  const actor = await canManageOrganization(input.actorUserId, input.organizationId);
+  if (!actor) return { ok: false as const, error: "organization_manage_denied" as const };
+
+  const [target] = await db.select().from(organizationMemberships).where(and(
+    eq(organizationMemberships.id, input.membershipId),
+    eq(organizationMemberships.organizationId, input.organizationId),
+  ));
+  if (!target || target.status === "revoked") return { ok: false as const, error: "member_not_found" as const };
+
+  if (target.orgRole === "owner") {
+    const owners = await db.select({ id: organizationMemberships.id }).from(organizationMemberships).where(and(
+      eq(organizationMemberships.organizationId, input.organizationId),
+      eq(organizationMemberships.orgRole, "owner"),
+      eq(organizationMemberships.status, "active"),
+    ));
+    // Losing the last owner would leave the organization unadministrable.
+    if (owners.length <= 1) return { ok: false as const, error: "last_owner" as const };
+  }
+
+  const now = Date.now();
+  const released = await db.select({
+    assignmentId: careAssignments.id,
+    organizationClientId: careAssignments.organizationClientId,
+    discipline: careAssignments.discipline,
+    primary: careAssignments.primary,
+    athleteId: organizationClients.athleteId,
+  })
+    .from(careAssignments)
+    .innerJoin(organizationClients, eq(organizationClients.id, careAssignments.organizationClientId))
+    .where(and(
+      eq(careAssignments.professionalMembershipId, input.membershipId),
+      eq(careAssignments.status, "active"),
+    ));
+
+  await db.transaction(async (tx) => {
+    await tx.update(organizationMemberships)
+      .set({ status: "revoked", revokedAt: now })
+      .where(eq(organizationMemberships.id, input.membershipId));
+    await tx.update(careAssignments)
+      .set({ status: "revoked", primary: false, revokedAt: now })
+      .where(and(
+        eq(careAssignments.professionalMembershipId, input.membershipId),
+        eq(careAssignments.status, "active"),
+      ));
+    for (const assignment of released) {
+      await tx.insert(syncChanges).values({
+        id: newId("change"),
+        athleteId: assignment.athleteId,
+        entityType: "care_assignment",
+        entityId: assignment.assignmentId,
+        operation: "delete",
+        payload: { organizationId: input.organizationId, discipline: assignment.discipline, primary: false },
+        createdAt: now,
+      });
+    }
+    await tx.insert(auditEvents).values({
+      id: newId("audit"),
+      organizationId: input.organizationId,
+      actorMembershipId: actor.id,
+      actorUserId: input.actorUserId,
+      action: "organization_member.revoked",
+      subjectType: "organization_membership",
+      subjectId: input.membershipId,
+      metadata: { releasedAssignments: released.length, targetUserId: target.userId },
+      occurredAt: now,
+    });
+  });
+
+  // Athletes who just lost their primary in a discipline need reassignment.
+  const uncovered = released.filter(assignment => assignment.primary)
+    .map(assignment => ({ athleteId: assignment.athleteId, discipline: assignment.discipline as Discipline }));
+  return { ok: true as const, releasedAssignments: released.length, uncovered };
+}
+
+/** Add or remove a member's disciplines. */
+export async function setMemberDisciplines(input: {
+  actorUserId: string;
+  organizationId: string;
+  membershipId: string;
+  disciplines: Discipline[];
+}) {
+  const actor = await canManageOrganization(input.actorUserId, input.organizationId);
+  if (!actor) return { ok: false as const, error: "organization_manage_denied" as const };
+
+  const [target] = await db.select().from(organizationMemberships).where(and(
+    eq(organizationMemberships.id, input.membershipId),
+    eq(organizationMemberships.organizationId, input.organizationId),
+    eq(organizationMemberships.status, "active"),
+  ));
+  if (!target) return { ok: false as const, error: "member_not_found" as const };
+
+  const current = await db.select().from(professionalCapabilities)
+    .where(eq(professionalCapabilities.membershipId, input.membershipId));
+  const removing = current
+    .map(capability => capability.discipline as Discipline)
+    .filter(discipline => !input.disciplines.includes(discipline));
+
+  if (removing.length) {
+    const blocking = await db.select({ id: careAssignments.id }).from(careAssignments).where(and(
+      eq(careAssignments.professionalMembershipId, input.membershipId),
+      eq(careAssignments.status, "active"),
+      inArray(careAssignments.discipline, removing),
+    ));
+    // Dropping a discipline someone is actively assigned in would leave those
+    // athletes with an assignment whose discipline no longer authorizes it.
+    if (blocking.length) return { ok: false as const, error: "discipline_has_active_assignments" as const };
+  }
+
+  const now = Date.now();
+  await db.transaction(async (tx) => {
+    if (removing.length) {
+      await tx.delete(professionalCapabilities).where(and(
+        eq(professionalCapabilities.membershipId, input.membershipId),
+        inArray(professionalCapabilities.discipline, removing),
+      ));
+    }
+    for (const discipline of input.disciplines) {
+      await tx.insert(professionalCapabilities)
+        .values({ membershipId: input.membershipId, discipline, createdAt: now })
+        .onConflictDoNothing();
+    }
+    await tx.insert(auditEvents).values({
+      id: newId("audit"),
+      organizationId: input.organizationId,
+      actorMembershipId: actor.id,
+      actorUserId: input.actorUserId,
+      action: "organization_member.disciplines_changed",
+      subjectType: "organization_membership",
+      subjectId: input.membershipId,
+      metadata: { disciplines: input.disciplines, removed: removing },
+      occurredAt: now,
+    });
+  });
+  return { ok: true as const, disciplines: input.disciplines };
+}
+
+/** Remove one professional from one athlete without touching the rest of the team. */
+export async function revokeCareAssignment(input: {
+  actorUserId: string;
+  organizationId: string;
+  assignmentId: string;
+}) {
+  const actor = await canManageOrganization(input.actorUserId, input.organizationId);
+  if (!actor) return { ok: false as const, error: "organization_manage_denied" as const };
+
+  const [assignment] = await db.select({
+    id: careAssignments.id,
+    discipline: careAssignments.discipline,
+    primary: careAssignments.primary,
+    athleteId: organizationClients.athleteId,
+    organizationId: organizationClients.organizationId,
+  })
+    .from(careAssignments)
+    .innerJoin(organizationClients, eq(organizationClients.id, careAssignments.organizationClientId))
+    .where(and(eq(careAssignments.id, input.assignmentId), eq(careAssignments.status, "active")));
+  if (!assignment || assignment.organizationId !== input.organizationId) {
+    return { ok: false as const, error: "assignment_not_found" as const };
+  }
+
+  const now = Date.now();
+  await db.transaction(async (tx) => {
+    await tx.update(careAssignments)
+      .set({ status: "revoked", primary: false, revokedAt: now })
+      .where(eq(careAssignments.id, input.assignmentId));
+    await tx.insert(syncChanges).values({
+      id: newId("change"),
+      athleteId: assignment.athleteId,
+      entityType: "care_assignment",
+      entityId: input.assignmentId,
+      operation: "delete",
+      payload: { organizationId: input.organizationId, discipline: assignment.discipline, primary: false },
+      createdAt: now,
+    });
+    await tx.insert(auditEvents).values({
+      id: newId("audit"),
+      organizationId: input.organizationId,
+      actorMembershipId: actor.id,
+      actorUserId: input.actorUserId,
+      action: "care_assignment.revoked",
+      subjectType: "athlete",
+      subjectId: assignment.athleteId,
+      metadata: { assignmentId: input.assignmentId, discipline: assignment.discipline, wasPrimary: assignment.primary },
+      occurredAt: now,
+    });
+  });
+  return {
+    ok: true as const,
+    uncovered: assignment.primary
+      ? [{ athleteId: assignment.athleteId, discipline: assignment.discipline as Discipline }]
+      : [],
+  };
 }
 
 export async function setAthleteSharingConsent(input: {

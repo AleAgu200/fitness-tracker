@@ -419,6 +419,20 @@ export default function DietaScreen() {
           </Animated.View>
         )}
 
+        {/* SCHEDULED PLAN BANNER — the next plan is published but not in force yet */}
+        {state.scheduledMeals?.effectiveAt != null && (
+          <Animated.View entering={FadeInDown.duration(280)} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: withAlpha(C.textTertiary, 0.4), padding: 12, marginBottom: 12 }}>
+            <Text style={{ fontFamily: F.mono, fontSize: 13, color: C.textTertiary }}>→</Text>
+            <Text style={{ flex: 1, fontFamily: F.inter, fontSize: 12, color: C.textSecondary, lineHeight: 17 }}>
+              {state.scheduledMeals.name ? `“${state.scheduledMeals.name}” entra` : 'Un plan nuevo entra'} en vigor el{' '}
+              <Text style={{ color: C.textPrimary, fontFamily: F.interSemi }}>
+                {new Date(state.scheduledMeals.effectiveAt).toLocaleDateString('es-AR', { day: '2-digit', month: 'long' })}
+              </Text>
+              . Hasta entonces seguís con este.
+            </Text>
+          </Animated.View>
+        )}
+
         {/* Keyed by the meal being edited so switching meals (or moving from
             editing to adding) remounts the form and drops the previous meal's
             picked foods, instead of clearing them from an effect. */}

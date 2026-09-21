@@ -35,11 +35,21 @@ interface MealPlanAssignment {
   };
 }
 
+/** A published plan that has not taken effect yet. The athlete sees only when
+ *  it starts — the plan they train on today stays the one in force. */
+export interface ScheduledPlan {
+  version: number;
+  name: string | null;
+  effectiveAt: number | null;
+}
+
 export interface SyncResult {
   workoutBy: string | null;
   mealsBy: string | null;
   workoutChanged: boolean;
   mealsChanged: boolean;
+  scheduledWorkout: ScheduledPlan | null;
+  scheduledMeals: ScheduledPlan | null;
 }
 
 const kv = {
@@ -69,11 +79,20 @@ export async function syncAssignments(
   templateId: string,
   mealPlanId: string,
 ): Promise<SyncResult> {
-  const res = await apiFetch<{ workout: WorkoutAssignment | null; mealPlan: MealPlanAssignment | null }>(
-    '/api/assignments',
-  );
+  const res = await apiFetch<{
+    workout: WorkoutAssignment | null;
+    mealPlan: MealPlanAssignment | null;
+    scheduled?: { workout: ScheduledPlan | null; mealPlan: ScheduledPlan | null };
+  }>('/api/assignments');
   const k = keys(userId);
-  const result: SyncResult = { workoutBy: null, mealsBy: null, workoutChanged: false, mealsChanged: false };
+  const result: SyncResult = {
+    workoutBy: null,
+    mealsBy: null,
+    workoutChanged: false,
+    mealsChanged: false,
+    scheduledWorkout: res.scheduled?.workout ?? null,
+    scheduledMeals: res.scheduled?.mealPlan ?? null,
+  };
 
   if (res.workout) {
     result.workoutBy = res.workout.payload.coachName || 'tu coach';

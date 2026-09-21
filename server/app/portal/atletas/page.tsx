@@ -132,6 +132,7 @@ export default function AthletesPage() {
   const [unread, setUnread] = useState<Record<string, number>>({});
   const [selected, setSelected] = useState<Athlete | null>(null);
   const [query, setQuery] = useState("");
+  const [scope, setScope] = useState<"mine" | "all">("mine");
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [listError, setListError] = useState(false);
@@ -191,7 +192,9 @@ export default function AthletesPage() {
   }
 
   const totalUnread = Object.values(unread).reduce((a, b) => a + b, 0);
+  const collaborations = athletes.filter(a => !a.primary).length;
   const filtered = athletes
+    .filter(a => scope === "all" || a.primary)
     .filter(a => a.name.toLowerCase().includes(query.toLowerCase()) || a.email.toLowerCase().includes(query.toLowerCase()))
     .sort((a, b) => (a.lastMessageAt ?? -Infinity) - (b.lastMessageAt ?? -Infinity));
   const mostRecentLink = athletes.length ? Math.max(...athletes.map(a => a.since)) : null;
@@ -275,6 +278,22 @@ export default function AthletesPage() {
               placeholder="Buscar atleta…"
               className="w-full border border-line bg-elev px-3 py-2 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none"
             />
+            {collaborations > 0 && (
+              <div className="mt-2 flex gap-1">
+                {([["mine", "MIS ATLETAS"], ["all", "TODOS LOS AUTORIZADOS"]] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setScope(value)}
+                    className={`flex-1 cursor-pointer border px-2 py-1.5 font-mono-app text-[9px] ${
+                      scope === value ? "border-volt text-volt" : "border-line text-fg-ter hover:text-fg"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div className="max-h-130 overflow-y-auto">
             {filtered.map(a => (

@@ -5,6 +5,7 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useRewardedInterstitialAd } from 'react-native-google-mobile-ads';
 
 import { F, useColors, withAlpha } from '@/constants/colors';
+import { useEntitlement } from '@/context/entitlement';
 import { usePreferences } from '@/context/preferences';
 import { adsSupported, ENTRENO_AD_UNIT_ID, initializeAds } from '@/lib/ads';
 
@@ -30,15 +31,21 @@ let consumedThisSession = false;
 export function EntrenoAdGate() {
   const C = useColors();
   const { accent } = usePreferences();
+  const { entitled, loading: entitlementLoading } = useEntitlement();
 
+  // Subscribers never see the gate. While entitlement is still resolving we do
+  // not gate either: briefly missing an impression is far better than showing
+  // an ad to someone who paid to remove them.
   const [gated, setGated] = useState(() => adsSupported && !consumedThisSession);
   const [adReady, setAdReady] = useState(false);
   // Once we've let the athlete through, showing the ad late would yank them out
   // of a set they already started — so a resolved gate is permanently inert.
   const resolved = useRef(false);
 
+  const suppressed = entitled || entitlementLoading;
+
   const { isLoaded, isClosed, error, load, show } = useRewardedInterstitialAd(
-    gated ? ENTRENO_AD_UNIT_ID : null,
+    gated && !suppressed ? ENTRENO_AD_UNIT_ID : null,
   );
 
   const release = useCallback(() => {
@@ -50,9 +57,14 @@ export function EntrenoAdGate() {
 
   // Start the SDK, then request the ad. Only runs on the focus that actually
   // gates — later focuses see `gated === false` and skip straight past.
+  // An entitlement that resolves while the gate is up releases it immediately.
+  useEffect(() => {
+    if (entitled) release();
+  }, [entitled, release]);
+
   useFocusEffect(
     useCallback(() => {
-      if (!gated || resolved.current) return;
+      if (!gated || suppressed || resolved.current) return;
 
       let cancelled = false;
       initializeAds().then(() => {
@@ -64,7 +76,7 @@ export function EntrenoAdGate() {
         cancelled = true;
         clearTimeout(timeout);
       };
-    }, [gated, release]),
+    }, [gated, suppressed, release]),
   );
 
   useEffect(() => {
@@ -88,7 +100,7 @@ export function EntrenoAdGate() {
     }
   }, [error, release]);
 
-  if (!gated) return null;
+  if (!gated || suppressed) return null;
 
   return (
     <Animated.View

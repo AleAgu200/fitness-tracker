@@ -1,6 +1,7 @@
 import { after } from "next/server";
 
 import { getSessionUser, unauthorized } from "@/lib/api-auth";
+import { canGeneratePlan, paywallResponse } from "@/lib/entitlements";
 import { rawGenerationRequestSchema } from "@/lib/generation/assemble";
 import {
   createOrReuseGenerationJob,
@@ -49,6 +50,11 @@ export async function POST(request: Request) {
   } catch {
     return Response.json({ error: "invalid_body" }, { status: 400 });
   }
+
+  // Checked before the job is created, not at run time: a queued job already
+  // holds the one-active-job slot and would burn OpenRouter budget.
+  const allowance = await canGeneratePlan(user.id);
+  if (!allowance.allowed) return paywallResponse(allowance);
 
   const parsedInput = rawGenerationRequestSchema.safeParse(body);
   if (!parsedInput.success) {

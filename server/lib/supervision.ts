@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto";
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
@@ -30,6 +30,8 @@ export interface LinkedAthlete {
   name: string;
   email: string;
   since: number | null;
+  /** False when this professional collaborates but someone else is responsible. */
+  primary: boolean;
 }
 
 function newId(): string {
@@ -173,6 +175,7 @@ export async function getAthletes(professionalId: string): Promise<LinkedAthlete
       name: user.name,
       email: user.email,
       since: careAssignments.createdAt,
+      primary: careAssignments.primary,
     })
     .from(organizationMemberships)
     .innerJoin(careAssignments, eq(careAssignments.professionalMembershipId, organizationMemberships.id))
@@ -195,6 +198,9 @@ export async function getAthletes(professionalId: string): Promise<LinkedAthlete
       name: user.name,
       email: user.email,
       since: supervisionLinks.acceptedAt,
+      // Legacy direct links predate the primary/collaborator split; the linked
+      // professional was by definition the only one responsible.
+      primary: sql<boolean>`true`,
     })
     .from(supervisionLinks)
     .innerJoin(user, eq(user.id, supervisionLinks.athleteId))

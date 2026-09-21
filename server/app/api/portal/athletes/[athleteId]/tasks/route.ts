@@ -8,6 +8,7 @@ const taskSchema = z.object({
   detail: z.string().trim().max(2000).optional(),
   dueAt: z.number().int().positive().optional(),
   attentionSignalId: z.string().max(128).optional(),
+  assigneeMembershipId: z.string().max(128).optional(),
 });
 
 export async function POST(request: Request, { params }: { params: Promise<{ athleteId: string }> }) {

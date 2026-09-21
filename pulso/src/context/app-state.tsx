@@ -53,7 +53,7 @@ import {
 } from '@/db/workout';
 import { CLEARED_REST_STATE, loadRestTimerState, RestTimerState, saveRestTimerState } from '@/lib/rest-timer-store';
 import { addWidgetRestListener } from '@/modules/pulso-widget';
-import { getStoredAssignmentMeta, syncAssignments, syncMobileData } from '@/lib/sync';
+import { getStoredAssignmentMeta, syncAssignments, syncMobileData, type ScheduledPlan } from '@/lib/sync';
 import { pushAthleteProfile, syncAthleteProfile } from '@/lib/profile-sync';
 import { formatWeight } from '@/lib/units';
 import { EMPTY_WIDGET_DATA, syncWorkoutWidgets } from '@/lib/widget-bridge';
@@ -148,6 +148,8 @@ export interface AppState {
   // supervision — non-null when a professional assigned the plan (attribution only)
   assignedWorkoutBy: string | null;
   assignedMealsBy: string | null;
+  scheduledWorkout: ScheduledPlan | null;
+  scheduledMeals: ScheduledPlan | null;
 
   // habits / derived
   racha: number;
@@ -198,6 +200,8 @@ const initialState: AppState = {
   goalWeightKg: null,
   assignedWorkoutBy: null,
   assignedMealsBy: null,
+  scheduledWorkout: null,
+  scheduledMeals: null,
   racha: 0,
   weekDays: [],
   heatmap: Array.from({ length: 12 }, () => Array.from({ length: 7 }, () => 0)),
@@ -346,10 +350,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         let [plan, mealPlan] = await Promise.all([getPlan(userId, todayWeekday), getMealPlan(userId, todayWeekday)]);
         let assignedWorkoutBy: string | null = null;
         let assignedMealsBy: string | null = null;
+        let scheduledWorkout: ScheduledPlan | null = null;
+        let scheduledMeals: ScheduledPlan | null = null;
         try {
           const sync = await syncAssignments(userId, plan.templateId, mealPlan.mealPlanId);
           assignedWorkoutBy = sync.workoutBy;
           assignedMealsBy = sync.mealsBy;
+          scheduledWorkout = sync.scheduledWorkout;
+          scheduledMeals = sync.scheduledMeals;
           if (sync.workoutChanged) plan = await getPlan(userId, todayWeekday);
           if (sync.mealsChanged) mealPlan = await getMealPlan(userId, todayWeekday);
         } catch {
@@ -442,6 +450,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           goalWeightKg: profile?.goalWeightKg ?? null,
           assignedWorkoutBy,
           assignedMealsBy,
+          scheduledWorkout,
+          scheduledMeals,
           racha,
           weekDays,
           heatmap,

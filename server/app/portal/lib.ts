@@ -15,6 +15,8 @@ export interface Athlete {
   email: string;
   since: number;
   lastMessageAt: number | null;
+  /** False when another professional is the responsible one for this athlete. */
+  primary: boolean;
 }
 
 export interface Msg {
@@ -55,11 +57,23 @@ export const FOOD_CATEGORIES = ["proteína", "carbohidrato", "grasa", "fruta", "
 export const MUSCLE_GROUPS = ["pecho", "espalda", "piernas", "hombros", "brazos", "core", "full body"];
 export const EQUIPMENT = ["barra", "mancuernas", "polea", "máquina", "peso corporal", "otro"];
 
+/** Carries the parsed error body so callers can act on it — a 409 needs the
+ *  server's current version, not just the status code. */
+export class ApiError extends Error {
+  constructor(public readonly status: number, public readonly body: Record<string, unknown> | null) {
+    super(String(status));
+    this.name = "ApiError";
+  }
+}
+
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...options,
     headers: { "content-type": "application/json", ...options?.headers },
   });
-  if (!res.ok) throw new Error(String(res.status));
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new ApiError(res.status, body);
+  }
   return res.json();
 }

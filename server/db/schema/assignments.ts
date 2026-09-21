@@ -3,7 +3,8 @@ import { bigint, check, index, integer, jsonb, pgTable, text } from "drizzle-orm
 
 import { user } from "./auth";
 import { careAssignments } from "./care";
-import { organizations } from "./organizations";
+import { organizationMemberships, organizations } from "./organizations";
+import { planTemplates } from "./plans";
 
 const milliseconds = (name: string) => bigint(name, { mode: "number" });
 
@@ -16,12 +17,16 @@ export const assignedWorkouts = pgTable("assigned_workouts", {
   payload: jsonb("payload").$type<unknown>().notNull(),
   version: integer("version").notNull(),
   status: text("status").notNull().default("active"),
+  name: text("name"),
+  publishedByMembershipId: text("publishedByMembershipId").references(() => organizationMemberships.id, { onDelete: "restrict" }),
+  sourceTemplateId: text("sourceTemplateId").references(() => planTemplates.id, { onDelete: "set null" }),
   createdAt: milliseconds("createdAt").notNull(),
   effectiveAt: milliseconds("effectiveAt"),
   endsAt: milliseconds("endsAt"),
 }, (table) => [
   check("assigned_workouts_status_check", sql`${table.status} in ('active', 'archived')`),
   index("aw_athlete").on(table.athleteId, table.status),
+  index("aw_athlete_window").on(table.athleteId, table.effectiveAt, table.endsAt),
 ]);
 
 export const assignedMealPlans = pgTable("assigned_meal_plans", {
@@ -33,10 +38,14 @@ export const assignedMealPlans = pgTable("assigned_meal_plans", {
   payload: jsonb("payload").$type<unknown>().notNull(),
   version: integer("version").notNull(),
   status: text("status").notNull().default("active"),
+  name: text("name"),
+  publishedByMembershipId: text("publishedByMembershipId").references(() => organizationMemberships.id, { onDelete: "restrict" }),
+  sourceTemplateId: text("sourceTemplateId").references(() => planTemplates.id, { onDelete: "set null" }),
   createdAt: milliseconds("createdAt").notNull(),
   effectiveAt: milliseconds("effectiveAt"),
   endsAt: milliseconds("endsAt"),
 }, (table) => [
   check("assigned_meal_plans_status_check", sql`${table.status} in ('active', 'archived')`),
   index("amp_athlete").on(table.athleteId, table.status),
+  index("amp_athlete_window").on(table.athleteId, table.effectiveAt, table.endsAt),
 ]);

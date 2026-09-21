@@ -348,6 +348,7 @@ function Login({ onDone }: { onDone: () => void }) {
 const NAV = [
   { href: "/portal/atencion", label: "ATENCIÓN", icon: "⚡" },
   { href: "/portal/atletas", label: "ATLETAS", icon: "◆" },
+  { href: "/portal/equipo", label: "EQUIPO", icon: "⬡" },
   { href: "/portal/alimentos", label: "ALIMENTOS", icon: "✚" },
   { href: "/portal/ejercicios", label: "EJERCICIOS", icon: "▲" },
 ];

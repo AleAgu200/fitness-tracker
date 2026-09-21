@@ -1,8 +1,7 @@
 import { forbidden, getSessionUser, unauthorized } from "@/lib/api-auth";
 import { AssignmentConflictError, assignMealPlan, MealPlanPayload } from "@/lib/assignments";
+import { normalizeMeals, PlanPayloadError } from "@/lib/plan-payload";
 import { requireCategoryAccess } from "@/lib/permissions";
-
-const MAX_MEALS = 10;
 
 /** POST /api/assignments/meal-plan { athleteId, meals } — nutritionist assigns a meal plan */
 export async function POST(request: Request) {
@@ -17,39 +16,17 @@ export async function POST(request: Request) {
     return Response.json({ error: "invalid_body" }, { status: 400 });
   }
   const athleteId = typeof body.athleteId === "string" ? body.athleteId : null;
-  if (!athleteId || !Array.isArray(body.meals) || body.meals.length === 0) {
-    return Response.json({ error: "invalid_body" }, { status: 400 });
-  }
-  if (body.meals.length > MAX_MEALS) {
-    return Response.json({ error: "too_many_meals" }, { status: 400 });
-  }
+  if (!athleteId) return Response.json({ error: "invalid_body" }, { status: 400 });
+
   const access = await requireCategoryAccess(user.id, athleteId, "nutrition");
   if (!access) return Response.json({ error: "nutrition_access_denied" }, { status: 403 });
 
-  const meals: MealPlanPayload["meals"] = [];
-  for (const raw of body.meals as Record<string, unknown>[]) {
-    const label = typeof raw.label === "string" ? raw.label.trim().toUpperCase() : "";
-    const n = typeof raw.n === "string" ? raw.n.trim() : "";
-    if (!label || !n) return Response.json({ error: "invalid_meal" }, { status: 400 });
-    const items = Array.isArray(raw.items)
-      ? (raw.items as Record<string, unknown>[])
-          .filter(it => typeof it.name === "string" && Number(it.grams) > 0)
-          .map(it => ({
-            foodId: typeof it.foodId === "string" ? it.foodId : "",
-            name: (it.name as string).trim(),
-            grams: Math.round(Number(it.grams)),
-          }))
-      : undefined;
-    meals.push({
-      label,
-      time: typeof raw.time === "string" ? raw.time.trim() : "",
-      n,
-      kcal: Math.max(0, Math.round(Number(raw.kcal) || 0)),
-      p: Math.max(0, Math.round(Number(raw.p) || 0)),
-      c: Math.max(0, Math.round(Number(raw.c) || 0)),
-      g: Math.max(0, Math.round(Number(raw.g) || 0)),
-      items,
-    });
+  let meals: MealPlanPayload["meals"];
+  try {
+    meals = normalizeMeals(body.meals);
+  } catch (error) {
+    if (error instanceof PlanPayloadError) return Response.json({ error: error.code }, { status: 400 });
+    throw error;
   }
 
   try {

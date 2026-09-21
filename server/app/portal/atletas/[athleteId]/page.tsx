@@ -4,6 +4,7 @@ import Link from "next/link";
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 
 import { api } from "../../lib";
+import { PlanWorkspace } from "./plan-workspace";
 
 type AccessStatus = "granted" | "revoked" | "not_authorized";
 
@@ -130,6 +131,12 @@ export default function AthleteRecordPage({ params }: { params: Promise<{ athlet
   const mainSignal = overview?.signals[0] ?? null;
   const pendingCheckin = overview?.checkins.find(checkin => checkin.status === "submitted") ?? null;
   const activeTasks = useMemo(() => overview?.tasks.filter(task => task.status === "open") ?? [], [overview]);
+  const editableDisciplines = useMemo(() => {
+    const result: ("coach" | "nutritionist")[] = [];
+    if (overview?.permissions.training?.canEdit) result.push("coach");
+    if (overview?.permissions.nutrition?.canEdit) result.push("nutritionist");
+    return result;
+  }, [overview]);
 
   async function createTask(event: React.FormEvent) {
     event.preventDefault();
@@ -271,11 +278,7 @@ export default function AthleteRecordPage({ params }: { params: Promise<{ athlet
 
       {tab === "Check-ins" && <div className="flex flex-col gap-3">{overview.checkins.length ? overview.checkins.map(checkin => <div key={checkin.requestId} className="border border-line bg-card p-4"><div className="flex items-center justify-between"><div><span className="font-mono-app text-[10px] text-volt">{checkin.status.toUpperCase()}</span><div className="mt-1 text-xs text-fg-ter">Vence {dateTime(checkin.dueAt)} · enviado {dateTime(checkin.submittedAt)}</div></div>{checkin.status === "submitted" && <div className="flex gap-2"><button disabled={busy} onClick={() => reviewCheckin(checkin, "no_changes")} className="cursor-pointer border border-line px-3 py-2 font-mono-app text-[9px] text-fg-sec">SIN CAMBIOS</button><button disabled={busy} onClick={() => reviewCheckin(checkin, "task")} className="cursor-pointer bg-volt px-3 py-2 font-mono-app text-[9px] font-bold text-ink">REVISAR + TAREA</button></div>}</div>{checkin.answers && <div className="mt-4 grid grid-cols-5 gap-2">{["energy", "sleep", "pain", "stress", "motivation"].map(key => <div key={key} className="border border-line bg-elev p-3"><div className="font-mono-app text-[8px] uppercase text-fg-ter">{key}</div><div className="mt-1 text-xl text-fg">{String(checkin.answers?.[key] ?? "—")}</div></div>)}</div>}</div>) : <div className="border border-dashed border-line p-8 text-center text-sm text-fg-ter">No hay check-ins visibles.</div>}</div>}
 
-      {tab === "Plan" && <div className="grid grid-cols-2 gap-4">{([[
-        "Entrenamiento", overview.plans.workout, overview.permissions.training.status,
-      ], [
-        "Nutrición", overview.plans.mealPlan, overview.permissions.nutrition.status,
-      ]] as [string, Plan | null, AccessStatus][]).map(([label, plan, state]) => <div key={label} className="border border-line bg-card p-4"><div className="font-mono-app text-[10px] text-fg-ter">{label}</div>{plan ? <><div className="mt-3 text-xl text-fg">Versión {plan.version}</div><div className="mt-2 text-sm text-fg-sec">Efectivo {dateTime(plan.effectiveAt)} · termina {dateTime(plan.endsAt)}</div><Link href="/portal/atletas" className="mt-5 inline-block border border-neon px-3 py-2 font-mono-app text-[9px] text-neon">ABRIR EDITOR ACTUAL</Link></> : <p className="mt-4 text-sm text-fg-sec">{state === "revoked" ? "Acceso revocado." : "No hay un plan vigente visible."}</p>}</div>)}</div>}
+      {tab === "Plan" && <PlanWorkspace athleteId={athleteId} disciplines={editableDisciplines} onPublished={load} />}
 
       {tab === "Mensajes" && <RecordChat athleteId={athleteId} />}
 

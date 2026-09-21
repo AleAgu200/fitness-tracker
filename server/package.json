@@ -8,7 +8,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test lib/*.test.ts",
-    "test:integration": "node --import tsx --test lib/sync.integration.ts lib/professional.integration.ts",
+    "test:integration": "node --import tsx --env-file-if-exists=.env.local --env-file-if-exists=.env --test lib/sync.integration.ts lib/professional.integration.ts lib/plans.integration.ts lib/team.integration.ts lib/entitlements.integration.ts",
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {

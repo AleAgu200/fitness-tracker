@@ -10,21 +10,25 @@ import { createCheckinRequest, reviewCheckin } from "@/lib/checkins";
 import { requireCategoryAccess } from "@/lib/permissions";
 import { CURRENT_SYNC_SCHEMA_VERSION } from "@/lib/sync-contract";
 import { pullChanges, pushMutations } from "@/lib/sync";
+import { seedCoachedAthlete } from "@/lib/test-fixtures";
 import { setAthleteSharingConsent } from "@/lib/team-management";
 
-const coachId = "coach_seed";
-const athleteId = "athlete_seed";
-const deviceId = "device-integration-001";
-
 test("PostgreSQL vertical flow: sync, signal, review, task, conflict and revocation", async () => {
-  const access = await requireCategoryAccess(coachId, athleteId, "training");
-  assert.ok(access, "backfill should grant the coach training access");
+  const { access, coachId, athleteId } = await seedCoachedAthlete({
+    categories: ["training", "nutrition", "metrics", "checkins"],
+  });
+  // Device ids are globally unique, so derive it from the seeded athlete rather
+  // than using a constant that would collide with the previous run's device.
+  const deviceId = `device_${athleteId}`;
+  // The conflict assertions below publish against baseVersion 1, so the athlete
+  // needs a v1 plan the way a real supervised athlete would already have one.
+  await assignWorkout(coachId, athleteId, { coachName: "Coach Seed", exercises: [] }, { access });
 
   const sessionMutation = {
     schemaVersion: CURRENT_SYNC_SCHEMA_VERSION,
-    mutationId: "mutation-session-001",
+    mutationId: `mutation-session-001_${athleteId}`,
     entityType: "training_session" as const,
-    entityId: "session-integration-001",
+    entityId: `session-integration-001_${athleteId}`,
     operation: "create" as const,
     occurredAt: Date.now(),
     payload: {
@@ -48,13 +52,13 @@ test("PostgreSQL vertical flow: sync, signal, review, task, conflict and revocat
 
   const lateSet = {
     schemaVersion: CURRENT_SYNC_SCHEMA_VERSION,
-    mutationId: "mutation-set-late-001",
+    mutationId: `mutation-set-late-001_${athleteId}`,
     entityType: "training_set" as const,
-    entityId: "set-integration-001",
+    entityId: `set-integration-001_${athleteId}`,
     operation: "create" as const,
     occurredAt: Date.now(),
     payload: {
-      sessionId: "session-integration-late-001",
+      sessionId: `session-integration-late-001_${athleteId}`,
       exerciseName: "Sentadilla",
       setIndex: 0,
       reps: 5,
@@ -70,8 +74,8 @@ test("PostgreSQL vertical flow: sync, signal, review, task, conflict and revocat
   assert.equal(firstLateSetPush.results[0].status, "retryable");
   await pushMutations(athleteId, deviceId, [{
     ...sessionMutation,
-    mutationId: "mutation-session-late-001",
-    entityId: "session-integration-late-001",
+    mutationId: `mutation-session-late-001_${athleteId}`,
+    entityId: `session-integration-late-001_${athleteId}`,
   }]);
   const retriedLateSetPush = await pushMutations(athleteId, deviceId, [lateSet]);
   assert.equal(retriedLateSetPush.upgradeRequired, false);
@@ -88,9 +92,9 @@ test("PostgreSQL vertical flow: sync, signal, review, task, conflict and revocat
   assert.ok(request);
   const checkinMutation = {
     schemaVersion: CURRENT_SYNC_SCHEMA_VERSION,
-    mutationId: "mutation-checkin-001",
+    mutationId: `mutation-checkin-001_${athleteId}`,
     entityType: "checkin_response" as const,
-    entityId: "response-integration-001",
+    entityId: `response-integration-001_${athleteId}`,
     operation: "create" as const,
     occurredAt: Date.now(),
     payload: {

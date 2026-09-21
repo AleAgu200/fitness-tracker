@@ -40,7 +40,49 @@ export interface AccessContext {
   consents: Record<SharingCategory, "granted" | "revoked" | "never_granted">;
 }
 
+/**
+ * Organization-level identity for work that is not about one athlete (plan
+ * templates, team administration). Deliberately narrower than AccessContext,
+ * which additionally carries a specific athlete's client id and consents.
+ */
+export interface OrganizationActor {
+  organizationId: string;
+  organizationName: string;
+  membershipId: string;
+  orgRole: OrganizationRole;
+  discipline: Discipline;
+}
+
 const ALL_CATEGORIES: SharingCategory[] = ["training", "nutrition", "metrics", "checkins", "photos"];
+
+/** Active memberships where this professional holds the given discipline. */
+export async function getProfessionalOrganizations(
+  userId: string,
+  discipline: Discipline,
+): Promise<OrganizationActor[]> {
+  const rows = await db.select({
+    organizationId: organizations.id,
+    organizationName: organizations.name,
+    membershipId: organizationMemberships.id,
+    orgRole: organizationMemberships.orgRole,
+  })
+    .from(organizationMemberships)
+    .innerJoin(organizations, eq(organizations.id, organizationMemberships.organizationId))
+    .innerJoin(professionalCapabilities, eq(professionalCapabilities.membershipId, organizationMemberships.id))
+    .where(and(
+      eq(organizationMemberships.userId, userId),
+      eq(organizationMemberships.status, "active"),
+      eq(professionalCapabilities.discipline, discipline),
+    ));
+
+  return rows.map(row => ({
+    organizationId: row.organizationId,
+    organizationName: row.organizationName,
+    membershipId: row.membershipId,
+    orgRole: row.orgRole as OrganizationRole,
+    discipline,
+  }));
+}
 
 export async function getProfessionalAccess(professionalUserId: string, athleteId: string): Promise<AccessContext[]> {
   const rows = await db.select({

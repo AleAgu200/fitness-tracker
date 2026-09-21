@@ -21,6 +21,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { NotificationBootstrap } from '@/components/notification-bootstrap';
 import { AppProvider } from '@/context/app-state';
+import { EntitlementProvider } from '@/context/entitlement';
 import { OnboardingGenerationProvider } from '@/context/onboarding-generation';
 import { PreferencesProvider } from '@/context/preferences';
 import { SessionProvider } from '@/context/session';
@@ -70,6 +71,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <PreferencesProvider>
         <SessionProvider>
+          <EntitlementProvider>
           <OnboardingGenerationProvider>
             <NotificationBootstrap />
             <AppProvider>
@@ -77,6 +79,7 @@ export default function RootLayout() {
               <Stack screenOptions={{ headerShown: false }} />
             </AppProvider>
           </OnboardingGenerationProvider>
+          </EntitlementProvider>
         </SessionProvider>
       </PreferencesProvider>
     </GestureHandlerRootView>

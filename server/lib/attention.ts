@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto";
 
-import { and, desc, eq, inArray, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, lte, or, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
@@ -84,6 +84,9 @@ export async function refreshAttentionSignals(professionalUserId: string) {
               eq(assignedWorkouts.careAssignmentId, assignment.ownerAssignmentId),
               eq(assignedWorkouts.status, "active"),
               lte(assignedWorkouts.endsAt, soon),
+              // A superseded plan keeps status 'active' with its window already
+              // closed — only a plan still in force can be "ending soon".
+              gt(assignedWorkouts.endsAt, now),
             ))
         : Promise.resolve([]),
       assignment.discipline === "nutritionist"
@@ -93,6 +96,7 @@ export async function refreshAttentionSignals(professionalUserId: string) {
               eq(assignedMealPlans.careAssignmentId, assignment.ownerAssignmentId),
               eq(assignedMealPlans.status, "active"),
               lte(assignedMealPlans.endsAt, soon),
+              gt(assignedMealPlans.endsAt, now),
             ))
         : Promise.resolve([]),
       db.select({ id: syncDevices.id, lastSeenAt: syncDevices.lastSeenAt })

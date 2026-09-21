@@ -3,8 +3,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Paywall } from '@/components/paywall';
 import { Card, GlowPulse, Label, PressableScale } from '@/components/ui/kit';
 import { F, useColors, withAlpha } from '@/constants/colors';
+import { isPaywallError } from '@/lib/purchases';
 import {
   PlanGenerationJob,
   RawGenerationRequest,
@@ -140,6 +142,7 @@ export default function GeneratingScreen() {
   const [leaving, setLeaving] = useState(false);
   const [skipping, setSkipping] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [paywallOpen, setPaywallOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   const active = job?.status === 'queued' || job?.status === 'running';
@@ -217,7 +220,10 @@ export default function GeneratingScreen() {
 
       await startGeneration(body);
     } catch (error) {
-      setLocalError(errorMessage(error));
+      // A refused generation is a paywall, not a failure — show the offer
+      // rather than an error the athlete cannot act on.
+      if (isPaywallError(error)) setPaywallOpen(true);
+      else setLocalError(errorMessage(error));
     } finally {
       setStarting(false);
     }
@@ -438,6 +444,12 @@ export default function GeneratingScreen() {
           </View>
         </View>
       )}
+
+      <Paywall
+        visible={paywallOpen}
+        reason="free_quota_exhausted"
+        onClose={() => setPaywallOpen(false)}
+      />
     </ScrollView>
   );
 }

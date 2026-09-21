@@ -1,4 +1,5 @@
 import { getSessionUser, unauthorized } from "@/lib/api-auth";
+import { canGeneratePlan, paywallResponse } from "@/lib/entitlements";
 import {
   GenerationTimeoutError,
   GenerationValidationError,
@@ -18,6 +19,9 @@ import { generationInputSchema } from "@/lib/generation/schema";
 export async function POST(request: Request) {
   const user = await getSessionUser(request);
   if (!user) return unauthorized();
+
+  const allowance = await canGeneratePlan(user.id);
+  if (!allowance.allowed) return paywallResponse(allowance);
 
   let body: unknown;
   try {
