@@ -264,8 +264,8 @@ function TeamSection() {
                   style={{ backgroundColor: C.cyan, paddingHorizontal: 20, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}
                 >
                   {linking
-                    ? <ActivityIndicator color={C.bg} size="small" />
-                    : <Text style={{ fontFamily: F.monoXBold, fontSize: 12, letterSpacing: 0.8, color: C.bg }}>VINCULAR</Text>}
+                    ? <ActivityIndicator color={C.onAccent} size="small" />
+                    : <Text style={{ fontFamily: F.monoXBold, fontSize: 12, letterSpacing: 0.8, color: C.onAccent }}>VINCULAR</Text>}
                 </PressableScale>
               </View>
               {error && (

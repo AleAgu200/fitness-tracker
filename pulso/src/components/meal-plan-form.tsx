@@ -133,7 +133,7 @@ export function MealPlanForm({ editing, initial, onCancel, onSave, onDelete }: P
           </PressableScale>
         )}
         <PressableScale onPress={save} haptic="medium" style={{ flex: 1.5, padding: 12, backgroundColor: C.cyan, alignItems: 'center' }}>
-          <Text style={{ fontFamily: F.monoXBold, fontSize: 11, letterSpacing: 0.6, color: C.bg, textTransform: 'uppercase' }}>
+          <Text style={{ fontFamily: F.monoXBold, fontSize: 11, letterSpacing: 0.6, color: C.onAccent, textTransform: 'uppercase' }}>
             {editing ? 'GUARDAR' : 'AGREGAR'}
           </Text>
         </PressableScale>

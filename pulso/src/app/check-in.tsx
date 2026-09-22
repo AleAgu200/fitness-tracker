@@ -42,7 +42,7 @@ function ScaleQuestion({ question, value, onChange }: { question: CheckinQuestio
               borderWidth: 1, borderColor: value === option ? C.cyan : C.border,
             }}
           >
-            <Text style={{ fontFamily: F.monoBold, fontSize: 11, color: value === option ? C.bg : C.textSecondary }}>{option}</Text>
+            <Text style={{ fontFamily: F.monoBold, fontSize: 11, color: value === option ? C.onAccent : C.textSecondary }}>{option}</Text>
           </PressableScale>
         ))}
       </View>
@@ -144,7 +144,7 @@ export default function ProfessionalCheckinScreen() {
           ))}
           {error && <Text style={{ fontFamily: F.mono, fontSize: 10, color: C.red, marginBottom: 10 }}>{error}</Text>}
           <PressableScale onPress={submit} disabled={saving} haptic="success" style={{ minHeight: 54, backgroundColor: C.yellow, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 }}>
-            {saving ? <ActivityIndicator color={C.bg} /> : <Text style={{ fontFamily: F.monoXBold, fontSize: 12, letterSpacing: 0.8, color: C.bg }}>GUARDAR CHECK-IN</Text>}
+            {saving ? <ActivityIndicator color={C.onAccent} /> : <Text style={{ fontFamily: F.monoXBold, fontSize: 12, letterSpacing: 0.8, color: C.onAccent }}>GUARDAR CHECK-IN</Text>}
           </PressableScale>
         </>
       )}

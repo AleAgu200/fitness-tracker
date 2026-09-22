@@ -212,7 +212,7 @@ export default function ProgresoScreen() {
               backgroundColor: logged ? metricColor : 'transparent',
             }}
           >
-            <Text style={{ fontFamily: F.monoBold, fontSize: 12, letterSpacing: 0.6, color: logged ? C.bg : metricColor, textTransform: 'uppercase' }}>
+            <Text style={{ fontFamily: F.monoBold, fontSize: 12, letterSpacing: 0.6, color: logged ? C.onAccent : metricColor, textTransform: 'uppercase' }}>
               {logged ? '✓ REGISTRADO · TOCÁ PARA ACTUALIZAR' : `REGISTRAR ${metricDef.label}`}
             </Text>
           </PressableScale>

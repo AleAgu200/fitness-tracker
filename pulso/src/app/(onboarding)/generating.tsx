@@ -416,7 +416,7 @@ export default function GeneratingScreen() {
                 onPress={() => void generate()}
                 style={{ paddingVertical: 15, alignItems: 'center', backgroundColor: C.yellow }}
               >
-                <Text style={{ color: C.bg, fontFamily: F.monoBold, fontSize: 12, letterSpacing: 0.8 }}>
+                <Text style={{ color: C.onAccent, fontFamily: F.monoBold, fontSize: 12, letterSpacing: 0.8 }}>
                   {starting ? 'CREANDO JOB…' : 'INTENTAR DE NUEVO'}
                 </Text>
               </PressableScale>

@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -52,8 +53,16 @@ export function Paywall({ visible, onClose, reason }: { visible: boolean; onClos
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' }}>
         <Animated.View entering={FadeIn.duration(180)} style={{ backgroundColor: C.bg, borderTopWidth: 1, borderColor: withAlpha(accent, 0.4), maxHeight: '88%' }}>
           <ScrollView contentContainerStyle={{ padding: 24, gap: 18 }}>
-            <View style={{ alignSelf: 'flex-start', borderWidth: 1, borderColor: withAlpha(accent, 0.35), backgroundColor: withAlpha(accent, 0.06), paddingHorizontal: 12, paddingVertical: 5 }}>
-              <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 1.4, color: accent }}>PULSO PLUS</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <Image
+                source={require('../../assets/expo.icon/Assets/1000399110(1).png')}
+                style={{ width: 40, height: 40 }}
+                contentFit="contain"
+                accessibilityLabel="PULSO"
+              />
+              <View style={{ borderWidth: 1, borderColor: withAlpha(accent, 0.35), backgroundColor: withAlpha(accent, 0.06), paddingHorizontal: 12, paddingVertical: 5 }}>
+                <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 1.4, color: accent }}>PULSO PLUS</Text>
+              </View>
             </View>
 
             <Text style={{ fontFamily: F.grotesk, fontSize: 24, lineHeight: 30, color: C.textPrimary }}>

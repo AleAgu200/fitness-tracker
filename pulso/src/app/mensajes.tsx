@@ -214,8 +214,8 @@ export default function MensajesScreen() {
             style={{ backgroundColor: C.cyan, paddingHorizontal: 20, minHeight: 46, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-end' }}
           >
             {sending
-              ? <ActivityIndicator color={C.bg} size="small" />
-              : <Text style={{ fontFamily: F.monoXBold, fontSize: 12, letterSpacing: 0.8, color: C.bg }}>ENVIAR</Text>}
+              ? <ActivityIndicator color={C.onAccent} size="small" />
+              : <Text style={{ fontFamily: F.monoXBold, fontSize: 12, letterSpacing: 0.8, color: C.onAccent }}>ENVIAR</Text>}
           </PressableScale>
         </View>
       )}

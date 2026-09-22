@@ -229,7 +229,7 @@ export function ExerciseAnimationModal({
                   accessibilityLabel={`Usar ${nombre} en el plan`}
                   style={({ pressed }) => ({ minHeight: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: C.cyan, paddingHorizontal: 14, opacity: pressed ? 0.78 : 1 })}
                 >
-                  <Text style={{ fontFamily: F.monoBold, fontSize: 10, letterSpacing: 0.8, color: C.bg }}>USAR ESTE EJERCICIO →</Text>
+                  <Text style={{ fontFamily: F.monoBold, fontSize: 10, letterSpacing: 0.8, color: C.onAccent }}>USAR ESTE EJERCICIO →</Text>
                 </Pressable>
               )}
               <Text style={{ fontFamily: F.mono, fontSize: 8, letterSpacing: 0.5, color: C.textTertiary, textAlign: 'center' }}>

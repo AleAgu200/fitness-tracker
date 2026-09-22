@@ -150,7 +150,7 @@ export function NotificationSettings() {
           haptic="medium"
           style={{ backgroundColor: accent, padding: 12, alignItems: 'center', marginTop: 12 }}
         >
-          <Text style={{ fontFamily: F.monoXBold, fontSize: 10, letterSpacing: 0.7, color: C.bg }}>
+          <Text style={{ fontFamily: F.monoXBold, fontSize: 10, letterSpacing: 0.7, color: C.onAccent }}>
             ACTIVAR NOTIFICACIONES
           </Text>
         </PressableScale>

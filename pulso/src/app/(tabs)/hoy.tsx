@@ -236,7 +236,7 @@ export default function HoyScreen() {
                     alignItems: 'center', justifyContent: 'center',
                   }}
                 >
-                  <Text style={{ fontFamily: F.mono, fontSize: 8, color: d.done ? C.bg : C.textTertiary }}>{d.label}</Text>
+                  <Text style={{ fontFamily: F.mono, fontSize: 8, color: d.done ? C.onAccent : C.textTertiary }}>{d.label}</Text>
                 </View>
               ))}
             </View>
@@ -282,7 +282,7 @@ export default function HoyScreen() {
                 haptic="medium"
                 style={{ marginTop: 12, backgroundColor: accent, padding: 11, alignItems: 'center' }}
               >
-                <Text style={{ fontFamily: F.monoBold, fontSize: 11, letterSpacing: 0.5, color: C.bg, textTransform: 'uppercase' }}>
+                <Text style={{ fontFamily: F.monoBold, fontSize: 11, letterSpacing: 0.5, color: C.onAccent, textTransform: 'uppercase' }}>
                   {totalSets > 0 ? 'CONTINUAR ENTRENO →' : 'EMPEZAR ENTRENO →'}
                 </Text>
               </PressableScale>

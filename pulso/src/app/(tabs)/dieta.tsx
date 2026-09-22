@@ -106,7 +106,7 @@ function MealCard({ m, index }: { m: Meal; index: number }) {
               alignItems: 'center',
             }}
           >
-            <Text style={{ fontFamily: F.monoBold, fontSize: 9, letterSpacing: 0.5, color: s === action ? C.bg : C.textSecondary, textTransform: 'uppercase' }}>
+            <Text style={{ fontFamily: F.monoBold, fontSize: 9, letterSpacing: 0.5, color: s === action ? C.onAccent : C.textSecondary, textTransform: 'uppercase' }}>
               {action === 'cumplido' ? 'CUMPLIDO' : action === 'sustituido' ? 'SUSTITUIR' : 'PENDIENTE'}
             </Text>
           </PressableScale>
@@ -260,7 +260,7 @@ function OtherDayMealEditor({ weekday, onChanged }: { weekday: number; onChanged
             onPress={() => { setAdding(true); setEditingId(null); }}
             style={{ backgroundColor: C.cyan, paddingVertical: 12, paddingHorizontal: 22, alignItems: 'center', alignSelf: 'stretch' }}
           >
-            <Text style={{ fontFamily: F.monoXBold, fontSize: 11, letterSpacing: 0.6, color: C.bg, textTransform: 'uppercase' }}>
+            <Text style={{ fontFamily: F.monoXBold, fontSize: 11, letterSpacing: 0.6, color: C.onAccent, textTransform: 'uppercase' }}>
               + CREAR COMIDA
             </Text>
           </PressableScale>
@@ -477,7 +477,7 @@ export default function DietaScreen() {
               haptic="medium"
               style={{ backgroundColor: C.cyan, paddingVertical: 12, paddingHorizontal: 22 }}
             >
-              <Text style={{ fontFamily: F.monoXBold, fontSize: 11, letterSpacing: 0.6, color: C.bg, textTransform: 'uppercase' }}>
+              <Text style={{ fontFamily: F.monoXBold, fontSize: 11, letterSpacing: 0.6, color: C.onAccent, textTransform: 'uppercase' }}>
                 + CREAR MI PLAN
               </Text>
             </PressableScale>

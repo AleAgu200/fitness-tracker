@@ -27,6 +27,16 @@ export interface ColorTokens {
   red: string;
   orange: string;
 
+  /**
+   * Text/icons drawn ON TOP of a brand accent (yellow, cyan, the user's accent).
+   *
+   * Always dark, in both themes, because the accents themselves do not flip —
+   * they are bright in light mode too. Using `bg` here instead only looks right
+   * in dark mode; in light mode it puts a near-white label on yellow, which is
+   * close to invisible.
+   */
+  onAccent: string;
+
   textPrimary: string;
   textMid: string;
   textSecondary: string;
@@ -41,6 +51,7 @@ export const DARK: ColorTokens = {
   bgEl: '#0E0E10',
 
   ...BRAND,
+  onAccent: '#0A0A0B',
 
   textPrimary: '#FAFAFA',
   textMid: '#C7C7CE',
@@ -56,6 +67,7 @@ export const LIGHT: ColorTokens = {
   bgEl: '#ECECEE',
 
   ...BRAND,
+  onAccent: '#0A0A0B',
 
   textPrimary: '#0A0A0B',
   textMid: '#3A3A3F',

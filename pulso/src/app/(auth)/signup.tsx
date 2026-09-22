@@ -305,8 +305,8 @@ export default function SignUpScreen() {
         activeOpacity={0.8}
       >
         {loading
-          ? <ActivityIndicator color={C.bg} />
-          : <Text style={{ fontFamily: F.monoBold, fontSize: 12, letterSpacing: 0.8, color: C.bg, textTransform: 'uppercase' }}>CREAR CUENTA</Text>
+          ? <ActivityIndicator color={C.onAccent} />
+          : <Text style={{ fontFamily: F.monoBold, fontSize: 12, letterSpacing: 0.8, color: C.onAccent, textTransform: 'uppercase' }}>CREAR CUENTA</Text>
         }
       </TouchableOpacity>
 

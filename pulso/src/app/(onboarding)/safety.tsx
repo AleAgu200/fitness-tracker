@@ -122,7 +122,7 @@ export default function OnboardingSafetyScreen() {
                 backgroundColor: consent ? accent : C.bgEl,
               }}
             >
-              <Text style={{ fontFamily: F.monoBold, fontSize: 13, color: consent ? C.bg : C.textTertiary }}>
+              <Text style={{ fontFamily: F.monoBold, fontSize: 13, color: consent ? C.onAccent : C.textTertiary }}>
                 {consent ? '✓' : ''}
               </Text>
             </View>

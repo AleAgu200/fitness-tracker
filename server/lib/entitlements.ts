@@ -16,6 +16,10 @@ export const FREE_GENERATION_LIMIT = 1;
 /** Statuses that still grant access — a billing retry should not lock someone out mid-period. */
 const ENTITLED_STATUSES = ["active", "in_grace_period", "billing_issue"] as const;
 
+import { sandboxEntitlementAllowed } from "@/lib/entitlement-policy";
+
+export { sandboxEntitlementAllowed };
+
 export interface EntitlementState {
   entitled: boolean;
   status: string | null;
@@ -34,8 +38,7 @@ export async function getEntitlement(userId: string, now = Date.now()): Promise<
   // A period that has elapsed without a renewal event is not entitlement: the
   // webhook may simply not have arrived, and we must fail closed on paid work.
   const periodValid = row.currentPeriodEndsAt == null || row.currentPeriodEndsAt > now;
-  // Sandbox receipts unlock paid features only outside production.
-  const sandboxAllows = !row.isSandbox || process.env.NODE_ENV !== "production";
+  const sandboxAllows = sandboxEntitlementAllowed(row.isSandbox);
 
   return {
     entitled: statusAllows && periodValid && sandboxAllows,

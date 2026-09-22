@@ -293,7 +293,7 @@ export default function ResultsScreen() {
         onPress={() => void acceptPlan()}
         style={{ paddingVertical: 16, alignItems: 'center', backgroundColor: C.yellow }}
       >
-        <Text style={{ color: C.bg, fontFamily: F.monoXBold, fontSize: 12, letterSpacing: 0.9 }}>
+        <Text style={{ color: C.onAccent, fontFamily: F.monoXBold, fontSize: 12, letterSpacing: 0.9 }}>
           {accepting ? 'APLICANDO PLAN…' : 'ACEPTAR Y EMPEZAR'}
         </Text>
       </PressableScale>

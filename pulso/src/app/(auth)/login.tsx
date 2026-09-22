@@ -194,7 +194,7 @@ export default function LoginScreen() {
         >
           <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, right: 0, bottom: 0, backgroundColor: C.bg }, drainStyle]} />
           <View style={{ padding: 16, alignItems: 'center' }}>
-            <Text style={{ fontFamily: F.monoBold, fontSize: 12, letterSpacing: 0.8, color: C.bg, textTransform: 'uppercase' }}>
+            <Text style={{ fontFamily: F.monoBold, fontSize: 12, letterSpacing: 0.8, color: C.onAccent, textTransform: 'uppercase' }}>
               {loading ? 'INGRESANDO…' : 'INGRESAR'}
             </Text>
           </View>

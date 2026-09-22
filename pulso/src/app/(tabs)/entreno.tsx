@@ -659,7 +659,7 @@ export default function EntrenoScreen() {
             </View>
 
             <PressableScale onPress={guardarSet} disabled={restActive} haptic="success" style={{ padding: 15, backgroundColor: accent, alignItems: 'center' }}>
-              <Text style={{ fontFamily: F.monoXBold, fontSize: 12, letterSpacing: 0.8, color: C.bg, textTransform: 'uppercase' }}>
+              <Text style={{ fontFamily: F.monoXBold, fontSize: 12, letterSpacing: 0.8, color: C.onAccent, textTransform: 'uppercase' }}>
                 {restActive ? 'SALTÁ EL DESCANSO PARA GUARDAR' : '✓ GUARDAR SET'}
               </Text>
             </PressableScale>

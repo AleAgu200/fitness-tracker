@@ -595,7 +595,7 @@ export function ExercisePlanForm({
         )}
         {canConfigureExercise && (
           <PressableScale onPress={save} haptic="medium" style={{ flex: 1.5, padding: 12, backgroundColor: accent, alignItems: 'center' }}>
-            <Text style={{ fontFamily: F.monoXBold, fontSize: 11, letterSpacing: 0.6, color: C.bg, textTransform: 'uppercase' }}>
+            <Text style={{ fontFamily: F.monoXBold, fontSize: 11, letterSpacing: 0.6, color: C.onAccent, textTransform: 'uppercase' }}>
               {editing ? 'GUARDAR CAMBIOS' : 'AGREGAR AL PLAN'}
             </Text>
           </PressableScale>

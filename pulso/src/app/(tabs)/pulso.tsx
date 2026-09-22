@@ -238,7 +238,7 @@ export default function PulsoScreen() {
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}>
-                    <Text style={{ fontFamily: F.monoBold, fontSize: 9, color: day.done ? C.bg : C.textTertiary }}>
+                    <Text style={{ fontFamily: F.monoBold, fontSize: 9, color: day.done ? C.onAccent : C.textTertiary }}>
                       {day.label}
                     </Text>
                   </View>
@@ -293,7 +293,7 @@ export default function PulsoScreen() {
                 onPress={() => router.push('/mensajes')}
                 style={{ backgroundColor: C.cyan, padding: 11, alignItems: 'center', marginTop: 14 }}
               >
-                <Text style={{ fontFamily: F.monoXBold, fontSize: 10, color: C.bg }}>ABRIR MENSAJES →</Text>
+                <Text style={{ fontFamily: F.monoXBold, fontSize: 10, color: C.onAccent }}>ABRIR MENSAJES →</Text>
               </PressableScale>
             </Card>
           </>

@@ -3,6 +3,7 @@ import { ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PlusBanner } from '@/components/plus-banner';
 import { Card, Label, PressableScale } from '@/components/ui/kit';
 import { F, useColors } from '@/constants/colors';
 import { useApp } from '@/context/app-state';
@@ -79,6 +80,8 @@ export default function PerfilScreen() {
             </PressableScale>
           </Animated.View>
         ))}
+
+        <PlusBanner />
       </View>
     </ScrollView>
   );
