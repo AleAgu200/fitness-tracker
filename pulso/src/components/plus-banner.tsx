@@ -92,7 +92,7 @@ export function PlusBanner() {
               <Text style={{ fontFamily: F.inter, fontSize: 11, lineHeight: 16, color: C.textTertiary, marginTop: 3 }}>
                 {freeLeft > 0
                   ? `Te queda ${freeLeft} plan con IA incluido. Con Plus son ilimitados y sin anuncios.`
-                  : 'Planes con IA sin límite, sin anuncios y con tu progreso completo.'}
+                  : 'Planes con IA sin límite y sin anuncios.'}
               </Text>
             </View>
             <Text style={{ fontFamily: F.mono, fontSize: 13, color: accent }}>→</Text>

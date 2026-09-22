@@ -8,11 +8,15 @@ import { useEntitlement } from '@/context/entitlement';
 import { usePreferences } from '@/context/preferences';
 import { purchasesSupported } from '@/lib/purchases';
 
+/**
+ * Only list what actually ships today. Cloud backup and data export are planned
+ * but not implemented, and advertising them here would be charging for
+ * something that does not exist — which is also grounds for store rejection.
+ * Add them back the moment they work.
+ */
 const BENEFITS = [
   { title: 'Planes con IA sin límite', detail: 'Regenerá y ajustá tu plan cuando cambie tu objetivo.' },
   { title: 'Sin anuncios', detail: 'Entrá directo al entreno, sin esperas.' },
-  { title: 'Progreso completo', detail: 'Historial sin recortes y exportación de tus datos.' },
-  { title: 'Respaldo en la nube', detail: 'Recuperá todo si cambiás de teléfono.' },
 ];
 
 /**
