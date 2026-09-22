@@ -29,7 +29,14 @@ export async function GET(
     }
 
     const headers = new Headers({
-      "Cache-Control": "private, max-age=86400",
+      // Cacheable at the edge on purpose. These are third-party exercise
+      // animations, identical for every athlete and no more sensitive than the
+      // catalog GIFs already served unauthenticated from /exercises/gifs. The
+      // session check exists to keep the WorkoutX key server-side, not to
+      // protect the image, and `private` meant every athlete re-fetched every
+      // file through this origin and against the WorkoutX quota. WorkoutX ids
+      // are stable, so the bytes behind a name do not change.
+      "Cache-Control": "public, max-age=2592000, immutable",
       "Content-Disposition": `inline; filename="${file}"`,
       "Content-Type": contentType,
       "X-Content-Type-Options": "nosniff",

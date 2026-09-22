@@ -55,6 +55,28 @@ Resources:
       # Port 22 is intentionally absent. Shell access is through Session
       # Manager, so there is no SSH key to lose and no open port to scan.
 
+  # Durable copy of the exercise GIFs (~127 MB). They are deliberately not in
+  # git, so without this a recreated instance comes up with broken images and
+  # no way to restore them. Retained on stack deletion for the same reason.
+  MediaBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub 'pulso-media-${AWS::AccountId}-${AWS::Region}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: Name
+          Value: pulso-media
+
   InstanceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -67,6 +89,20 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: read-media-bucket
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Read-only: the instance restores media, it never publishes it.
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !Sub '${MediaBucket.Arn}/*'
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !GetAtt MediaBucket.Arn
       Tags:
         - Key: Name
           Value: pulso-backend
@@ -186,3 +222,7 @@ Outputs:
 
   SecurityGroupId:
     Value: !Ref WebSecurityGroup
+
+  MediaBucketName:
+    Description: Durable copy of the exercise GIFs; restore with 'aws s3 sync'.
+    Value: !Ref MediaBucket
