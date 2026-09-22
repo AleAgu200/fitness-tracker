@@ -129,9 +129,25 @@ documents
 - Pagos, paquetes y facturación entre profesional y atleta. Sigue siendo P2, y RevenueCat cubre sólo la suscripción de PULSO al atleta.
 - Grupos, retos grupales y videollamada.
 
-## Decisiones de producto todavía sin responder
+## Decisiones de producto — resueltas 2026-09-22
 
-Vienen del plan anterior y siguen abiertas. Bloquean la liberación del sync detallado, no este trabajo, pero conviene cerrarlas:
+### Un atleta puede pertenecer a varias organizaciones
 
-1. **¿Qué pasa con las copias históricas cuando el atleta revoca una categoría?** ¿Borrado tras período de gracia, o retención hasta pedido explícito?
-2. **¿Un atleta puede pertenecer a varias organizaciones a la vez?** Afecta invitaciones, consentimiento y separación de datos.
+El esquema ya lo soporta sin cambios: `organization_clients` es único por `(organizationId, athleteId)`, `sharing_consents` cuelga de `organizationClientId` —o sea consentimiento separado por organización— y hay un responsable principal por disciplina **en cada** organización.
+
+**Pero destapa un conflicto real.** `getActiveWorkout` en `lib/assignments.ts` filtra por atleta y ventana de vigencia, no por organización, mientras que `supersedeWorkouts` sí filtra por organización. Con dos organizaciones asignando entrenamiento al mismo atleta, el teléfono se queda con el que publicó último, arbitrariamente, y ninguna sabe de la otra.
+
+La resolución vive en el plan de la app: **planes guardados con el atleta eligiendo cuál está activo** (`pulso/plans/app-plus-y-datos/`). Del lado del portal, la consecuencia es que **el expediente debe mostrar si el plan que publicó esta organización es el que el atleta tiene activo**. Sin eso, un coach lee la adherencia contra un plan que el atleta no está siguiendo.
+
+### Retención tras revocar consentimiento
+
+Se separan dos consentimientos que hoy están colapsados en uno:
+
+| | |
+|---|---|
+| **Compartir con una organización** | Lo revoca el atleta; el profesional pierde acceso de inmediato. |
+| **Respaldo en la nube propio** | Consentimiento aparte, para recuperar al cambiar de teléfono. |
+
+**Revocar el acceso de un profesional no borra el respaldo del atleta**, porque son decisiones distintas con propósitos distintos.
+
+Se evaluó y se descartó cobrar por recuperar datos tras una revocación: convertiría una protección de privacidad en una palanca comercial, y la portabilidad de los datos propios no puede ser una función premium. La exportación es gratuita siempre.
