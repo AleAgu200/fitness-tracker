@@ -1,0 +1,315 @@
+---
+title: "PULSO — Evolución visual de la app"
+brief: "Plan app-first para convertir Hoy, Entreno y Progreso en un ciclo visible, memorable y útil; privacidad y portal avanzan en una pista paralela."
+kind: "plan"
+status: "draft"
+localOnly: true
+---
+
+# PULSO — Evolución visual de la app
+
+## Resultado
+
+La prioridad es que el atleta perciba una mejora clara desde que abre la app hasta que termina una sesión. **Hoy** se convierte en un centro de decisión con el Núcleo PULSO; **Entreno** aporta contexto personal durante cada serie; el cierre devuelve una tarjeta visual; y **Progreso** transforma el historial en una historia diaria y semanal. El portal, exportación, borrado y permisos continúan como trabajo paralelo, sin condicionar esta experiencia.
+
+**Terminado significa que:**
+
+- La pantalla Hoy comunica en menos de cinco segundos qué toca, cómo llega el cuerpo y cuál es la siguiente acción.
+- Iniciar el entrenamiento planificado requiere un toque; crear una sesión libre desde el mapa muscular no más de tres.
+- Cada serie puede compararse con un “Pulso anterior” sin recomendar automáticamente más carga.
+- Terminar una sesión revela una sola tarjeta relevante y la guarda localmente.
+- Progreso reúne fuerza, carga corporal, tarjetas y semanas sin convertir la pantalla en un mosaico de tarjetas genéricas.
+- El flujo principal funciona offline; sincronización y compartir son capacidades adicionales.
+
+<Callout id="app-first-decision" tone="decision">
+
+**Dirección recomendada: Núcleo PULSO.** Una composición oscura y técnica con un único foco luminoso por pantalla. El Núcleo representa estado y continuidad; los datos concretos explican por qué. La alternativa “Editorial de rendimiento” se conserva en el canvas como opción más sobria, pero no se mezclan ambas composiciones.
+
+</Callout>
+
+## Qué cambia en la experiencia
+
+<Table
+  id="experience-scope"
+  columns={["Superficie", "Cambio visible", "Primera entrega"]}
+  rows={[
+    ["Hoy", "Núcleo, estado corporal, misión del día y señal semanal", "Sí"],
+    ["Entreno", "Pulso anterior, objetivo de la serie, registro concentrado y mapa para sesión libre", "Sí"],
+    ["Cierre", "Tarjeta principal con resultado y acciones claras", "Sí"],
+    ["Progreso", "Lectura por Fuerza, Cuerpo y Semanas con jerarquía editorial", "Sí"],
+    ["Mis planes", "Plan activo, origen, semana y cambio manual explícito", "Sí, después del ciclo base"],
+    ["Dieta", "Mantiene su flujo; adopta los tokens y componentes refinados", "Solo consistencia visual"],
+    ["Privacidad y portal", "Exportación, borrado, consentimiento y progreso profesional", "Pista paralela"],
+  ]}
+/>
+
+### Principios de UI/UX
+
+- **Un protagonista por pantalla.** Núcleo en Hoy, serie activa en Entreno, tarjeta en el cierre y tendencia principal en Progreso.
+- **Datos antes que decoración.** El brillo responde a actividad, recuperación o un hito; nunca aparece sin significado.
+- **Acción primaria inequívoca.** Amarillo para actuar, cian para contexto/recuperación, naranja para continuidad y rojo para alerta o récord.
+- **Menos contenedores.** Secciones separadas por ritmo, divisores y tipografía; las tarjetas se reservan para objetos que realmente se guardan o abren.
+- **Movimiento funcional.** Transiciones de 150–250 ms; pulso tenue para el estado activo; sin rebotes ni coreografías de carga.
+- **Accesibilidad nativa.** Contraste verificado, áreas táctiles mínimas de 44 pt, alternativas textuales al mapa corporal y movimiento reducido.
+
+## Recorrido principal
+
+### 1. Hoy — decidir sin explorar
+
+`pulso/src/app/(tabs)/hoy.tsx` conserva el resumen diario, pero cambia su jerarquía:
+
+1. Encabezado corto con fecha, saludo y estado de sincronización no intrusivo.
+2. Núcleo PULSO compacto como foco. Comunica `LATENTE`, `ACTIVO`, `CARGADO`, `RECUPERANDO`, `ESTABLE` o `REACTIVANDO`; no muestra una puntuación moral.
+3. Una misión: entrenamiento asignado, sesión libre sugerida, recuperación o descanso.
+4. Una línea de señales: carga corporal, nutrición y continuidad. Cada señal abre su detalle; no compite con la acción principal.
+5. El Wrapped aparece durante 72 horas como franja editorial, no como otra tarjeta permanente.
+
+La dirección A del canvas es la recomendada. La dirección B conserva más densidad para quien prefiera un tablero sin símbolo central; la elección está al final en Open Questions.
+
+### 2. Entreno — contexto dentro de la serie
+
+`pulso/src/app/(tabs)/entreno.tsx` mantiene el editor y la sesión actual, pero el estado activo adopta una composición concentrada:
+
+- Ejercicio y progreso de la sesión en el encabezado.
+- Una referencia `PULSO ANTERIOR · 60 kg × 8 · RPE 8` inmediatamente antes del registro.
+- Una instrucción breve: `+1 REP PARA SUPERARLO`, `HOY TOCA CONSOLIDAR`, `REGRESO` o `TÉCNICA`.
+- La serie actual tiene el único CTA amarillo de la pantalla; las series completas se comprimen en un historial legible.
+- Guardar da háptico y una confirmación de hasta 1.5 s. No bloquea la siguiente serie.
+
+Cuando no hay plan o el atleta elige `SESIÓN LIBRE`, `BodyMap` permite seleccionar grupos, revisar carga reciente y generar una sesión determinista con ejercicios disponibles. Dolor informado requiere confirmación y nunca se interpreta como diagnóstico.
+
+### 3. Cierre — una recompensa con sustancia
+
+Al terminar se calcula una familia de resultado y se revela solo la de mayor prioridad:
+
+- `NUEVO PULSO` — récord comparable.
+- `CONTROL` — mismo trabajo con menor RPE.
+- `REGRESO` — primera sesión después de 7+ días.
+- `CONSISTENCIA` — sesión prevista completada.
+
+La tarjeta muestra la métrica principal, comparación, fecha y contexto. `GUARDAR` siempre está disponible; `COMPARTIR CON MI EQUIPO` respeta consentimiento; compartir como imagen del sistema puede llegar después. Si no existe un hito, el cierre sigue mostrando resumen y recuperación sin fabricar un premio.
+
+### 4. Progreso — entender la historia
+
+`pulso/src/app/progreso.tsx` se organiza en tres lecturas:
+
+- **Fuerza:** tendencia principal, mejores movimientos y Pulso anterior relevante.
+- **Cuerpo:** mapa de carga 7D, recuperación y ficha por grupo muscular.
+- **Semanas:** Wrapped, tarjetas guardadas y continuidad.
+
+Cada vista tiene una métrica protagonista y una lista secundaria. Los rangos 7/28/90 días permanecen, pero se muestran cuando afectan la lectura; no se convierten en una fila de controles repetida en cada sección.
+
+### 5. Mis planes — elegir sin perder agencia
+
+La biblioteca reutiliza `programs → workoutTemplates → templateExerciseSlots`. El plan activo se distingue por color, origen y semana. Activar otro plan requiere una confirmación inline que explica el efecto sobre la próxima sesión; no se usa un modal genérico. Un plan profesional sigue disponible aunque el atleta use temporalmente uno propio.
+
+## Componentes y lenguaje visual
+
+<Table
+  id="visual-language"
+  columns={["Componente", "Responsabilidad", "Regla visual"]}
+  rows={[
+    ["PulseCore", "Estado y momentum derivado", "Un halo activo; el número vive en detalle"],
+    ["SignalStrip", "Tres señales breves y navegables", "Divisores, sin tres tarjetas anidadas"],
+    ["PreviousPulse", "Referencia comparable de un ejercicio", "Cian para contexto, amarillo solo al superar"],
+    ["BodyMap", "Selección y carga por grupo", "Frente/posterior y alternativa en lista"],
+    ["SessionResultCard", "Objeto persistente del cierre", "Proporción 3:4, una métrica protagonista"],
+    ["WeeklyStory", "Resumen adaptable de 3–7 páginas", "Una idea por página; omite páginas vacías"],
+    ["PlanRow", "Plan, origen y estado activo", "Fila expandible; no catálogo de cards idénticas"],
+  ]}
+/>
+
+El kit existente sigue siendo base: `Card`, `PressableScale`, `AnimatedBar`, `GlowPulse` y `Label`. La implementación refina estados y accesibilidad; no crea una segunda biblioteca visual.
+
+## Datos locales y reglas derivadas
+
+<DataModel
+  id="app-engagement-model"
+  entities={[
+    {
+      id: "workout_sessions",
+      name: "workout_sessions",
+      fields: [
+        { name: "id", type: "text", pk: true },
+        { name: "userId", type: "text" },
+        { name: "startedAt", type: "integer" },
+        { name: "completedAt", type: "integer", nullable: true },
+      ],
+    },
+    {
+      id: "session_cards",
+      name: "session_cards",
+      fields: [
+        { name: "id", type: "text", pk: true },
+        { name: "sessionId", type: "text", fk: "workout_sessions.id", unique: true },
+        { name: "type", type: "new_pulse|control|return|consistency" },
+        { name: "metricJson", type: "text" },
+        { name: "earnedAt", type: "integer" },
+        { name: "sharedWithTeamAt", type: "integer", nullable: true },
+      ],
+    },
+    {
+      id: "weekly_summaries",
+      name: "weekly_summaries",
+      fields: [
+        { name: "id", type: "text", pk: true },
+        { name: "userId", type: "text" },
+        { name: "weekStart", type: "text" },
+        { name: "summaryJson", type: "text" },
+        { name: "generatedAt", type: "integer" },
+        { name: "viewedAt", type: "integer", nullable: true },
+      ],
+    },
+  ]}
+  relations={[
+    { from: "session_cards", to: "workout_sessions", kind: "1-1" },
+  ]}
+/>
+
+`PulseCoreState`, comparaciones y resúmenes se calculan con funciones puras sobre datos locales. No se almacena una “puntuación del atleta” como verdad permanente. Las nuevas filas usan IDs estables y se agregan a la outbox únicamente cuando la categoría tiene una razón de sincronización.
+
+## Mapa de implementación
+
+<FileTree
+  id="app-file-map"
+  title="Archivos principales"
+  entries={[
+    { path: "pulso/src/app/(tabs)/hoy.tsx", change: "modified", note: "Nueva jerarquía y punto de entrada del ciclo." },
+    { path: "pulso/src/app/(tabs)/entreno.tsx", change: "modified", note: "Pulso anterior, sesión libre y cierre." },
+    { path: "pulso/src/app/progreso.tsx", change: "modified", note: "Fuerza, Cuerpo y Semanas." },
+    { path: "pulso/src/app/resultado-sesion.tsx", change: "added", note: "Revelado y acciones posteriores." },
+    { path: "pulso/src/app/resumen-semanal.tsx", change: "added", note: "Historia semanal navegable." },
+    { path: "pulso/src/app/mis-planes.tsx", change: "added", note: "Biblioteca y activación manual." },
+    { path: "pulso/src/components/pulse/pulse-core.tsx", change: "added", note: "Visual central y estados reducidos." },
+    { path: "pulso/src/components/pulse/previous-pulse.tsx", change: "added", note: "Referencia durante la serie." },
+    { path: "pulso/src/components/pulse/session-result-card.tsx", change: "added", note: "Tarjeta 3:4 reutilizable." },
+    { path: "pulso/src/components/body/body-map.tsx", change: "added", note: "SVG accesible y capas musculares." },
+    { path: "pulso/src/lib/pulse-engine.ts", change: "added", note: "Momentum, comparación y reglas de tarjeta." },
+    { path: "pulso/src/lib/weekly-summary.ts", change: "added", note: "Generador determinista adaptable." },
+    { path: "pulso/src/db/schema/workouts.ts", change: "modified", note: "Tarjetas y resúmenes locales." },
+    { path: "pulso/drizzle/0011_pulse_experience.sql", change: "added", note: "Migración aditiva y reversible." },
+    { path: "pulso/src/components/ui/kit.tsx", change: "modified", note: "Estados pressed/focus/disabled y reduce motion." },
+  ]}
+/>
+
+## Entregas verticales
+
+### Fase 1 — Hoy reconocible
+
+- Extraer `PulseCore`, `SignalStrip` y los estados visuales.
+- Reordenar Hoy sin cambiar contratos de datos.
+- Conectar la misión del día al plan activo o a sesión libre.
+- Añadir fixtures para usuario nuevo, activo, recuperando y reactivando.
+
+**Salida:** abrir la app ya se siente distinto y conduce a una acción real.
+
+### Fase 2 — Entrenar y cerrar el ciclo
+
+- Calcular Pulso anterior por ejercicio y atleta.
+- Integrarlo en la captura de series sin añadir pasos.
+- Crear el motor de cuatro tarjetas y la migración local.
+- Navegar al resultado al completar; guardar y volver a Hoy/Progreso.
+
+**Salida:** una sesión completa produce contexto y una devolución visible.
+
+### Fase 3 — Progreso y Wrapped
+
+- Reorganizar Progreso en Fuerza, Cuerpo y Semanas.
+- Implementar mapa de carga con alternativa accesible en lista.
+- Generar el resumen semanal local y adaptarlo a datos faltantes.
+- Habilitar historial de tarjetas y semanas.
+
+**Salida:** el atleta entiende tendencia, distribución y continuidad.
+
+### Fase 4 — Planes y sesión libre
+
+- Añadir Mis planes sobre el modelo normalizado.
+- Activación local transaccional por disciplina.
+- Generador determinista de sesión libre por músculos y equipo.
+- Sincronizar únicamente la referencia activa cuando corresponda.
+
+**Salida:** el atleta elige cómo entrenar sin perder el plan profesional.
+
+## Pista paralela — privacidad, cuenta y portal
+
+Este trabajo sigue en paralelo con equipo o pull requests separados:
+
+- Exportación y borrado de cuenta desde Configuración, sin paywall.
+- Expediente profesional siempre acotado por `organizationId`.
+- Consentimiento por organización y categoría; respaldo personal independiente.
+- Progreso profesional 7/28/90 con cobertura, frescura y estados `empty`, `revoked` y `not_authorized`.
+- Retención, auditoría e idempotencia antes de habilitar borrado en producción.
+
+La pista paralela puede reutilizar tarjetas o resúmenes solo cuando el atleta los comparte explícitamente. No introduce dependencias de red en Hoy, Entreno o Progreso.
+
+<Callout id="parallel-boundary" tone="info">
+
+Los cambios visuales pueden desarrollarse con datos locales y fixtures mientras privacidad/portal define contratos de servidor. El único punto de integración inicial es `sharedWithTeamAt`; si el backend no está listo, la acción queda deshabilitada con explicación y no bloquea guardar.
+
+</Callout>
+
+## No objetivos del primer corte
+
+- No crear leaderboard, duelos, monedas, niveles ni pérdida punitiva de rachas.
+- No abrir la pestaña PULSO oculta a todos los usuarios; el Núcleo vive en Hoy y Progreso.
+- No generar recomendaciones médicas ni interpretar molestias como lesión.
+- No reemplazar planes profesionales automáticamente.
+- No depender de IA o del servidor para generar una sesión libre.
+- No rediseñar Dieta completa antes de validar el ciclo de entrenamiento.
+
+## Verificación
+
+1. Ejecutar `npx expo lint` y `npx tsc --noEmit` dentro de `pulso/`.
+2. Probar con fixtures: usuario nuevo, usuario con plan, regreso tras 7 días, récord real, sesión sin hito y datos semanales incompletos.
+3. Smoke offline: modo avión → abrir Hoy → iniciar Entreno → guardar series → terminar → guardar tarjeta → verla en Progreso → reiniciar la app y confirmar persistencia.
+4. Smoke de planes: activar un plan distinto → cerrar/reabrir → confirmar un único plan activo y que Hoy apunta a su próxima sesión.
+5. Verificar VoiceOver/TalkBack en Núcleo, mapa corporal, CTA de serie y navegación del Wrapped; confirmar alternativa en lista para músculos.
+6. Activar “reducir movimiento” y comprobar que pulso/revelado se sustituyen por transiciones instantáneas o de opacidad.
+7. Inspeccionar iPhone pequeño y Android grande en modo claro y oscuro; ningún CTA, tab o métrica debe truncarse.
+
+### Open Questions
+
+<QuestionForm
+  id="app-ui-open-questions"
+  questions={[
+    {
+      id: "home-direction",
+      title: "¿Qué dirección debe guiar la pantalla Hoy?",
+      subtitle: "Ambas opciones están visibles en el primer carril del canvas.",
+      mode: "single",
+      options: [
+        { id: "pulse-core", label: "Núcleo PULSO", detail: "Más distintiva y emocional; mantiene los datos concretos debajo.", recommended: true },
+        { id: "editorial", label: "Editorial de rendimiento", detail: "Más sobria y densa; prioriza lectura numérica inmediata." },
+      ],
+      required: true,
+    },
+    {
+      id: "first-visible-slice",
+      title: "¿Cuál debe ser el primer corte implementable?",
+      mode: "single",
+      options: [
+        { id: "complete-loop", label: "Hoy + cierre", detail: "Entrega un ciclo pequeño pero completo y medible.", recommended: true },
+        { id: "home-only", label: "Solo Hoy", detail: "Cambio visible más rápido, pero la promesa termina al iniciar Entreno." },
+        { id: "progress-first", label: "Progreso primero", detail: "Prioriza historial y visualización antes del hábito diario." },
+      ],
+      required: true,
+    },
+    {
+      id: "card-sharing",
+      title: "¿Hasta dónde llega compartir tarjetas en la primera entrega?",
+      mode: "single",
+      options: [
+        { id: "save-team", label: "Guardar + equipo", detail: "Local siempre; el equipo solo cuando exista consentimiento y backend.", recommended: true },
+        { id: "system-share", label: "También imagen", detail: "Añade exportación visual al share sheet desde el inicio." },
+      ],
+      required: true,
+    },
+    {
+      id: "notes",
+      title: "¿Hay una pantalla o gesto que quieras conservar exactamente?",
+      mode: "freeform",
+      placeholder: "Ej.: mantener el resumen actual de Hoy, no mover el CTA de Entreno...",
+    },
+  ]}
+  submitLabel="Guardar decisiones de UI"
+/>

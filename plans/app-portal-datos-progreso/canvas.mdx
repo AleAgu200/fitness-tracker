@@ -1,0 +1,144 @@
+<DesignBoard id="pulso-app-first" title="PULSO · evolución visual de la app" mode="design">
+  <Section id="visual-directions" title="01 · Elegir el carácter de Hoy" subtitle="Dos direcciones completas; Núcleo PULSO es la recomendada.">
+    <Artboard id="today-core" label="Dirección A · Núcleo PULSO" x={0} y={0}>
+      <Screen
+        surface="mobile"
+        renderMode="design"
+        html={`<div class="pulso-app" data-design-id="today-core-screen">
+  <header class="topbar" data-design-id="today-header"><div><small>MARTES · 22 SEP</small><h2>Buen día, Alex</h2></div><button aria-label="Notificaciones"><span data-icon="bell"></span></button></header>
+  <main class="content">
+    <section class="core-stage" data-design-id="pulse-core">
+      <small>ESTADO · ACTIVO</small>
+      <div class="pulse-ring outer"><div class="pulse-ring middle"><div class="pulse-ring inner"><strong>4/5</strong><small>RITMO</small></div></div></div>
+      <p>Tu cuerpo está listo. Hoy suma fuerza sin perseguir fatiga.</p>
+    </section>
+    <section class="mission" data-design-id="today-mission"><div><small>PRÓXIMO PULSO · 18:30</small><h3>Fuerza base · Día 2</h3><p>Espalda + bíceps · 52 min</p></div><button class="primary" data-goto="active-session">EMPEZAR</button></section>
+    <section class="signal-strip" data-design-id="signal-strip"><div><small>CARGA</small><strong>MEDIA</strong></div><div><small>NUTRICIÓN</small><strong>3/4</strong></div><div><small>CONTINUIDAD</small><strong>4 DÍAS</strong></div></section>
+    <button class="week-strip" data-goto="weekly-story"><span><small>TU SEMANA YA ESTÁ LISTA</small><strong>Ver resumen de 2 min</strong></span><span data-icon="arrowRight"></span></button>
+  </main>
+  <nav class="tabbar"><button class="active"><span data-icon="calendar"></span><small>HOY</small></button><button><span>◇</span><small>DIETA</small></button><button><span>◆</span><small>ENTRENO</small></button><button><span data-icon="user"></span><small>PERFIL</small></button></nav>
+</div>`}
+        css={`.pulso-app{height:100%;box-sizing:border-box;padding:16px 16px 10px;display:flex;flex-direction:column;gap:14px;background:var(--wf-paper);color:var(--wf-ink)}.topbar{display:flex;align-items:center;width:100%;gap:12px}.topbar h2,.topbar p{margin:2px 0 0}.topbar>div{flex:1;min-width:0}.content{display:flex;flex:1;min-height:0;flex-direction:column;gap:13px}.core-stage{display:flex;flex-direction:column;align-items:center;text-align:center;gap:9px;padding:12px 8px 4px}.core-stage p{max-width:280px;margin:0;color:var(--wf-muted);line-height:1.4}.pulse-ring{border-radius:999px;display:flex;align-items:center;justify-content:center}.pulse-ring.outer{width:174px;height:174px;border:1px solid var(--wf-accent);background:var(--wf-accent-soft)}.pulse-ring.middle{width:132px;height:132px;border:2px solid var(--wf-accent)}.pulse-ring.inner{width:84px;height:84px;flex-direction:column;background:var(--wf-accent);color:var(--wf-accent-fg);animation:pulse 2.4s ease-in-out infinite}.pulse-ring strong{font-size:24px}.pulse-ring small{color:inherit}.mission{display:flex;align-items:center;gap:12px;padding:13px 0;border-top:1px solid var(--wf-line);border-bottom:1px solid var(--wf-line)}.mission>div{flex:1;min-width:0}.mission h3,.mission p{margin:3px 0}.signal-strip{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--wf-line)}.signal-strip>div{display:flex;flex-direction:column;gap:4px;padding:10px 8px}.signal-strip>div+div{border-left:1px solid var(--wf-line)}.week-strip{display:flex;align-items:center;width:100%;gap:10px;text-align:left;padding:11px;background:var(--wf-card);border:1px solid var(--wf-accent)}.week-strip>span:first-child{display:flex;flex:1;flex-direction:column;gap:3px}.tabbar{display:flex;width:100%;justify-content:space-around;border-top:1px solid var(--wf-line);padding-top:8px}.tabbar button{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:58px;border:0;background:transparent;color:var(--wf-muted)}.tabbar button.active{color:var(--wf-accent)}@keyframes pulse{50%{transform:scale(.96);opacity:.82}}@media(prefers-reduced-motion:reduce){.pulse-ring.inner{animation:none}}`}
+      />
+    </Artboard>
+
+    <Annotation id="today-core-note" targetId="today-core" placement="bottom" title="Recomendada" text="Un único símbolo memorable, una misión y tres señales. El brillo expresa estado; no decora toda la pantalla." />
+
+    <Artboard id="today-editorial" label="Dirección B · Editorial de rendimiento" x={620} y={0}>
+      <Screen
+        surface="mobile"
+        renderMode="design"
+        html={`<div class="pulso-app editorial" data-design-id="today-editorial-screen">
+  <header class="topbar"><div><small>HOY · MAR 22 SEP</small><h2>Tu día en números</h2></div><button><span data-icon="bell"></span></button></header>
+  <main class="content">
+    <section class="lead"><small>ENTRENO PROGRAMADO</small><strong>18:30</strong><h3>Fuerza base · Día 2</h3><p>Espalda + bíceps · 6 ejercicios</p><button class="primary">EMPEZAR ENTRENO</button></section>
+    <section class="week"><div class="section-title"><small>CARGA · 7 DÍAS</small><span class="wf-pill accent">ESTABLE</span></div><div class="bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="days"><small>L</small><small>M</small><small>X</small><small>J</small><small>V</small><small>S</small><small>D</small></div></section>
+    <section class="metric-list"><div><span><small>SESIONES</small><strong>4 / 5</strong></span><small>80%</small></div><div><span><small>NUTRICIÓN</small><strong>3 de 4 comidas</strong></span><small>EN CURSO</small></div><div><span><small>RECUPERACIÓN</small><strong>Espalda disponible</strong></span><small>ÓPTIMA</small></div></section>
+    <button class="week-strip"><span><small>RESUMEN SEMANAL</small><strong>Tu mejor señal: control</strong></span><span data-icon="arrowRight"></span></button>
+  </main>
+  <nav class="tabbar"><button class="active"><span data-icon="calendar"></span><small>HOY</small></button><button><span>◇</span><small>DIETA</small></button><button><span>◆</span><small>ENTRENO</small></button><button><span data-icon="user"></span><small>PERFIL</small></button></nav>
+</div>`}
+        css={`.pulso-app{height:100%;box-sizing:border-box;padding:16px 16px 10px;display:flex;flex-direction:column;gap:14px;background:var(--wf-paper);color:var(--wf-ink)}.topbar{display:flex;align-items:center;width:100%}.topbar>div{flex:1}.topbar h2{margin:3px 0}.content{display:flex;flex:1;min-height:0;flex-direction:column;gap:14px}.lead{display:flex;flex-direction:column;gap:4px;padding:12px 0 16px;border-bottom:1px solid var(--wf-line)}.lead>strong{font-size:56px;line-height:1;color:var(--wf-accent)}.lead h3,.lead p{margin:2px 0}.lead button{margin-top:10px}.week{display:flex;flex-direction:column;gap:8px}.section-title{display:flex;align-items:center;justify-content:space-between}.bars{height:72px;display:flex;align-items:end;gap:7px}.bars i{flex:1;background:var(--wf-line);min-height:18%}.bars i:nth-child(2),.bars i:nth-child(5){height:76%;background:var(--wf-accent)}.bars i:nth-child(3){height:52%}.bars i:nth-child(4){height:90%;background:var(--wf-accent)}.bars i:nth-child(6){height:38%}.bars i:nth-child(7){height:20%}.days{display:flex;justify-content:space-around}.metric-list{border-top:1px solid var(--wf-line)}.metric-list>div{display:flex;align-items:center;padding:10px 0;border-bottom:1px solid var(--wf-line)}.metric-list span{display:flex;flex:1;flex-direction:column;gap:2px}.week-strip{display:flex;align-items:center;width:100%;gap:10px;text-align:left;padding:11px;background:var(--wf-card);border:1px solid var(--wf-line)}.week-strip>span:first-child{display:flex;flex:1;flex-direction:column}.tabbar{display:flex;width:100%;justify-content:space-around;border-top:1px solid var(--wf-line);padding-top:8px}.tabbar button{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:58px;border:0;background:transparent;color:var(--wf-muted)}.tabbar button.active{color:var(--wf-accent)}`}
+      />
+    </Artboard>
+
+    <Annotation id="today-editorial-note" targetId="today-editorial" placement="bottom" title="Alternativa" text="Más información en el primer viewport y menor carga simbólica. Se siente eficiente, pero menos propia de PULSO." />
+  </Section>
+
+  <Section id="daily-loop" title="02 · Flujo recomendado" subtitle="Hoy → Entreno → resultado → Progreso">
+    <Artboard id="active-session" label="Entreno · serie activa" x={0} y={1080}>
+      <Screen
+        surface="mobile"
+        renderMode="design"
+        html={`<div class="session" data-design-id="active-session-screen">
+  <header class="topbar"><button data-goto="today-core"><span data-icon="x"></span></button><div><small>FUERZA BASE · DÍA 2</small><h3>32:18</h3></div><button>PAUSAR</button></header>
+  <div class="progress"><span style="width:58%"></span></div>
+  <main class="body"><div class="exercise-head"><small>03 / 06</small><h1>Remo con barra</h1><p>Serie 3 de 4 · descanso 01:24</p></div>
+    <section class="previous"><small>PULSO ANTERIOR</small><div><strong>60 KG × 8</strong><span>RPE 8</span></div><p>+1 REP PARA SUPERARLO</p></section>
+    <section class="set-input"><div><small>PESO · KG</small><strong>60</strong></div><span>×</span><div><small>REPS</small><strong>8</strong></div></section>
+    <button class="primary save">GUARDAR SERIE</button>
+    <section class="set-list"><small>SERIES COMPLETAS</small><div><span>01</span><strong>55 × 10</strong><small>RPE 7</small><span>✓</span></div><div><span>02</span><strong>60 × 8</strong><small>RPE 8</small><span>✓</span></div><div class="current"><span>03</span><strong>60 × 8</strong><small>ACTUAL</small><span>—</span></div></section>
+  </main>
+  <button class="finish" data-goto="session-result">TERMINAR SESIÓN · 4 EJERCICIOS RESTANTES</button>
+</div>`}
+        css={`.session{height:100%;box-sizing:border-box;padding:16px;display:flex;flex-direction:column;gap:12px;background:var(--wf-paper);color:var(--wf-ink)}.topbar{display:flex;align-items:center;width:100%;gap:10px}.topbar>div{flex:1;text-align:center}.topbar h3{margin:2px 0}.progress{height:4px;background:var(--wf-line)}.progress span{display:block;height:100%;background:var(--wf-accent)}.body{display:flex;flex:1;min-height:0;flex-direction:column;gap:14px}.exercise-head{padding:8px 0;border-bottom:1px solid var(--wf-line)}.exercise-head h1{margin:4px 0}.exercise-head p{margin:0;color:var(--wf-muted)}.previous{padding:12px;border:1px solid var(--wf-line);background:var(--wf-card)}.previous>div{display:flex;justify-content:space-between;margin:7px 0}.previous>div strong{font-size:23px;color:var(--wf-accent)}.previous p{margin:0;color:var(--wf-ok)}.set-input{display:grid;grid-template-columns:1fr auto 1fr;align-items:end;gap:12px}.set-input>div{padding:12px;border-bottom:2px solid var(--wf-accent)}.set-input strong{display:block;font-size:32px;margin-top:5px}.set-input>span{padding-bottom:14px}.save{width:100%;padding:14px}.set-list{display:flex;flex-direction:column;border-top:1px solid var(--wf-line)}.set-list>small{padding:10px 0}.set-list>div{display:grid;grid-template-columns:30px 1fr 1fr 22px;padding:9px 0;border-top:1px solid var(--wf-line)}.set-list>div>*:last-child{text-align:right}.set-list .current{color:var(--wf-muted)}.finish{width:100%;padding:12px;border:1px solid var(--wf-line);background:transparent}`}
+      />
+    </Artboard>
+
+    <Annotation id="active-session-note" targetId="active-session" placement="bottom" title="Contexto, no presión" text="Pulso anterior compara la misma persona y ejercicio. El CTA principal sigue siendo guardar; superar es una pista, no una obligación." />
+
+    <Artboard id="session-result" label="Cierre · Nuevo Pulso" x={620} y={1080}>
+      <Screen
+        surface="mobile"
+        renderMode="design"
+        html={`<div class="result" data-design-id="session-result-screen">
+  <header><small>SESIÓN COMPLETADA · 52 MIN</small><h2>Un resultado que vale guardar</h2></header>
+  <main class="stage"><article class="result-card" data-design-id="result-card"><div class="card-top"><span class="wf-pill accent">NUEVO PULSO</span><small>22 · SEP · 2026</small></div><div class="mark"><span></span><span></span><span></span></div><div class="metric"><small>REMO CON BARRA</small><strong>62.5 × 8</strong><p>+4.2% e1RM vs. tu pulso anterior</p></div><div class="card-foot"><span>ESPALDA · FUERZA</span><strong>PULSO / 014</strong></div></article>
+    <section class="summary"><div><small>VOLUMEN</small><strong>8,460 kg</strong></div><div><small>SERIES</small><strong>18</strong></div><div><small>RPE MEDIO</small><strong>7.8</strong></div></section>
+  </main>
+  <div class="actions"><button class="primary">GUARDAR</button><button>COMPARTIR CON MI EQUIPO</button><button data-goto="progress-strength">VER EN PROGRESO</button></div>
+</div>`}
+        css={`.result{height:100%;box-sizing:border-box;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--wf-paper);color:var(--wf-ink)}.result header{text-align:center}.result header h2{margin:5px auto;max-width:290px}.stage{display:flex;flex:1;min-height:0;flex-direction:column;align-items:center;gap:14px}.result-card{width:82%;aspect-ratio:3/4;box-sizing:border-box;padding:14px;display:flex;flex-direction:column;border:1px solid var(--wf-accent);background:var(--wf-card)}.card-top,.card-foot{display:flex;justify-content:space-between;align-items:center;gap:8px}.mark{display:flex;flex:1;align-items:center;justify-content:center;gap:7px}.mark span{display:block;width:18px;height:76px;border:1px solid var(--wf-accent);transform:skew(-12deg)}.mark span:nth-child(2){height:124px;background:var(--wf-accent)}.metric{border-top:1px solid var(--wf-line);padding-top:12px}.metric strong{display:block;font-size:29px;margin:5px 0;color:var(--wf-accent)}.metric p{margin:0;color:var(--wf-muted)}.card-foot{margin-top:12px;padding-top:10px;border-top:1px solid var(--wf-line);font-size:10px}.summary{display:grid;width:100%;grid-template-columns:repeat(3,1fr);border:1px solid var(--wf-line)}.summary>div{padding:9px;display:flex;flex-direction:column;gap:3px}.summary>div+div{border-left:1px solid var(--wf-line)}.actions{display:flex;flex-direction:column;gap:7px}.actions button{width:100%}`}
+      />
+    </Artboard>
+
+    <Annotation id="session-result-note" targetId="session-result" placement="bottom" title="Una sola recompensa" text="El motor selecciona el resultado más significativo. Sin récord real, cambia a Control, Regreso o Consistencia; nunca inventa un logro." />
+
+    <Artboard id="progress-strength" label="Progreso · Fuerza" x={1240} y={1080}>
+      <Screen
+        surface="mobile"
+        renderMode="design"
+        html={`<div class="progress-screen" data-design-id="progress-screen">
+  <header class="topbar"><button data-goto="today-core"><span data-icon="arrowLeft"></span></button><div><small>TU HISTORIA</small><h2>Progreso</h2></div><button><span data-icon="more"></span></button></header>
+  <div class="segments"><button class="active">FUERZA</button><button data-goto="body-map">CUERPO</button><button data-goto="weekly-story">SEMANAS</button></div>
+  <main class="content"><section class="hero"><div class="range"><small>28 DÍAS</small><span>7D · <strong>28D</strong> · 90D</span></div><strong>+6.4%</strong><p>Tu fuerza estimada sube con carga estable.</p><svg viewBox="0 0 300 100" role="img" aria-label="Tendencia ascendente"><polyline points="4,82 45,72 78,76 116,55 154,61 196,38 234,43 296,18" fill="none" stroke="var(--wf-accent)" stroke-width="4"/></svg></section>
+    <section class="movement-list"><div class="section-title"><small>MOVIMIENTOS CLAVE</small><button>VER TODOS</button></div><div><span><strong>Sentadilla</strong><small>e1RM · 112.4 kg</small></span><b>+8.1%</b></div><div><span><strong>Press banca</strong><small>e1RM · 84.8 kg</small></span><b>+3.2%</b></div><div><span><strong>Remo con barra</strong><small>e1RM · 79.1 kg</small></span><b>+4.2%</b></div></section>
+    <button class="latest"><span class="wf-pill accent">NUEVO</span><span><small>ÚLTIMA TARJETA</small><strong>Nuevo Pulso · Remo</strong></span><span data-icon="arrowRight"></span></button>
+  </main>
+</div>`}
+        css={`.progress-screen{height:100%;box-sizing:border-box;padding:16px;display:flex;flex-direction:column;gap:13px;background:var(--wf-paper);color:var(--wf-ink)}.topbar{display:flex;align-items:center;width:100%;gap:10px}.topbar>div{flex:1}.topbar h2{margin:2px 0}.segments{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--wf-line)}.segments button{border:0;border-bottom:3px solid transparent;background:transparent;padding:10px 4px;color:var(--wf-muted)}.segments button.active{border-bottom-color:var(--wf-accent);color:var(--wf-ink)}.content{display:flex;flex:1;min-height:0;flex-direction:column;gap:16px}.hero{padding:10px 0 14px;border-bottom:1px solid var(--wf-line)}.range{display:flex;justify-content:space-between}.hero>strong{display:block;font-size:48px;line-height:1.1;margin-top:12px;color:var(--wf-accent)}.hero p{margin:5px 0;color:var(--wf-muted)}.hero svg{width:100%;height:104px;margin-top:8px}.movement-list{display:flex;flex-direction:column}.section-title{display:flex;align-items:center;justify-content:space-between;padding-bottom:7px}.movement-list>div:not(.section-title){display:flex;align-items:center;padding:11px 0;border-top:1px solid var(--wf-line)}.movement-list span{display:flex;flex:1;flex-direction:column;gap:3px}.movement-list b{color:var(--wf-ok)}.latest{margin-top:auto;display:flex;align-items:center;width:100%;gap:9px;text-align:left;padding:12px;background:var(--wf-card);border:1px solid var(--wf-line)}.latest>span:nth-child(2){display:flex;flex:1;flex-direction:column}`}
+      />
+    </Artboard>
+
+    <Annotation id="progress-note" targetId="progress-strength" placement="bottom" title="Jerarquía editorial" text="Una tendencia principal y una lista secundaria. Cuerpo y Semanas cambian el contenido, no duplican tarjetas métricas." />
+  </Section>
+
+  <Section id="secondary-surfaces" title="03 · Profundidad sin saturar Hoy" subtitle="Las superficies ricas viven detrás de una acción clara.">
+    <Artboard id="weekly-story" label="Wrapped · página 2 de 5" x={0} y={2160}>
+      <Screen
+        surface="mobile"
+        renderMode="design"
+        html={`<div class="story" data-design-id="weekly-story-screen"><div class="story-bars"><i></i><i class="active"></i><i></i><i></i><i></i></div><header><button data-goto="today-core"><span data-icon="x"></span></button><small>15–21 SEP · 2/5</small><button><span data-icon="more"></span></button></header><main><small>MOVIMIENTO</small><h1>Moviste<br/><em>24,860 kg</em><br/>esta semana.</h1><div class="orbit"><span>4</span><small>SESIONES</small></div><p>Es 12% más volumen que tu semana anterior, con un RPE medio similar.</p></main><footer><button data-goto="progress-strength">ANTERIOR</button><button class="primary">SIGUIENTE</button></footer></div>`}
+        css={`.story{height:100%;box-sizing:border-box;padding:14px 16px 18px;display:flex;flex-direction:column;gap:14px;background:var(--wf-paper);color:var(--wf-ink)}.story-bars{display:flex;gap:5px}.story-bars i{height:3px;flex:1;background:var(--wf-line)}.story-bars i.active{background:var(--wf-accent)}.story header{display:flex;align-items:center;justify-content:space-between}.story main{display:flex;flex:1;min-height:0;flex-direction:column;justify-content:center;align-items:flex-start;gap:16px}.story h1{font-size:39px;line-height:1.05;margin:0}.story h1 em{font-style:normal;color:var(--wf-accent)}.orbit{align-self:center;width:166px;height:166px;border-radius:999px;border:2px solid var(--wf-accent);display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--wf-accent-soft)}.orbit span{font-size:54px;color:var(--wf-accent)}.story main p{max-width:300px;line-height:1.45;color:var(--wf-muted)}.story footer{display:grid;grid-template-columns:1fr 1fr;gap:8px}.story footer button{padding:13px}`}
+      />
+    </Artboard>
+
+    <Annotation id="weekly-note" targetId="weekly-story" placement="bottom" title="Historia adaptable" text="Si faltan datos, se acorta a tres páginas. Nunca muestra una pantalla vacía ni felicita cambios de peso sin contexto de objetivo." />
+
+    <Artboard id="plans-library" label="Entreno · Mis planes" x={620} y={2160}>
+      <Screen
+        surface="mobile"
+        renderMode="design"
+        html={`<div class="plans" data-design-id="plans-library-screen"><header class="topbar"><button data-goto="today-core"><span data-icon="arrowLeft"></span></button><div><small>ENTRENO</small><h2>Mis planes</h2></div><button><span data-icon="plus"></span></button></header><main><section class="active-plan"><div class="plan-meta"><span class="wf-pill accent">ACTIVO</span><small>COACH ANA · EQUIPO CENTRO</small></div><h1>Fuerza base</h1><p>Semana 4 de 8 · 4 días</p><div class="week-days"><span>✓<small>L</small></span><span>✓<small>M</small></span><span class="today">3<small>X</small></span><span>4<small>J</small></span><span>—<small>V</small></span></div><button class="primary">ABRIR ENTRENAMIENTO</button></section><section class="plan-list"><small>OTROS PLANES</small><article><div><strong>Hipertrofia personal</strong><small>PROPIO · 5 DÍAS</small></div><button>ACTIVAR</button></article><article><div><strong>Bloque técnico</strong><small>PULSO IA · 3 DÍAS</small></div><button>ACTIVAR</button></article><article><div><strong>Fuerza base · v3</strong><small>ARCHIVADO · COACH ANA</small></div><button><span data-icon="more"></span></button></article></section></main><div class="hint"><strong>Tu elección mantiene tu agencia.</strong><p>Tu equipo solo ve si su plan está seleccionado, no el contenido de otros planes.</p></div></div>`}
+        css={`.plans{height:100%;box-sizing:border-box;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--wf-paper);color:var(--wf-ink)}.topbar{display:flex;align-items:center;width:100%;gap:10px}.topbar>div{flex:1}.topbar h2{margin:2px 0}.plans main{display:flex;flex:1;min-height:0;flex-direction:column;gap:18px}.active-plan{display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid var(--wf-accent);background:var(--wf-card)}.plan-meta{display:flex;align-items:center;justify-content:space-between;gap:8px}.active-plan h1,.active-plan p{margin:1px 0}.week-days{display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--wf-line);border-bottom:1px solid var(--wf-line);padding:10px 0}.week-days span{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--wf-muted)}.week-days .today{color:var(--wf-accent)}.plan-list{display:flex;flex-direction:column}.plan-list>small{padding-bottom:7px}.plan-list article{display:flex;align-items:center;gap:10px;padding:12px 0;border-top:1px solid var(--wf-line)}.plan-list article>div{display:flex;flex:1;flex-direction:column;gap:3px}.hint{padding:11px;border:1px solid var(--wf-line)}.hint p{margin:4px 0 0;color:var(--wf-muted);line-height:1.35}`}
+      />
+    </Artboard>
+
+    <Annotation id="plans-note" targetId="plans-library" placement="bottom" title="No es un catálogo de cards" text="El plan activo recibe el espacio dominante; las alternativas son filas. Cambiar se confirma inline y mantiene el origen visible." />
+
+    <Artboard id="body-map" label="Sesión libre · mapa corporal" x={1240} y={2160}>
+      <Screen
+        surface="mobile"
+        renderMode="design"
+        html={`<div class="bodymap" data-design-id="body-map-screen"><header class="topbar"><button data-goto="progress-strength"><span data-icon="arrowLeft"></span></button><div><small>SESIÓN LIBRE</small><h2>¿Qué quieres mover?</h2></div><button>LISTA</button></header><div class="view-toggle"><button class="active">FRENTE</button><button>ESPALDA</button></div><main><div class="silhouette" role="img" aria-label="Mapa corporal frontal con pecho y cuádriceps seleccionados"><div class="head"></div><div class="torso"><span class="muscle chest"></span><span class="muscle core"></span></div><div class="arms"><i></i><i></i></div><div class="legs"><i class="selected"></i><i class="selected"></i></div></div><section class="selection"><div><small>SELECCIONADO</small><h3>Pecho + cuádriceps</h3><p>Carga reciente media · sin molestias reportadas</p></div><div class="chips"><span class="wf-pill accent">PECHO</span><span class="wf-pill accent">CUÁDRICEPS</span><span class="wf-pill">+ AÑADIR</span></div></section></main><button class="primary generate">GENERAR SESIÓN · 6 EJERCICIOS</button><small class="disclaimer">La carga es una referencia de entrenamiento, no una evaluación médica.</small></div>`}
+        css={`.bodymap{height:100%;box-sizing:border-box;padding:16px;display:flex;flex-direction:column;gap:12px;background:var(--wf-paper);color:var(--wf-ink)}.topbar{display:flex;align-items:center;width:100%;gap:10px}.topbar>div{flex:1}.topbar h2{margin:2px 0}.view-toggle{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--wf-line)}.view-toggle button{border:0;border-bottom:3px solid transparent;background:transparent}.view-toggle button.active{border-bottom-color:var(--wf-accent)}.bodymap main{display:flex;flex:1;min-height:0;flex-direction:column;gap:12px}.silhouette{flex:1;min-height:310px;display:grid;grid-template-columns:1fr 2fr 1fr;grid-template-rows:42px 144px 176px;justify-items:center;align-items:stretch;padding:8px 55px}.head{grid-column:2;width:42px;border-radius:999px;border:1px solid var(--wf-line)}.torso{grid-column:2;grid-row:2;width:98px;border:1px solid var(--wf-line);display:flex;flex-direction:column;gap:5px;padding:9px}.muscle{display:block;flex:1;border:1px solid var(--wf-line)}.muscle.chest{background:var(--wf-accent-soft);border-color:var(--wf-accent)}.arms{grid-column:1/4;grid-row:2;display:flex;width:210px;justify-content:space-between}.arms i{width:36px;border:1px solid var(--wf-line)}.legs{grid-column:2;grid-row:3;display:flex;gap:12px}.legs i{width:39px;border:1px solid var(--wf-line)}.legs i.selected{background:var(--wf-accent-soft);border-color:var(--wf-accent)}.selection{border-top:1px solid var(--wf-line);padding-top:10px}.selection h3,.selection p{margin:4px 0}.selection p{color:var(--wf-muted)}.chips{display:flex;gap:5px;white-space:nowrap;overflow:hidden;margin-top:9px}.generate{width:100%;padding:14px}.disclaimer{text-align:center;color:var(--wf-muted)}`}
+      />
+    </Artboard>
+
+    <Annotation id="body-map-note" targetId="body-map" placement="bottom" title="Visual y accesible" text="El mismo catálogo muscular alimenta selección, carga y progreso. “LISTA” ofrece una alternativa completa para lector de pantalla y precisión táctil." />
+  </Section>
+
+  <Connector from="today-core" to="active-session" label="Empezar" />
+  <Connector from="active-session" to="session-result" label="Terminar" />
+  <Connector from="session-result" to="progress-strength" label="Ver progreso" />
+</DesignBoard>
