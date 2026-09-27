@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import {
   athleteDailySummaries,
+  athletePlanSelections,
   attentionSignals,
   bodyMeasurements,
   careAssignments,
@@ -13,6 +14,7 @@ import {
   checkinResponses,
   nutritionEntries,
   organizationClients,
+  sharedSessionCards,
   syncChanges,
   syncDevices,
   syncMutations,
@@ -79,6 +81,38 @@ const checkinPayload = z.object({
     obstacles: z.string().trim().max(1000).default(""),
     note: z.string().trim().max(2000).default(""),
   }),
+});
+
+const sessionCardMetric = z.object({
+  exerciseName: z.string().trim().max(160).nullable(),
+  weightKg: z.number().finite().nonnegative().max(10_000).nullable(),
+  reps: z.number().int().nonnegative().max(10_000).nullable(),
+  deltaPct: z.number().finite().min(-1000).max(1000).nullable(),
+  rpeDrop: z.number().finite().min(0).max(10).nullable(),
+  daysAway: z.number().int().nonnegative().max(10_000).nullable(),
+  completedSets: z.number().int().nonnegative().max(1000),
+  targetSets: z.number().int().nonnegative().max(1000).nullable(),
+  volumeKg: z.number().finite().nonnegative().max(10_000_000),
+  avgRpe: z.number().finite().min(0).max(10).nullable(),
+  durationMin: z.number().int().nonnegative().max(24 * 60).nullable(),
+  muscles: z.array(z.string().max(40)).max(10),
+});
+
+const sessionCardPayload = z.object({
+  sessionId: z.string().min(1).max(128),
+  type: z.enum(["new_pulse", "control", "return", "consistency"]),
+  metric: sessionCardMetric,
+  earnedAt: z.number().int().positive(),
+  sharedAt: z.number().int().positive(),
+});
+
+const sessionCardUnsharePayload = z.object({
+  unsharedAt: z.number().int().positive(),
+});
+
+const planSelectionPayload = z.object({
+  coachPlanSelected: z.boolean(),
+  selectedAt: z.number().int().positive(),
 });
 
 export type MutationStatus = "acked" | "retryable" | "rejected";
@@ -353,6 +387,52 @@ async function applyDomainMutation(tx: any, athleteId: string, deviceId: string,
         openedAt: parsed.data.submittedAt,
       }).onConflictDoNothing();
       await rebuildDailySummary(tx, athleteId, parsed.data.submittedAt);
+      return { status: "acked" as const };
+    }
+    case "session_card": {
+      // Sharing is explicit and reversible: create shares (or re-shares),
+      // delete stops sharing. The row is kept either way so a re-share keeps
+      // the same id; readers only see cards with `unsharedAt` null.
+      const [current] = await tx.select().from(sharedSessionCards).where(eq(sharedSessionCards.id, mutation.entityId));
+      if (current && current.athleteId !== athleteId) return { status: "rejected" as const, error: "entity_not_found" };
+      if (mutation.operation === "delete") {
+        const parsed = sessionCardUnsharePayload.safeParse(mutation.payload);
+        if (!parsed.success) return { status: "rejected" as const, error: "invalid_session_card" };
+        if (current) {
+          await tx.update(sharedSessionCards)
+            .set({ unsharedAt: parsed.data.unsharedAt, updatedAt: now })
+            .where(eq(sharedSessionCards.id, mutation.entityId));
+        }
+        return { status: "acked" as const };
+      }
+      if (mutation.operation !== "create") return { status: "rejected" as const, error: "unsupported_operation" };
+      const parsed = sessionCardPayload.safeParse(mutation.payload);
+      if (!parsed.success) return { status: "rejected" as const, error: "invalid_session_card" };
+      if (current) {
+        await tx.update(sharedSessionCards)
+          .set({ sharedAt: parsed.data.sharedAt, unsharedAt: null, updatedAt: now })
+          .where(eq(sharedSessionCards.id, mutation.entityId));
+      } else {
+        await tx.insert(sharedSessionCards).values({
+          id: mutation.entityId,
+          athleteId,
+          ...parsed.data,
+          updatedAt: now,
+        });
+      }
+      return { status: "acked" as const };
+    }
+    case "plan_selection": {
+      if (mutation.operation !== "update") return { status: "rejected" as const, error: "unsupported_operation" };
+      const parsed = planSelectionPayload.safeParse(mutation.payload);
+      if (!parsed.success) return { status: "rejected" as const, error: "invalid_plan_selection" };
+      // Last selection wins; a late retry of an older switch is a no-op.
+      await tx.insert(athletePlanSelections).values({ athleteId, ...parsed.data, updatedAt: now })
+        .onConflictDoUpdate({
+          target: athletePlanSelections.athleteId,
+          set: { ...parsed.data, updatedAt: now },
+          setWhere: sql`${athletePlanSelections.selectedAt} <= ${parsed.data.selectedAt}`,
+        });
       return { status: "acked" as const };
     }
   }

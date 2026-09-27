@@ -4,7 +4,9 @@ import Link from "next/link";
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 
 import { api } from "../../lib";
+import { dateTime, describeAction, describeMetadata, freshness, percent } from "./format";
 import { PlanWorkspace } from "./plan-workspace";
+import { type Period, type ProgressData, ProgressTab, type SharedCard } from "./progress-tab";
 
 type AccessStatus = "granted" | "revoked" | "not_authorized";
 
@@ -14,12 +16,9 @@ interface Overview {
   permissions: Record<string, { status: AccessStatus; canEdit: boolean }>;
   dataFreshness: Record<string, { status: AccessStatus; updatedAt: number | null }>;
   sync: { deviceId: string; lastSeenAt: number; status: string } | null;
-  progress: {
-    periodDays: number;
-    training: { completed: number; scheduled: number; adherence: number | null; totalVolumeKg: number; daysWithData: number } | null;
-    nutrition: { completed: number; substituted: number; pending: number; adherence: number | null; daysWithData: number } | null;
-    metrics: { latestWeightKg: number | null; weightChangeKg: number | null; daysWithData: number } | null;
-  };
+  progress: ProgressData;
+  sharedCards: SharedCard[];
+  planSelection: { coachPlanSelected: boolean; selectedAt: number } | null;
   plans: { workout: Plan | null; mealPlan: Plan | null };
   checkins: Checkin[];
   signals: Signal[];
@@ -78,21 +77,9 @@ function RecordChat({ athleteId }: { athleteId: string }) {
   );
 }
 
-function percent(value: number | null): string {
-  return value == null ? "—" : `${Math.round(value * 100)}%`;
-}
-
-function dateTime(value: number | null): string {
-  return value == null ? "—" : new Date(value).toLocaleString("es-AR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
-}
-
-function freshness(value: number | null): string {
-  if (!value) return "sin datos";
-  const minutes = Math.max(0, Math.floor((Date.now() - value) / 60_000));
-  if (minutes < 1) return "ahora";
-  if (minutes < 60) return `hace ${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  return hours < 24 ? `hace ${hours} h` : `hace ${Math.floor(hours / 24)} d`;
+/** Summary line under a metric when there's no number to show. */
+function unavailable(state: AccessStatus): string {
+  return state === "revoked" ? "acceso revocado" : state === "not_authorized" ? "sin autorización" : "sin datos en el período";
 }
 
 function AccessCard({ label, state, updatedAt }: { label: string; state: AccessStatus; updatedAt: number | null }) {
@@ -115,17 +102,21 @@ export default function AthleteRecordPage({ params }: { params: Promise<{ athlet
   const [taskOpen, setTaskOpen] = useState(false);
   const [taskTitle, setTaskTitle] = useState("");
   const [busy, setBusy] = useState(false);
+  const [period, setPeriod] = useState<Period>(28);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
+    setRefreshing(true);
     try {
-      setOverview(await api<Overview>(`/api/portal/athletes/${encodeURIComponent(athleteId)}/overview`));
+      setOverview(await api<Overview>(`/api/portal/athletes/${encodeURIComponent(athleteId)}/overview?range=${period}`));
       setError(null);
     } catch {
       setError("No se pudo abrir el expediente o ya no tenés acceso.");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }, [athleteId]);
+  }, [athleteId, period]);
   useEffect(() => { load(); }, [load]);
 
   const mainSignal = overview?.signals[0] ?? null;
@@ -246,11 +237,11 @@ export default function AthleteRecordPage({ params }: { params: Promise<{ athlet
               </div>
             ) : <div className="border border-line bg-card p-4 text-sm text-fg-sec">No hay señales activas para este atleta.</div>}
             <div className="border border-line bg-card p-4">
-              <div className="mb-3 flex items-center justify-between"><span className="font-semibold text-fg">Últimos 28 días</span><button onClick={() => setTab("Progreso")} className="cursor-pointer font-mono-app text-[9px] text-neon">VER PROGRESO →</button></div>
+              <div className="mb-3 flex items-center justify-between"><span className="font-semibold text-fg">Últimos {overview.progress.periodDays} días</span><button onClick={() => setTab("Progreso")} className="cursor-pointer font-mono-app text-[9px] text-neon">VER PROGRESO →</button></div>
               <div className="grid grid-cols-3 gap-3">
-                <div className="border border-line bg-elev p-3"><div className="font-mono-app text-[9px] text-fg-ter">ENTRENAMIENTO</div><div className="mt-2 text-2xl font-semibold text-volt">{percent(overview.progress.training?.adherence ?? null)}</div><div className="mt-1 text-xs text-fg-sec">{overview.progress.training ? `${overview.progress.training.completed}/${overview.progress.training.scheduled} sesiones` : overview.permissions.training.status}</div></div>
-                <div className="border border-line bg-elev p-3"><div className="font-mono-app text-[9px] text-fg-ter">NUTRICIÓN</div><div className="mt-2 text-2xl font-semibold text-neon">{percent(overview.progress.nutrition?.adherence ?? null)}</div><div className="mt-1 text-xs text-fg-sec">{overview.progress.nutrition ? `${overview.progress.nutrition.substituted} sustituidas` : overview.permissions.nutrition.status}</div></div>
-                <div className="border border-line bg-elev p-3"><div className="font-mono-app text-[9px] text-fg-ter">PESO</div><div className="mt-2 text-2xl font-semibold text-fg">{overview.progress.metrics?.latestWeightKg ? `${overview.progress.metrics.latestWeightKg.toFixed(1)} kg` : "—"}</div><div className="mt-1 text-xs text-fg-sec">{overview.progress.metrics?.weightChangeKg != null ? `${overview.progress.metrics.weightChangeKg > 0 ? "+" : ""}${overview.progress.metrics.weightChangeKg.toFixed(1)} kg` : overview.permissions.metrics.status}</div></div>
+                <div className="border border-line bg-elev p-3"><div className="font-mono-app text-[9px] text-fg-ter">ENTRENAMIENTO</div><div className="mt-2 text-2xl font-semibold text-volt">{percent(overview.progress.training?.adherence ?? null)}</div><div className="mt-1 text-xs text-fg-sec">{overview.progress.training ? `${overview.progress.training.completed}/${overview.progress.training.scheduled} sesiones` : unavailable(overview.permissions.training.status)}</div></div>
+                <div className="border border-line bg-elev p-3"><div className="font-mono-app text-[9px] text-fg-ter">NUTRICIÓN</div><div className="mt-2 text-2xl font-semibold text-neon">{percent(overview.progress.nutrition?.adherence ?? null)}</div><div className="mt-1 text-xs text-fg-sec">{overview.progress.nutrition ? `${overview.progress.nutrition.substituted} sustituidas` : unavailable(overview.permissions.nutrition.status)}</div></div>
+                <div className="border border-line bg-elev p-3"><div className="font-mono-app text-[9px] text-fg-ter">PESO</div><div className="mt-2 text-2xl font-semibold text-fg">{overview.progress.metrics?.latestWeightKg ? `${overview.progress.metrics.latestWeightKg.toFixed(1)} kg` : "—"}</div><div className="mt-1 text-xs text-fg-sec">{overview.progress.metrics?.weightChangeKg != null ? `${overview.progress.metrics.weightChangeKg > 0 ? "+" : ""}${overview.progress.metrics.weightChangeKg.toFixed(1)} kg` : unavailable(overview.permissions.metrics.status)}</div></div>
               </div>
             </div>
             <div className="border border-line bg-card p-4">
@@ -268,13 +259,22 @@ export default function AthleteRecordPage({ params }: { params: Promise<{ athlet
         </div>
       )}
 
-      {tab === "Progreso" && <div className="grid grid-cols-3 gap-4">{([[
-        "Entrenamiento", overview.progress.training, overview.permissions.training.status,
-      ], [
-        "Nutrición", overview.progress.nutrition, overview.permissions.nutrition.status,
-      ], [
-        "Métricas", overview.progress.metrics, overview.permissions.metrics.status,
-      ]] as [string, object | null, AccessStatus][]).map(([label, data, state]) => <div key={label} className="border border-line bg-card p-4"><div className="font-mono-app text-[10px] text-fg-ter">{label}</div>{data ? <pre className="mt-4 overflow-auto whitespace-pre-wrap font-mono-app text-xs leading-6 text-fg-mid">{JSON.stringify(data, null, 2)}</pre> : <p className="mt-4 text-sm text-warn">{state === "revoked" ? "El acceso fue revocado; no se muestra como 0%." : "Sin autorización para esta categoría."}</p>}</div>)}</div>}
+      {tab === "Progreso" && (
+        <ProgressTab
+          progress={overview.progress}
+          freshnessAt={{
+            training: overview.dataFreshness.training.updatedAt,
+            nutrition: overview.dataFreshness.nutrition.updatedAt,
+            metrics: overview.dataFreshness.metrics.updatedAt,
+          }}
+          sharedCards={overview.sharedCards ?? []}
+          planSelection={overview.planSelection ?? null}
+          isCoach={overview.organizations.some(organization => organization.discipline === "coach")}
+          period={period}
+          onPeriodChange={setPeriod}
+          loading={refreshing}
+        />
+      )}
 
       {tab === "Check-ins" && <div className="flex flex-col gap-3">{overview.checkins.length ? overview.checkins.map(checkin => <div key={checkin.requestId} className="border border-line bg-card p-4"><div className="flex items-center justify-between"><div><span className="font-mono-app text-[10px] text-volt">{checkin.status.toUpperCase()}</span><div className="mt-1 text-xs text-fg-ter">Vence {dateTime(checkin.dueAt)} · enviado {dateTime(checkin.submittedAt)}</div></div>{checkin.status === "submitted" && <div className="flex gap-2"><button disabled={busy} onClick={() => reviewCheckin(checkin, "no_changes")} className="cursor-pointer border border-line px-3 py-2 font-mono-app text-[9px] text-fg-sec">SIN CAMBIOS</button><button disabled={busy} onClick={() => reviewCheckin(checkin, "task")} className="cursor-pointer bg-volt px-3 py-2 font-mono-app text-[9px] font-bold text-ink">REVISAR + TAREA</button></div>}</div>{checkin.answers && <div className="mt-4 grid grid-cols-5 gap-2">{["energy", "sleep", "pain", "stress", "motivation"].map(key => <div key={key} className="border border-line bg-elev p-3"><div className="font-mono-app text-[8px] uppercase text-fg-ter">{key}</div><div className="mt-1 text-xl text-fg">{String(checkin.answers?.[key] ?? "—")}</div></div>)}</div>}</div>) : <div className="border border-dashed border-line p-8 text-center text-sm text-fg-ter">No hay check-ins visibles.</div>}</div>}
 
@@ -284,7 +284,7 @@ export default function AthleteRecordPage({ params }: { params: Promise<{ athlet
 
       {tab === "Notas y tareas" && <div className="flex flex-col gap-3">{overview.tasks.length ? overview.tasks.map(task => <div key={task.id} className="flex items-start justify-between border border-line bg-card p-4"><div><div className="text-sm text-fg">{task.title}</div>{task.detail && <p className="mt-2 text-sm text-fg-sec">{task.detail}</p>}</div><div className="text-right font-mono-app text-[9px] text-fg-ter">{task.status.toUpperCase()}<br />{dateTime(task.dueAt)}</div></div>) : <div className="border border-dashed border-line p-8 text-center text-sm text-fg-ter">Sin tareas registradas.</div>}</div>}
 
-      {tab === "Actividad" && <div className="border border-line bg-card">{overview.activity.length ? overview.activity.map(item => <div key={item.id} className="flex gap-4 border-b border-line p-4 last:border-0"><div className="w-28 shrink-0 font-mono-app text-[9px] text-fg-ter">{dateTime(item.occurredAt)}</div><div><div className="text-sm text-fg">{item.action.replaceAll(".", " · ")}</div>{item.metadata && <div className="mt-1 font-mono-app text-[9px] text-fg-ter">{JSON.stringify(item.metadata)}</div>}</div></div>) : <div className="p-8 text-center text-sm text-fg-ter">La actividad auditada aparecerá aquí.</div>}</div>}
+      {tab === "Actividad" && <div className="border border-line bg-card">{overview.activity.length ? overview.activity.map(item => <div key={item.id} className="flex gap-4 border-b border-line p-4 last:border-0"><div className="w-28 shrink-0 font-mono-app text-[9px] text-fg-ter">{dateTime(item.occurredAt)}</div><div><div className="text-sm text-fg">{describeAction(item.action)}</div>{describeMetadata(item.metadata).length > 0 && <div className="mt-1 font-mono-app text-[9px] text-fg-ter">{describeMetadata(item.metadata).join(" · ")}</div>}</div></div>) : <div className="p-8 text-center text-sm text-fg-ter">La actividad auditada aparecerá aquí.</div>}</div>}
     </div>
   );
 }

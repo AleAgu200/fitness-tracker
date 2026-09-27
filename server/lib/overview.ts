@@ -1,12 +1,13 @@
 import { randomBytes } from "crypto";
 
-import { and, desc, eq, gte, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
   assignedMealPlans,
   assignedWorkouts,
   athleteDailySummaries,
+  athletePlanSelections,
   athleteProfiles,
   attentionSignals,
   auditEvents,
@@ -16,6 +17,7 @@ import {
   followUpTasks,
   organizationClients,
   organizationMemberships,
+  sharedSessionCards,
   syncDevices,
   user,
 } from "@/db/schema";
@@ -25,6 +27,7 @@ import {
   type AccessContext,
   type SharingCategory,
 } from "@/lib/permissions";
+import { progressState, type OverviewPeriod } from "@/lib/progress-policy";
 
 function newId(prefix: string): string {
   return `${prefix}_${randomBytes(12).toString("hex")}`;
@@ -39,18 +42,39 @@ function categoryState(contexts: AccessContext[], category: SharingCategory) {
   return "not_authorized" as const;
 }
 
-export async function getAthleteOverview(professionalUserId: string, athleteId: string) {
+export async function getAthleteOverview(professionalUserId: string, athleteId: string, periodDays: OverviewPeriod = 28) {
   const contexts = await getProfessionalAccess(professionalUserId, athleteId);
   if (!contexts.length) return null;
   const permissions = Object.fromEntries(CATEGORIES.map(category => [category, {
     status: categoryState(contexts, category),
     canEdit: contexts.some(context => disciplineAllowsCategory(context.discipline, category) && context.consents[category] === "granted"),
   }])) as Record<SharingCategory, { status: "granted" | "revoked" | "not_authorized"; canEdit: boolean }>;
+  const trainingGranted = permissions.training.status === "granted";
 
   const assignmentIds = contexts.map(context => context.assignmentId);
   const clientIds = [...new Set(contexts.map(context => context.organizationClientId))];
   const organizationIds = [...new Set(contexts.map(context => context.organizationId))];
-  const sinceDate = new Date(Date.now() - 28 * 86_400_000).toISOString().slice(0, 10);
+  const sinceDate = new Date(Date.now() - periodDays * 86_400_000).toISOString().slice(0, 10);
+  const [sharedCards, planSelection] = await Promise.all([
+    // Cards are shared deliberately by the athlete; the training consent still
+    // gates them at read time, so revoking it hides them immediately.
+    trainingGranted
+      ? db.select({
+          id: sharedSessionCards.id,
+          type: sharedSessionCards.type,
+          metric: sharedSessionCards.metric,
+          earnedAt: sharedSessionCards.earnedAt,
+          sharedAt: sharedSessionCards.sharedAt,
+        }).from(sharedSessionCards)
+          .where(and(eq(sharedSessionCards.athleteId, athleteId), isNull(sharedSessionCards.unsharedAt)))
+          .orderBy(desc(sharedSessionCards.earnedAt)).limit(10)
+      : Promise.resolve([]),
+    // Only whether the coach's plan is the selected one — never other plans.
+    trainingGranted && contexts.some(context => context.discipline === "coach")
+      ? db.select({ coachPlanSelected: athletePlanSelections.coachPlanSelected, selectedAt: athletePlanSelections.selectedAt })
+          .from(athletePlanSelections).where(eq(athletePlanSelections.athleteId, athleteId))
+      : Promise.resolve([]),
+  ]);
   const [athleteRows, profileRows, summaries, team, workoutPlans, mealPlans, checkins, signals, tasks, activity, writer] = await Promise.all([
     db.select({ id: user.id, name: user.name, email: user.email, image: user.image }).from(user).where(eq(user.id, athleteId)),
     db.select().from(athleteProfiles).where(eq(athleteProfiles.userId, athleteId)),
@@ -119,6 +143,8 @@ export async function getAthleteOverview(professionalUserId: string, athleteId: 
   const mealsSubstituted = sum("mealsSubstituted");
   const mealsPending = sum("mealsPending");
   const weights = summaries.filter(row => row.latestWeightKg != null).map(row => row.latestWeightKg as number);
+  const trainingDays = summaries.filter(row => row.trainingFreshAt != null).length;
+  const nutritionDays = summaries.filter(row => row.nutritionFreshAt != null).length;
   const freshness = {
     training: Math.max(0, ...summaries.map(row => row.trainingFreshAt ?? 0)) || null,
     nutrition: Math.max(0, ...summaries.map(row => row.nutritionFreshAt ?? 0)) || null,
@@ -137,7 +163,7 @@ export async function getAthleteOverview(professionalUserId: string, athleteId: 
       action: "athlete_record.viewed",
       subjectType: "athlete",
       subjectId: athleteId,
-      metadata: { categories: CATEGORIES.filter(category => permissions[category].status === "granted") },
+      metadata: { categories: CATEGORIES.filter(category => permissions[category].status === "granted"), periodDays },
       occurredAt: Date.now(),
     });
   }));
@@ -155,27 +181,37 @@ export async function getAthleteOverview(professionalUserId: string, athleteId: 
     }])),
     sync: writer[0] ?? null,
     progress: {
-      periodDays: 28,
+      periodDays,
+      states: {
+        training: progressState(permissions.training.status, trainingDays),
+        nutrition: progressState(permissions.nutrition.status, nutritionDays),
+        metrics: progressState(permissions.metrics.status, weights.length),
+      },
       training: permissions.training.status === "granted" ? {
         completed: completedTraining,
         scheduled: completedTraining + skippedTraining,
         adherence: completedTraining + skippedTraining ? completedTraining / (completedTraining + skippedTraining) : null,
         totalVolumeKg: sum("totalVolumeKg"),
-        daysWithData: summaries.filter(row => row.trainingFreshAt != null).length,
+        daysWithData: trainingDays,
+        coverage: trainingDays / periodDays,
       } : null,
       nutrition: permissions.nutrition.status === "granted" ? {
         completed: mealsCompleted,
         substituted: mealsSubstituted,
         pending: mealsPending,
         adherence: mealsCompleted + mealsSubstituted + mealsPending ? mealsCompleted / (mealsCompleted + mealsSubstituted + mealsPending) : null,
-        daysWithData: summaries.filter(row => row.nutritionFreshAt != null).length,
+        daysWithData: nutritionDays,
+        coverage: nutritionDays / periodDays,
       } : null,
       metrics: permissions.metrics.status === "granted" ? {
         latestWeightKg: weights.at(-1) ?? null,
         weightChangeKg: weights.length > 1 ? weights.at(-1)! - weights[0] : null,
         daysWithData: weights.length,
+        coverage: weights.length / periodDays,
       } : null,
     },
+    sharedCards,
+    planSelection: planSelection[0] ?? null,
     plans: { workout: workoutPlans[0] ?? null, mealPlan: mealPlans[0] ?? null },
     checkins,
     signals,

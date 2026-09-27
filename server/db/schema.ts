@@ -11,3 +11,4 @@ export * from "./schema/organizations";
 export * from "./schema/care";
 export * from "./schema/tracking";
 export * from "./schema/billing";
+export * from "./schema/athlete-sharing";

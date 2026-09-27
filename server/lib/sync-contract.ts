@@ -7,7 +7,17 @@ export const MAX_SYNC_MUTATIONS = 100;
 export const syncMutationSchema = z.object({
   schemaVersion: z.number().int(),
   mutationId: z.string().min(1).max(128),
-  entityType: z.enum(["training_session", "training_set", "nutrition_entry", "body_measurement", "checkin_response"]),
+  // Additive only: a new entity type must never change how older ones behave,
+  // so older app versions keep syncing without a schema-version bump.
+  entityType: z.enum([
+    "training_session",
+    "training_set",
+    "nutrition_entry",
+    "body_measurement",
+    "checkin_response",
+    "session_card",
+    "plan_selection",
+  ]),
   entityId: z.string().min(1).max(128),
   operation: z.enum(["create", "update", "delete"]),
   baseVersion: z.number().int().nonnegative().nullable().optional(),

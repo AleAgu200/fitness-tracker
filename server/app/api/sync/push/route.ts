@@ -1,3 +1,4 @@
+import { getPendingDeletion } from "@/lib/account";
 import { getSessionUser, unauthorized } from "@/lib/api-auth";
 import { WriterDeviceConflictError, pushMutations } from "@/lib/sync";
 import { syncPushSchema } from "@/lib/sync-contract";
@@ -6,6 +7,9 @@ export async function POST(request: Request) {
   const user = await getSessionUser(request);
   if (!user) return unauthorized();
   if (user.role !== "athlete") return Response.json({ error: "athlete_only" }, { status: 403 });
+  // During the deletion grace period nothing new is stored; the phone keeps
+  // its outbox, so cancelling the deletion loses nothing.
+  if (await getPendingDeletion(user.id)) return Response.json({ error: "account_deletion_pending" }, { status: 423 });
 
   let body: unknown;
   try {
