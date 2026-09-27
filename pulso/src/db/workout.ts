@@ -1,7 +1,9 @@
 import { and, asc, desc, eq, gte, lt, sql } from 'drizzle-orm';
 
 import { nanoid } from '@/lib/id';
-import { dayStart } from '@/lib/dates';
+import { dayStart, weekdayOf } from '@/lib/dates';
+import type { PreviousPulseRef } from '@/lib/pulse-engine';
+import { getPlan, getTemplateExercises, PlanExercise, resolveExerciseId } from './plan';
 import { enqueueSyncMutation } from './sync';
 import { db } from './index';
 import {
@@ -9,7 +11,9 @@ import {
   loggedExercises,
   loggedSets,
   personalRecords,
+  templateExerciseSlots,
   workoutSessions,
+  workoutTemplates,
 } from './schema';
 
 export interface LoggedSetRow {
@@ -23,6 +27,11 @@ export interface LoggedSetRow {
 export interface TodaySession {
   sessionId: string;
   completed: boolean;
+  templateId: string | null;
+  /** 'free' when today's session was generated from the body map. */
+  kind: 'plan' | 'free';
+  /** Label of a free session (e.g. "PECHO + CUÁDRICEPS"); null for plan days. */
+  label: string | null;
   /** sets grouped by plan slot id */
   log: Record<string, LoggedSetRow[]>;
 }
@@ -34,6 +43,14 @@ export interface PreviousExerciseSession {
   bestSet: LoggedSetRow;
   bestE1rm: number;
   totalVolumeKg: number;
+}
+
+/** Adapts a previous session to the comparison input of lib/pulse-engine. */
+export function previousPulseRef(previous: PreviousExerciseSession): PreviousPulseRef {
+  return {
+    bestSet: { weightKg: previous.bestSet.peso, reps: previous.bestSet.reps, rpe: previous.bestSet.rpe },
+    at: previous.completedAt.getTime(),
+  };
 }
 
 /** Most recent completed session before today that contains this exercise. */
@@ -130,7 +147,121 @@ export async function getTodaySession(athleteId: string): Promise<TodaySession |
     if (!r.slotId) continue;
     (log[r.slotId] ??= []).push({ reps: r.reps, peso: r.peso, rpe: r.rpe ?? 8, pr: r.pr, workingSeconds: r.workingSeconds });
   }
-  return { sessionId: session.id, completed: session.status === 'completed', log };
+  const [template] = session.templateId
+    ? await db.select({ kind: workoutTemplates.kind, name: workoutTemplates.name })
+      .from(workoutTemplates).where(eq(workoutTemplates.id, session.templateId)).limit(1)
+    : [];
+  const kind = template?.kind ?? 'plan';
+  return {
+    sessionId: session.id,
+    completed: session.status === 'completed',
+    templateId: template ? session.templateId : null,
+    kind,
+    label: kind === 'free' ? template?.name ?? null : null,
+    log,
+  };
+}
+
+export interface TodayPlan {
+  templateId: string;
+  exercises: PlanExercise[];
+  /** Non-null while today's session is a free one generated from the body map. */
+  free: { label: string } | null;
+  session: TodaySession | null;
+}
+
+/** What Entreno trains today: a free session if one was started, otherwise
+ *  the active plan's template for today's weekday. */
+export async function getTodayPlan(athleteId: string): Promise<TodayPlan> {
+  const session = await getTodaySession(athleteId);
+  if (session?.kind === 'free' && session.templateId) {
+    return {
+      templateId: session.templateId,
+      exercises: await getTemplateExercises(athleteId, session.templateId),
+      free: { label: session.label ?? 'SESIÓN LIBRE' },
+      session,
+    };
+  }
+  const plan = await getPlan(athleteId, weekdayOf(new Date()));
+  return { ...plan, free: null, session };
+}
+
+export interface FreeSessionExercise {
+  nombre: string;
+  target: number;
+  reps: number;
+  peso: number;
+  step: number;
+}
+
+/**
+ * Starts today's session from a body-map selection. The exercises live in a
+ * one-off 'free' template outside every weekly plan, so neither the athlete's
+ * plan nor a coach's is modified. Refuses once today already has logged sets.
+ */
+export async function startFreeSession(
+  athleteId: string,
+  label: string,
+  items: FreeSessionExercise[],
+): Promise<void> {
+  const today = await getTodaySession(athleteId);
+  if (today && Object.keys(today.log).length > 0) throw new Error('session_in_progress');
+
+  const exerciseIds: string[] = [];
+  for (const item of items) exerciseIds.push(await resolveExerciseId(athleteId, item.nombre));
+
+  const now = new Date();
+  const templateId = nanoid();
+  await db.transaction(async tx => {
+    await tx.insert(workoutTemplates).values({
+      id: templateId,
+      programId: null,
+      coachId: null,
+      name: label,
+      sessionLabel: 'LIBRE',
+      type: null,
+      templateOrder: null,
+      weekday: null,
+      kind: 'free',
+      createdAt: now,
+    });
+    await tx.insert(templateExerciseSlots).values(items.map((item, index) => ({
+      id: nanoid(),
+      templateId,
+      exerciseId: exerciseIds[index],
+      slotOrder: index,
+      targetSets: item.target,
+      targetReps: item.reps,
+      targetWeightKg: item.peso,
+      restSeconds: 90,
+      stepKg: item.step,
+    })));
+    if (today) {
+      await tx.update(workoutSessions)
+        .set({ templateId, status: 'in_progress', finishedAt: null, startedAt: now })
+        .where(eq(workoutSessions.id, today.sessionId));
+    } else {
+      await tx.insert(workoutSessions).values({
+        id: nanoid(), athleteId, templateId, startedAt: now, status: 'in_progress', totalTonnageKg: 0, createdAt: now,
+      });
+    }
+  });
+  if (today?.kind === 'free' && today.templateId) await deleteFreeTemplate(today.templateId);
+}
+
+/** Drops today's free session while nothing was logged, so the plan day returns. */
+export async function discardFreeSession(athleteId: string): Promise<void> {
+  const today = await getTodaySession(athleteId);
+  if (!today || today.kind !== 'free' || Object.keys(today.log).length > 0) return;
+  await db.delete(workoutSessions).where(eq(workoutSessions.id, today.sessionId));
+  if (today.templateId) await deleteFreeTemplate(today.templateId);
+}
+
+async function deleteFreeTemplate(templateId: string): Promise<void> {
+  await db.transaction(async tx => {
+    await tx.delete(templateExerciseSlots).where(eq(templateExerciseSlots.templateId, templateId));
+    await tx.delete(workoutTemplates).where(and(eq(workoutTemplates.id, templateId), eq(workoutTemplates.kind, 'free')));
+  });
 }
 
 export interface LogSetResult {

@@ -32,6 +32,10 @@ interface PulsoBodyMapProps {
   signals?: MuscleSignal[];
   selectedSlugs?: string[];
   detailedLoads?: Record<string, number>;
+  /** Detailed muscle keys (e.g. "quadriceps") drawn as recovering (cyan). */
+  recoveringKeys?: string[];
+  /** Detailed muscle keys with discomfort reported by the athlete (red). */
+  discomfortKeys?: string[];
   onMusclePress?: (group: MuscleGroup, slug: string) => void;
 }
 
@@ -123,6 +127,8 @@ function PulsoBodyMapComponent({
   signals = [],
   selectedSlugs = [],
   detailedLoads = {},
+  recoveringKeys,
+  discomfortKeys,
   onMusclePress,
 }: PulsoBodyMapProps) {
   const { accent } = usePreferences();
@@ -143,9 +149,20 @@ function PulsoBodyMapComponent({
         const selected = selectedSlugs.includes(part.slug);
         const broadSignal = group ? byGroup.get(group) : undefined;
         const detailedLoad = detail ? detailedLoads[detail.key] : undefined;
-        const signal = broadSignal && detailedLoad != null
+        const detailed = broadSignal && detailedLoad != null
           ? { ...broadSignal, load: detailedLoad, selected: false }
           : broadSignal;
+        // Per-muscle recovery / discomfort override the broad group's signal.
+        const recovery = detail != null && !!recoveringKeys?.includes(detail.key);
+        const discomfort = detail != null && !!discomfortKeys?.includes(detail.key);
+        const signal: MuscleSignal | undefined = recovery || discomfort
+          ? {
+              group: group ?? 'full',
+              load: detailed?.load ?? 0,
+              recovery: recovery || detailed?.recovery,
+              discomfort: discomfort || detailed?.discomfort,
+            }
+          : detailed;
         const fill = fillForSignal(signal, selected, accent, C);
         return (part.pathArray ?? []).map((path, index) => (
           <Path

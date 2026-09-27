@@ -9,6 +9,9 @@ export const programs = sqliteTable('programs', {
   startDate: text('start_date').notNull(),
   endDate:   text('end_date'),
   active:    integer('active', { mode: 'boolean' }).notNull().default(true),
+  // Where the plan came from — drives "Mis planes" labels and keeps a coach's
+  // plan intact while the athlete temporarily trains on another one.
+  origin:    text('origin', { enum: ['own', 'coach', 'ai'] }).notNull().default('own'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
@@ -79,6 +82,9 @@ export const workoutTemplates = sqliteTable('workout_templates', {
   // 1 = Monday .. 7 = Sunday; null = not tied to a specific day (legacy single-plan
   // templates, and the pre-weekly-plan fallback shown until a day gets its own template)
   weekday:       integer('weekday'),
+  // 'free' = one-off session generated from the body map (programId null). Never
+  // part of a weekly plan, so it can't be picked up as a legacy day template.
+  kind:          text('kind', { enum: ['plan', 'free'] }).notNull().default('plan'),
   createdAt:     integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
@@ -146,8 +152,38 @@ export const loggedSets = sqliteTable('logged_sets', {
   completedAt:      integer('completed_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
+/** The single result revealed when a session closes. Local-only; the team sees
+ *  it only after the athlete shares it explicitly (sharedWithTeamAt). */
+export const sessionCards = sqliteTable('session_cards', {
+  id:               text('id').primaryKey(),
+  athleteId:        text('athlete_id').notNull(),
+  sessionId:        text('session_id')
+                      .notNull()
+                      .references(() => workoutSessions.id, { onDelete: 'cascade' }),
+  type:             text('type', { enum: ['new_pulse', 'control', 'return', 'consistency'] }).notNull(),
+  metricJson:       text('metric_json').notNull(),
+  earnedAt:         integer('earned_at', { mode: 'timestamp_ms' }).notNull(),
+  sharedWithTeamAt: integer('shared_with_team_at', { mode: 'timestamp_ms' }),
+}, t => [
+  uniqueIndex('session_card_session').on(t.sessionId),
+]);
+
+/** Cached weekly story for a closed week, generated on the phone. */
+export const weeklySummaries = sqliteTable('weekly_summaries', {
+  id:          text('id').primaryKey(),
+  athleteId:   text('athlete_id').notNull(),
+  weekStart:   text('week_start').notNull(), // YYYY-MM-DD, Monday
+  summaryJson: text('summary_json').notNull(),
+  generatedAt: integer('generated_at', { mode: 'timestamp_ms' }).notNull(),
+  viewedAt:    integer('viewed_at', { mode: 'timestamp_ms' }),
+}, t => [
+  uniqueIndex('weekly_summary_athlete_week').on(t.athleteId, t.weekStart),
+]);
+
 export type Exercise       = typeof exercises.$inferSelect;
 export type WorkoutSession = typeof workoutSessions.$inferSelect;
 export type LoggedSet      = typeof loggedSets.$inferSelect;
 export type PersonalRecord = typeof personalRecords.$inferSelect;
+export type Program        = typeof programs.$inferSelect;
+export type SessionCardRow = typeof sessionCards.$inferSelect;
 

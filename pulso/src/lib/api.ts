@@ -15,7 +15,7 @@ export class ApiError extends Error {
 }
 
 export async function apiFetch<T>(path: string, options?: {
-  method?: 'GET' | 'POST' | 'PUT';
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   body?: unknown;
   signal?: AbortSignal;
   /** Optional captured auth headers for requests that must survive local logout cleanup. */

@@ -6,7 +6,7 @@ import * as SecureStore from 'expo-secure-store';
 import { and, eq, inArray } from 'drizzle-orm';
 
 import { DAYS_PER_WEEK, replaceWeekMealSlots } from '@/db/nutrition';
-import { AssignedExercise, replacePlanExercises } from '@/db/plan';
+import { applyCoachWorkout, AssignedExercise, hasCoachProgram } from '@/db/plan';
 import { db } from '@/db';
 import {
   ensureSyncState,
@@ -24,6 +24,7 @@ import { ApiError, apiFetch } from './api';
 
 interface WorkoutAssignment {
   version: number;
+  name?: string | null;
   payload: { coachName: string; exercises: AssignedExercise[] };
 }
 
@@ -65,6 +66,12 @@ const keys = (uid: string) => ({
   mBy: `pulso_amp_by_${uid}`,
 });
 
+/** Forgets the applied assignment versions and authors (account deletion). */
+export async function clearAssignmentMeta(userId: string): Promise<void> {
+  const k = keys(userId);
+  await Promise.all([kv.del(k.wVersion), kv.del(k.wBy), kv.del(k.mVersion), kv.del(k.mBy)]);
+}
+
 /** Last-known assignment authors, for offline attribution banners. */
 export async function getStoredAssignmentMeta(userId: string): Promise<{ workoutBy: string | null; mealsBy: string | null }> {
   const k = keys(userId);
@@ -76,7 +83,6 @@ export async function getStoredAssignmentMeta(userId: string): Promise<{ workout
 
 export async function syncAssignments(
   userId: string,
-  templateId: string,
   mealPlanId: string,
 ): Promise<SyncResult> {
   const res = await apiFetch<{
@@ -97,8 +103,14 @@ export async function syncAssignments(
   if (res.workout) {
     result.workoutBy = res.workout.payload.coachName || 'tu coach';
     const applied = Number(await kv.get(k.wVersion)) || 0;
-    if (res.workout.version > applied) {
-      await replacePlanExercises(userId, templateId, res.workout.payload.exercises);
+    // Coach plans used to be written over the athlete's own day, so the first
+    // sync after that changed re-applies the current version into its program.
+    if (res.workout.version > applied || !(await hasCoachProgram(userId))) {
+      await applyCoachWorkout(userId, {
+        name: res.workout.name ?? null,
+        coachName: result.workoutBy,
+        exercises: res.workout.payload.exercises,
+      });
       await kv.set(k.wVersion, String(res.workout.version));
       result.workoutChanged = true;
     }
@@ -264,6 +276,10 @@ const CATEGORY_BY_ENTITY: Record<string, SharingCategory> = {
   nutrition_entry: 'nutrition',
   body_measurement: 'metrics',
   checkin_response: 'checkins',
+  // Shared cards and "is the coach's plan the active one" are training data:
+  // they leave the phone only with the training consent.
+  session_card: 'training',
+  plan_selection: 'training',
 };
 
 async function pushAllowedOutbox(athleteId: string, deviceId: string) {

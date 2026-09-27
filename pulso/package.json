@@ -15,6 +15,7 @@
     "expo-crypto": "~56.0.4",
     "expo-dev-client": "~56.0.25",
     "expo-device": "~56.0.4",
+    "expo-file-system": "~56.0.11",
     "expo-font": "~56.0.7",
     "expo-glass-effect": "~56.0.4",
     "expo-haptics": "~56.0.3",
@@ -24,6 +25,7 @@
     "expo-notifications": "~56.0.24",
     "expo-router": "~56.2.19",
     "expo-secure-store": "~56.0.4",
+    "expo-sharing": "~56.0.26",
     "expo-splash-screen": "~56.0.14",
     "expo-sqlite": "~56.0.5",
     "expo-status-bar": "~56.0.4",
@@ -46,6 +48,7 @@
     "react-native-worklets": "0.8.3"
   },
   "devDependencies": {
+    "@types/node": "^22.20.4",
     "@types/react": "~19.2.2",
     "babel-plugin-inline-import": "^3.0.0",
     "drizzle-kit": "^0.31.10",
@@ -59,7 +62,8 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "test": "tsc -p tsconfig.test.json && node --test \".test-build/tests/*.test.js\""
   },
   "private": true,
   "expo": {

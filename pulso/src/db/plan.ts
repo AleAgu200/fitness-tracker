@@ -3,6 +3,7 @@ import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { nanoid } from '@/lib/id';
 import { todayStr, WEEKDAY_LABELS } from '@/lib/dates';
 import { db } from './index';
+import { enqueueSyncMutation } from './sync';
 import {
   exercises,
   personalRecords,
@@ -27,6 +28,14 @@ export interface PlanExercise {
   instructions: string | null; // technique guide paired with the animation
 }
 
+export type ProgramOrigin = 'own' | 'coach' | 'ai';
+
+const DEFAULT_PROGRAM_NAMES: Record<ProgramOrigin, string> = {
+  own: 'Plan personal',
+  coach: 'Plan de tu coach',
+  ai: 'Plan PULSO IA',
+};
+
 async function getOrCreateActiveProgramId(athleteId: string): Promise<string> {
   const existing = await db
     .select({ id: programs.id })
@@ -35,17 +44,197 @@ async function getOrCreateActiveProgramId(athleteId: string): Promise<string> {
     .limit(1);
   if (existing[0]) return existing[0].id;
 
-  const programId = nanoid();
-  await db.insert(programs).values({
-    id: programId,
+  // Nothing active: fall back to the athlete's own plan before creating one.
+  const [own] = await db
+    .select({ id: programs.id })
+    .from(programs)
+    .where(and(eq(programs.athleteId, athleteId), eq(programs.origin, 'own')))
+    .limit(1);
+  if (own) {
+    await db.update(programs).set({ active: true }).where(eq(programs.id, own.id));
+    return own.id;
+  }
+  return createProgram(athleteId, 'own', { active: true });
+}
+
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Tells the care team whether the coach's plan is the one in force — nothing
+ * about the athlete's other plans. Only relevant once a coach plan exists, and
+ * it leaves the phone only with the training consent (see lib/sync).
+ */
+async function recordPlanSelection(tx: Transaction, athleteId: string, activeOrigin: ProgramOrigin): Promise<void> {
+  const [coach] = await tx.select({ id: programs.id }).from(programs)
+    .where(and(eq(programs.athleteId, athleteId), eq(programs.origin, 'coach'))).limit(1);
+  if (!coach) return;
+  const now = new Date();
+  await enqueueSyncMutation(tx, {
     athleteId,
-    coachId: null,
-    name: 'Plan personal',
-    startDate: todayStr(),
-    active: true,
-    createdAt: new Date(),
+    entityType: 'plan_selection',
+    entityId: `plan_selection_${athleteId}`,
+    operation: 'update',
+    occurredAt: now,
+    payload: { coachPlanSelected: activeOrigin === 'coach', selectedAt: now.getTime() },
+  });
+}
+
+async function createProgram(
+  athleteId: string,
+  origin: ProgramOrigin,
+  options: { active: boolean; name?: string },
+): Promise<string> {
+  const programId = nanoid();
+  await db.transaction(async tx => {
+    if (options.active) {
+      await tx.update(programs).set({ active: false }).where(eq(programs.athleteId, athleteId));
+    }
+    await tx.insert(programs).values({
+      id: programId,
+      athleteId,
+      coachId: null,
+      name: options.name ?? DEFAULT_PROGRAM_NAMES[origin],
+      startDate: todayStr(),
+      active: options.active,
+      origin,
+      createdAt: new Date(),
+    });
+    if (options.active) await recordPlanSelection(tx, athleteId, origin);
   });
   return programId;
+}
+
+async function findProgram(athleteId: string, origin: ProgramOrigin) {
+  const [row] = await db
+    .select()
+    .from(programs)
+    .where(and(eq(programs.athleteId, athleteId), eq(programs.origin, origin)))
+    .orderBy(asc(programs.createdAt))
+    .limit(1);
+  return row ?? null;
+}
+
+export interface ActiveProgram {
+  id: string;
+  name: string;
+  origin: ProgramOrigin;
+}
+
+export async function getActiveProgram(athleteId: string): Promise<ActiveProgram> {
+  const id = await getOrCreateActiveProgramId(athleteId);
+  const [row] = await db.select().from(programs).where(eq(programs.id, id)).limit(1);
+  return { id: row.id, name: row.name, origin: row.origin };
+}
+
+export interface ProgramSummary extends ActiveProgram {
+  active: boolean;
+  startDate: string;
+  endDate: string | null;
+  /** Exercise count per weekday (1 = Sunday .. 7 = Saturday). */
+  dayCounts: Record<number, number>;
+}
+
+/** Every training plan the athlete has on this phone, active first. Makes sure
+ *  an own plan exists so there's always somewhere to go back to. */
+export async function listPrograms(athleteId: string): Promise<ProgramSummary[]> {
+  await getOrCreateActiveProgramId(athleteId);
+  if (!(await findProgram(athleteId, 'own'))) await createProgram(athleteId, 'own', { active: false });
+
+  const rows = await db.select().from(programs).where(eq(programs.athleteId, athleteId));
+  const summaries: ProgramSummary[] = [];
+  for (const row of rows) {
+    summaries.push({
+      id: row.id,
+      name: row.name,
+      origin: row.origin,
+      active: row.active,
+      startDate: row.startDate,
+      endDate: row.endDate,
+      dayCounts: Object.fromEntries((await getProgramWeekSummary(row.id)).map(day => [day.weekday, day.exerciseCount])),
+    });
+  }
+  return summaries.sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name, 'es'));
+}
+
+/** Switches the athlete's plan. One active program at a time, atomically. */
+export async function activateProgram(athleteId: string, programId: string): Promise<void> {
+  await db.transaction(async tx => {
+    const [target] = await tx.select({ id: programs.id, origin: programs.origin }).from(programs)
+      .where(and(eq(programs.id, programId), eq(programs.athleteId, athleteId))).limit(1);
+    if (!target) throw new Error('program_not_found');
+    await tx.update(programs).set({ active: false }).where(eq(programs.athleteId, athleteId));
+    await tx.update(programs).set({ active: true }).where(eq(programs.id, programId));
+    await recordPlanSelection(tx, athleteId, target.origin);
+  });
+}
+
+/**
+ * Stores a coach's published session in the coach's own program, so it stays
+ * available when the athlete trains on another plan. The session becomes the
+ * base (weekday-less) template: every day is seeded from it on first use and
+ * the athlete can still adjust a single day until the next version arrives.
+ * The first coach plan becomes active; later versions never switch plans.
+ */
+export async function applyCoachWorkout(
+  athleteId: string,
+  assignment: { name: string | null; coachName: string; exercises: AssignedExercise[] },
+): Promise<{ activated: boolean }> {
+  const name = assignment.name?.trim() || `Plan de ${assignment.coachName}`;
+  const existing = await findProgram(athleteId, 'coach');
+  const programId = existing?.id ?? await createProgram(athleteId, 'coach', { active: true, name });
+  if (existing) await db.update(programs).set({ name }).where(eq(programs.id, existing.id));
+  await replaceProgramBase(athleteId, programId, assignment.exercises);
+  return { activated: !existing };
+}
+
+/** Whether the coach's plan already lives in its own program on this phone. */
+export async function hasCoachProgram(athleteId: string): Promise<boolean> {
+  return (await findProgram(athleteId, 'coach')) != null;
+}
+
+/**
+ * Applies an accepted AI plan (exercises per weekday) as the athlete's AI
+ * program and activates it — accepting it is the athlete's explicit choice.
+ * A coach's program is kept untouched in "Mis planes".
+ */
+export async function applyGeneratedPlan(
+  athleteId: string,
+  exercisesByWeekday: Map<number, AssignedExercise[]>,
+): Promise<void> {
+  const existing = await findProgram(athleteId, 'ai');
+  const programId = existing?.id ?? await createProgram(athleteId, 'ai', { active: false });
+  for (let weekday = 1; weekday <= 7; weekday++) {
+    const templateId = await getOrCreateTemplateIn(programId, weekday);
+    await replacePlanExercises(athleteId, templateId, exercisesByWeekday.get(weekday) ?? []);
+  }
+  await activateProgram(athleteId, programId);
+}
+
+async function replaceProgramBase(athleteId: string, programId: string, items: AssignedExercise[]): Promise<void> {
+  const templateId = nanoid();
+  await db.transaction(async tx => {
+    // Slots are deleted explicitly: foreign_keys isn't guaranteed ON for the
+    // connection, so the cascade can't be relied on. Past sessions keep their
+    // logged rows either way (their slot/template references just go stale).
+    const old = await tx.select({ id: workoutTemplates.id }).from(workoutTemplates)
+      .where(eq(workoutTemplates.programId, programId));
+    if (old.length) {
+      await tx.delete(templateExerciseSlots).where(inArray(templateExerciseSlots.templateId, old.map(t => t.id)));
+    }
+    await tx.delete(workoutTemplates).where(eq(workoutTemplates.programId, programId));
+    await tx.insert(workoutTemplates).values({
+      id: templateId,
+      programId,
+      coachId: null,
+      name: 'SESIÓN',
+      sessionLabel: 'SESIÓN',
+      type: null,
+      templateOrder: 0,
+      weekday: null,
+      createdAt: new Date(),
+    });
+  });
+  await replacePlanExercises(athleteId, templateId, items);
 }
 
 /**
@@ -56,8 +245,10 @@ async function getOrCreateActiveProgramId(athleteId: string): Promise<string> {
  * anyone's exercises — each day then diverges independently from there.
  */
 async function getOrCreateTemplate(athleteId: string, weekday: number): Promise<string> {
-  const programId = await getOrCreateActiveProgramId(athleteId);
+  return getOrCreateTemplateIn(await getOrCreateActiveProgramId(athleteId), weekday);
+}
 
+async function getOrCreateTemplateIn(programId: string, weekday: number): Promise<string> {
   const templates = await db
     .select({ id: workoutTemplates.id, weekday: workoutTemplates.weekday })
     .from(workoutTemplates)
@@ -102,7 +293,12 @@ export interface WeekdaySummary {
 
 /** Exercise count per day of the week, for showing which days already have a plan. */
 export async function getWeekSummary(athleteId: string): Promise<WeekdaySummary[]> {
-  const programId = await getOrCreateActiveProgramId(athleteId);
+  return getProgramWeekSummary(await getOrCreateActiveProgramId(athleteId));
+}
+
+/** Like getWeekSummary for any program. Days not yet seeded from the program's
+ *  base template report the base template's count — that's what they'll show. */
+async function getProgramWeekSummary(programId: string): Promise<WeekdaySummary[]> {
   const templates = await db
     .select({ id: workoutTemplates.id, weekday: workoutTemplates.weekday })
     .from(workoutTemplates)
@@ -119,9 +315,10 @@ export async function getWeekSummary(athleteId: string): Promise<WeekdaySummary[
     for (const c of counts) countByTemplate.set(c.templateId, c.n);
   }
 
+  const base = templates.find(x => x.weekday === null);
   const result: WeekdaySummary[] = [];
   for (let weekday = 1; weekday <= 7; weekday++) {
-    const t = templates.find(x => x.weekday === weekday);
+    const t = templates.find(x => x.weekday === weekday) ?? base;
     result.push({ weekday, exerciseCount: t ? countByTemplate.get(t.id) ?? 0 : 0 });
   }
   return result;
@@ -129,7 +326,11 @@ export async function getWeekSummary(athleteId: string): Promise<WeekdaySummary[
 
 export async function getPlan(athleteId: string, weekday: number): Promise<{ templateId: string; exercises: PlanExercise[] }> {
   const templateId = await getOrCreateTemplate(athleteId, weekday);
+  return { templateId, exercises: await getTemplateExercises(athleteId, templateId) };
+}
 
+/** Exercises of any template — a weekly plan day or a one-off free session. */
+export async function getTemplateExercises(athleteId: string, templateId: string): Promise<PlanExercise[]> {
   const rows = await db
     .select({
       slotId: templateExerciseSlots.id,
@@ -156,31 +357,28 @@ export async function getPlan(athleteId: string, weekday: number): Promise<{ tem
     .where(eq(personalRecords.athleteId, athleteId));
   const prByExercise = new Map(prs.map(p => [p.exerciseId, p.weightKg]));
 
-  return {
-    templateId,
-    exercises: rows.map(r => ({
-      slotId: r.slotId,
-      exerciseId: r.exerciseId,
-      nombre: r.nombre,
-      target: r.target,
-      reps: r.reps,
-      peso: r.peso ?? 0,
-      step: r.step,
-      restSeconds: r.restSeconds,
-      basePR: prByExercise.get(r.exerciseId) ?? r.peso ?? 0,
-      muscleGroup: r.muscleGroup,
-      wxId: r.wxId,
-      gifPath: r.gifPath,
-      instructions: r.instructions,
-    })),
-  };
+  return rows.map(r => ({
+    slotId: r.slotId,
+    exerciseId: r.exerciseId,
+    nombre: r.nombre,
+    target: r.target,
+    reps: r.reps,
+    peso: r.peso ?? 0,
+    step: r.step,
+    restSeconds: r.restSeconds,
+    basePR: prByExercise.get(r.exerciseId) ?? r.peso ?? 0,
+    muscleGroup: r.muscleGroup,
+    wxId: r.wxId,
+    gifPath: r.gifPath,
+    instructions: r.instructions,
+  }));
 }
 
 /** Reuse a catalog exercise when the name matches, otherwise create a custom one.
  *  When a gifPath/wxId is given, it's also backfilled onto an existing name match
  *  that doesn't have one yet, so re-picking the same exercise from search later
  *  unlocks its demo animation. */
-async function resolveExerciseId(
+export async function resolveExerciseId(
   athleteId: string,
   nombre: string,
   wxId?: string | null,

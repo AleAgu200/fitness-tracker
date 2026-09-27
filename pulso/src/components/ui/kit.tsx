@@ -1,11 +1,12 @@
 import * as Haptics from 'expo-haptics';
-import React, { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { AccessibilityRole, Insets, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
   FadeInDown,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withRepeat,
   withSequence,
@@ -50,6 +51,7 @@ export function Card({ children, style, index = 0 }: {
 /**
  * Wraps content with a soft looping light pulse in the accent color.
  * The overlay never intercepts touches; set `intensity` (max overlay opacity) to taste.
+ * With "reduce motion" on, the pulse doesn't run at all.
  */
 export function GlowPulse({ children, color, style, active = true, intensity = 0.16, period = 1000 }: {
   children: React.ReactNode;
@@ -60,24 +62,25 @@ export function GlowPulse({ children, color, style, active = true, intensity = 0
   period?: number;
 }) {
   const glow = useSharedValue(0);
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
-    if (active) {
-      glow.value = withRepeat(
+    if (active && !reduceMotion) {
+      glow.set(withRepeat(
         withSequence(
           withTiming(1, { duration: period, easing: Easing.inOut(Easing.sin) }),
           withTiming(0, { duration: period, easing: Easing.inOut(Easing.sin) }),
         ),
         -1,
-      );
+      ));
     } else {
       cancelAnimation(glow);
-      glow.value = withTiming(0, { duration: 200 });
+      glow.set(withTiming(0, { duration: 200 }));
     }
     return () => cancelAnimation(glow);
-  }, [active, period, glow]);
+  }, [active, period, glow, reduceMotion]);
 
-  const overlayStyle = useAnimatedStyle(() => ({ opacity: glow.value * intensity }));
+  const overlayStyle = useAnimatedStyle(() => ({ opacity: glow.get() * intensity }));
 
   return (
     <View style={[{ overflow: 'hidden' }, style]}>
@@ -105,35 +108,118 @@ function fireHaptic(kind: HapticKind) {
   }
 }
 
-export function PressableScale({ children, onPress, style, haptic = 'light', disabled, accessibilityLabel }: {
+/** Extra hit area for isolated targets drawn smaller than 44 pt. Opt-in:
+ *  packed controls (RPE chips, day tabs) would steal each other's taps. */
+export const SMALL_TARGET_HIT_SLOP: Insets = { top: 8, bottom: 8, left: 8, right: 8 };
+
+export function PressableScale({
+  children, onPress, onLongPress, style, containerStyle, haptic = 'light', disabled, accessibilityLabel, accessibilityHint,
+  accessibilityRole = 'button', selected, hitSlop,
+}: {
   children: React.ReactNode;
   onPress?: () => void;
+  onLongPress?: () => void;
   style?: ViewStyle;
+  /** Layout of the touch target itself (e.g. `flex: 1` in a row); `style` is the visual box. */
+  containerStyle?: ViewStyle;
   haptic?: HapticKind;
   disabled?: boolean;
   /** Needed wherever the label is an icon or glyph ("✕", "✎") that a screen
    *  reader would otherwise announce as meaningless punctuation. */
   accessibilityLabel?: string;
+  accessibilityHint?: string;
+  accessibilityRole?: AccessibilityRole;
+  /** For tabs, segments and toggles — announced by screen readers. */
+  selected?: boolean;
+  hitSlop?: Insets;
 }) {
+  const C = useColors();
+  const reduceMotion = useReducedMotion();
   const scale = useSharedValue(1);
-  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const [focused, setFocused] = useState(false);
+  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }));
 
   return (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel}
-      onPressIn={() => { scale.value = withSpring(0.96, { damping: 20, stiffness: 400 }); }}
-      onPressOut={() => { scale.value = withSpring(1, { damping: 16, stiffness: 300 }); }}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled: !!disabled, selected }}
+      hitSlop={hitSlop}
+      onPressIn={() => { if (!reduceMotion) scale.set(withSpring(0.96, { damping: 20, stiffness: 400 })); }}
+      onPressOut={() => { if (!reduceMotion) scale.set(withSpring(1, { damping: 16, stiffness: 300 })); }}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
       onPress={() => {
         if (disabled) return;
         if (haptic !== 'none') fireHaptic(haptic);
         onPress?.();
       }}
+      onLongPress={onLongPress && !disabled ? () => { fireHaptic('medium'); onLongPress(); } : undefined}
       disabled={disabled}
-      style={{ opacity: disabled ? 0.6 : 1 }}
+      style={({ pressed }) => ({
+        ...containerStyle,
+        opacity: disabled ? 0.6 : pressed && reduceMotion ? 0.7 : 1,
+        // Keyboard / switch-access focus ring; touch never shows it.
+        ...(focused ? { outlineWidth: 2, outlineColor: C.cyan, outlineStyle: 'solid' as const, outlineOffset: 2 } : null),
+      })}
     >
       <Animated.View style={[animStyle, style]}>{children}</Animated.View>
     </Pressable>
+  );
+}
+
+// ── segmented control ────────────────────────────────────────────────────────
+
+/** Underlined segments (tabs, ranges, front/back). `compact` renders small
+ *  inline text options, e.g. a 7D · 28D · 90D range next to a heading. */
+export function Segmented<K extends string | number>({ options, value, onChange, accent, compact = false, style }: {
+  options: { key: K; label: string; accessibilityLabel?: string }[];
+  value: K;
+  onChange: (key: K) => void;
+  accent: string;
+  compact?: boolean;
+  style?: ViewStyle;
+}) {
+  const C = useColors();
+  return (
+    <View
+      accessibilityRole="tablist"
+      style={[
+        { flexDirection: 'row' },
+        compact ? { gap: 4 } : { borderBottomWidth: 1, borderBottomColor: C.border },
+        style,
+      ]}
+    >
+      {options.map(option => {
+        const selected = option.key === value;
+        return (
+          <PressableScale
+            key={String(option.key)}
+            accessibilityRole="tab"
+            accessibilityLabel={option.accessibilityLabel ?? option.label}
+            selected={selected}
+            haptic={selected ? 'none' : 'light'}
+            onPress={() => onChange(option.key)}
+            hitSlop={compact ? SMALL_TARGET_HIT_SLOP : undefined}
+            containerStyle={compact ? undefined : { flex: 1 }}
+            style={compact
+              ? { paddingHorizontal: 8, paddingVertical: 6, borderBottomWidth: 2, borderBottomColor: selected ? accent : 'transparent' }
+              : { minHeight: 44, justifyContent: 'center', paddingHorizontal: 6, borderBottomWidth: 3, borderBottomColor: selected ? accent : 'transparent', marginBottom: -1 }}
+          >
+            <Text style={{
+              fontFamily: selected ? F.monoBold : F.mono,
+              fontSize: compact ? 10 : 11,
+              letterSpacing: 1,
+              color: selected ? C.textPrimary : C.textTertiary,
+              textAlign: 'center',
+            }}>
+              {option.label}
+            </Text>
+          </PressableScale>
+        );
+      })}
+    </View>
   );
 }
 
@@ -150,10 +236,10 @@ export function AnimatedBar({ fill, color, height = 8, duration = 500 }: {
   const w = useSharedValue(0);
 
   useEffect(() => {
-    w.value = withTiming(Math.max(0, Math.min(1, fill)), { duration });
+    w.set(withTiming(Math.max(0, Math.min(1, fill)), { duration }));
   }, [fill, duration, w]);
 
-  const fillStyle = useAnimatedStyle(() => ({ width: `${w.value * 100}%` }));
+  const fillStyle = useAnimatedStyle(() => ({ width: `${w.get() * 100}%` }));
 
   return (
     <View style={{ height, backgroundColor: C.bgEl, borderWidth: 1, borderColor: C.border, overflow: 'hidden' }}>

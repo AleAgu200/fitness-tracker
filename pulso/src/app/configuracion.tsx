@@ -11,6 +11,7 @@ import { F, useColors, withAlpha } from '@/constants/colors';
 import { useApp } from '@/context/app-state';
 import { usePreferences } from '@/context/preferences';
 import { useSession } from '@/context/session';
+import { exportAccountData, ProfessionalAccountError, requestDeletion } from '@/lib/account';
 import { displayWeight, toKg } from '@/lib/units';
 
 type Sexo = 'M' | 'F' | 'X';
@@ -206,6 +207,112 @@ function TrainingPlanSection() {
   );
 }
 
+/** Export and account deletion. Free, and never behind the subscription. */
+function DataSection() {
+  const { userId, signOut } = useSession();
+  const C = useColors();
+  const [exporting, setExporting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleExport() {
+    if (!userId || exporting) return;
+    setExporting(true);
+    try {
+      const result = await exportAccountData(userId);
+      if (!result.includesServer) {
+        Alert.alert('Exportación sin conexión', 'El archivo tiene todo lo que guarda tu teléfono. Lo que está en el servidor se agrega cuando exportes con conexión.');
+      }
+    } catch (e) {
+      console.error('[export]', e);
+      Alert.alert('No pudimos exportar', 'Probá de nuevo en un momento.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!userId || deleting) return;
+    setDeleting(true);
+    try {
+      await requestDeletion(userId);
+      void signOut();
+      router.replace('/(auth)/login' as any);
+    } catch (e) {
+      setDeleting(false);
+      if (e instanceof ProfessionalAccountError) {
+        Alert.alert('Cuenta profesional', 'Las cuentas de profesionales se cierran desde el portal, después de transferir o cerrar tu organización.');
+      } else {
+        console.error('[account-delete]', e);
+        Alert.alert('No pudimos borrar la cuenta', 'Necesitás conexión para pedir el borrado. Tus datos no se tocaron.');
+      }
+    }
+  }
+
+  const rowStyle = { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: C.card, borderWidth: 1, borderColor: C.border, padding: 14, paddingHorizontal: 16 } as const;
+
+  return (
+    <View style={{ marginBottom: 20 }}>
+      <Label style={{ marginBottom: 9 }}>TUS DATOS</Label>
+      <PressableScale onPress={() => void handleExport()} disabled={exporting} style={{ ...rowStyle, marginBottom: 8 }}>
+        <View style={{ flex: 1, paddingRight: 10 }}>
+          <Text style={{ fontFamily: F.interSemi, fontSize: 14, color: C.textPrimary }}>{exporting ? 'Preparando archivo…' : 'Exportar mis datos'}</Text>
+          <Text style={{ fontFamily: F.inter, fontSize: 12, color: C.textTertiary, marginTop: 3 }}>
+            Un archivo JSON con tu historial del teléfono y lo que guarda el servidor
+          </Text>
+        </View>
+        <Text style={{ fontFamily: F.mono, fontSize: 12, color: C.textSecondary }}>↗</Text>
+      </PressableScale>
+
+      {!confirmingDelete ? (
+        <PressableScale onPress={() => setConfirmingDelete(true)} style={rowStyle} accessibilityHint="Muestra qué pasa antes de confirmar">
+          <View style={{ flex: 1, paddingRight: 10 }}>
+            <Text style={{ fontFamily: F.interSemi, fontSize: 14, color: C.red }}>Borrar mi cuenta</Text>
+            <Text style={{ fontFamily: F.inter, fontSize: 12, color: C.textTertiary, marginTop: 3 }}>
+              Tenés 30 días para arrepentirte
+            </Text>
+          </View>
+          <Text style={{ fontFamily: F.mono, fontSize: 12, color: C.red }}>→</Text>
+        </PressableScale>
+      ) : (
+        <Animated.View entering={FadeIn.duration(180)} style={{ borderWidth: 1, borderColor: C.red, backgroundColor: withAlpha(C.red, 0.06), padding: 14, gap: 10 }}>
+          <Text style={{ fontFamily: F.interSemi, fontSize: 14, color: C.textPrimary }}>Antes de borrar tu cuenta</Text>
+          {[
+            'Tu equipo deja de verte en el momento y se cierran todas tus sesiones.',
+            'Tu historial se borra ahora de este teléfono. Si querés conservarlo, exportalo primero.',
+            'A los 30 días borramos todo del servidor. Si volvés a iniciar sesión antes, podés cancelarlo.',
+            'Si tenés PULSO Plus, cancelá la suscripción desde la tienda: borrar la cuenta no la cancela.',
+          ].map(line => (
+            <Text key={line} style={{ fontFamily: F.inter, fontSize: 12, lineHeight: 18, color: C.textSecondary }}>• {line}</Text>
+          ))}
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+            <PressableScale
+              onPress={() => void handleExport()}
+              disabled={exporting || deleting}
+              containerStyle={{ flex: 1 }}
+              style={{ minHeight: 44, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: C.border }}
+            >
+              <Text style={{ fontFamily: F.monoBold, fontSize: 10, color: C.textPrimary }}>{exporting ? 'EXPORTANDO…' : 'EXPORTAR PRIMERO'}</Text>
+            </PressableScale>
+            <PressableScale
+              onPress={() => void handleDelete()}
+              disabled={deleting}
+              haptic="heavy"
+              containerStyle={{ flex: 1 }}
+              style={{ minHeight: 44, justifyContent: 'center', alignItems: 'center', backgroundColor: C.red }}
+            >
+              <Text style={{ fontFamily: F.monoBold, fontSize: 10, color: C.onAccent }}>{deleting ? 'BORRANDO…' : 'BORRAR MI CUENTA'}</Text>
+            </PressableScale>
+          </View>
+          <PressableScale onPress={() => setConfirmingDelete(false)} disabled={deleting} style={{ alignSelf: 'center', minHeight: 44, justifyContent: 'center', paddingHorizontal: 12 }}>
+            <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 1, color: C.textSecondary }}>CANCELAR</Text>
+          </PressableScale>
+        </Animated.View>
+      )}
+    </View>
+  );
+}
+
 export default function ConfiguracionScreen() {
   const { signOut } = useSession();
   const C = useColors();
@@ -247,6 +354,8 @@ export default function ConfiguracionScreen() {
         <PreferencesSettings />
 
         <TrainingPlanSection />
+
+        <DataSection />
 
         {/* CUENTA */}
         <View style={{ marginTop: 4 }}>

@@ -13,7 +13,14 @@ import {
 
 export const SYNC_SCHEMA_VERSION = 2;
 
-export type SyncEntityType = 'training_session' | 'training_set' | 'nutrition_entry' | 'body_measurement' | 'checkin_response';
+export type SyncEntityType =
+  | 'training_session'
+  | 'training_set'
+  | 'nutrition_entry'
+  | 'body_measurement'
+  | 'checkin_response'
+  | 'session_card'
+  | 'plan_selection';
 export type SyncOperation = 'create' | 'update' | 'delete';
 export type SharingCategory = 'training' | 'nutrition' | 'metrics' | 'checkins' | 'photos';
 

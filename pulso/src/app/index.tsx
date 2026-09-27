@@ -7,6 +7,7 @@ import {
   type OnboardingStep,
   shouldShowOnboarding,
 } from '@/db/onboarding';
+import { getPendingDeletion } from '@/lib/account';
 import { syncAthleteProfile } from '@/lib/profile-sync';
 
 const ONBOARDING_ROUTES: Record<OnboardingStep, string> = {
@@ -36,6 +37,19 @@ export default function Index() {
       }
 
       try {
+        // Logging in during the deletion grace period is how an athlete
+        // changes their mind: offer that before anything else loads.
+        try {
+          const pending = await getPendingDeletion();
+          if (cancelled) return;
+          if (pending) {
+            router.replace({ pathname: '/cuenta-en-borrado', params: { purgeAfter: String(pending.purgeAfter) } });
+            return;
+          }
+        } catch (error) {
+          console.warn('[account-deletion] status check deferred', error);
+        }
+
         try {
           await syncAthleteProfile(userId);
         } catch (error) {

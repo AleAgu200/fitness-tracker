@@ -12,7 +12,8 @@ import { usePreferences } from '@/context/preferences';
 const ALL_BADGES_COUNT = 6;
 
 const NAV_ROWS: { key: string; label: string; detail: string; href: string }[] = [
-  { key: 'progreso',      label: 'Progreso',      detail: 'Composición, logros, PRs y racha de entrenos', href: '/progreso' },
+  { key: 'progreso',      label: 'Progreso',      detail: 'Fuerza, cuerpo, tarjetas y resúmenes semanales', href: '/progreso' },
+  { key: 'planes',        label: 'Mis planes',    detail: 'Tu plan activo, el de tu coach y los demás',    href: '/mis-planes' },
   { key: 'equipo',        label: 'Equipo',        detail: 'Entrenador, nutricionista y mensajes',          href: '/equipo' },
   { key: 'configuracion', label: 'Configuración', detail: 'Datos personales, notificaciones y cuenta',     href: '/configuracion' },
 ];

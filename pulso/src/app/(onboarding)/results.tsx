@@ -14,7 +14,7 @@ import {
   setOnboardingStepIfInProgress,
 } from '@/db/onboarding';
 import { MealDraft, getMealPlan, replaceWeekMealSlots } from '@/db/nutrition';
-import { AssignedExercise, getPlan, replacePlanExercises } from '@/db/plan';
+import { applyGeneratedPlan, AssignedExercise } from '@/db/plan';
 import { weekdayOf } from '@/lib/dates';
 
 function catalogKey(source: string, id: string): string {
@@ -101,16 +101,10 @@ export default function ResultsScreen() {
         })),
       }));
 
-      // Replace all seven days so a rest day cannot retain exercises from a
-      // previous or interrupted attempt. Each replacement is retry-safe.
-      for (let mobileWeekday = 1; mobileWeekday <= 7; mobileWeekday += 1) {
-        const { templateId } = await getPlan(userId, mobileWeekday);
-        await replacePlanExercises(
-          userId,
-          templateId,
-          exercisesByWeekday.get(mobileWeekday) ?? [],
-        );
-      }
+      // Lands in the AI program (all seven days replaced, so a rest day can't
+      // keep exercises from an earlier attempt; retry-safe) and activates it.
+      // A coach's plan stays available in "Mis planes".
+      await applyGeneratedPlan(userId, exercisesByWeekday);
 
       const { mealPlanId } = await getMealPlan(userId, weekdayOf(new Date()));
       await replaceWeekMealSlots(mealPlanId, week);

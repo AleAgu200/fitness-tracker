@@ -34,35 +34,59 @@ import {
 } from '@/db/nutrition';
 import { ExercisePlanValues } from '@/components/exercise-plan-form';
 import {
+  ActiveProgram,
+  activateProgram,
   addPlanExercise,
   deletePlanExercise,
-  getPlan,
+  getActiveProgram,
+  getWeekSummary,
+  PlanExercise,
   updatePlanExercise,
 } from '@/db/plan';
+import { createSessionCard, getTrainingSessions } from '@/db/pulse';
 import { getAthleteProfile, getLatestWeightMeasurement, saveAthleteProfile } from '@/db/profile';
-import { weekdayOf } from '@/lib/dates';
+import { addDays, weekdayOf } from '@/lib/dates';
 import { getInitials } from '@/lib/names';
+import { comparePulse, TrainingSession } from '@/lib/pulse-engine';
 import {
+  discardFreeSession as dbDiscardFreeSession,
   finishSession as dbFinishSession,
+  FreeSessionExercise,
   getPreviousExerciseSession,
   getPRHistory,
+  getTodayPlan,
   getTodaySession,
   logSet,
   PreviousExerciseSession,
+  previousPulseRef,
   PRHistoryItem,
+  startFreeSession as dbStartFreeSession,
 } from '@/db/workout';
 import { CLEARED_REST_STATE, loadRestTimerState, RestTimerState, saveRestTimerState } from '@/lib/rest-timer-store';
 import { addWidgetRestListener } from '@/modules/pulso-widget';
 import { getStoredAssignmentMeta, syncAssignments, syncMobileData, type ScheduledPlan } from '@/lib/sync';
 import { pushAthleteProfile, syncAthleteProfile } from '@/lib/profile-sync';
-import { formatWeight } from '@/lib/units';
 import { EMPTY_WIDGET_DATA, syncWorkoutWidgets } from '@/lib/widget-bridge';
 import { usePreferences } from './preferences';
 import { useSession } from './session';
 
 export type MealStatus = 'cumplido' | 'sustituido' | 'pendiente';
 export type MetricKey = 'peso' | 'grasa' | 'musculo';
-export type { WeekDay, MetricPoint, ProgressPhoto, PreviousExerciseSession, PRHistoryItem, ExercisePlanValues };
+export type { WeekDay, MetricPoint, ProgressPhoto, PreviousExerciseSession, PRHistoryItem, ExercisePlanValues, ActiveProgram };
+
+/** Brief confirmation after saving a set (≤ 1.5 s, never blocks the next one). */
+export interface SetFeedback {
+  /** Increments on every save so consecutive confirmations re-animate. */
+  id: number;
+  kind: 'saved' | 'beat' | 'record';
+  setNumber: number;
+  exercise: string;
+  weightKg: number;
+}
+
+const SET_FEEDBACK_MS = 1500;
+/** Training history kept in memory for Hoy/Progreso rules (covers the 90-day range). */
+const TRAINING_HISTORY_DAYS = 120;
 
 const STATUS_TO_DB: Record<MealStatus, MealStatusDb> = {
   cumplido: 'completed',
@@ -151,6 +175,13 @@ export interface AppState {
   scheduledWorkout: ScheduledPlan | null;
   scheduledMeals: ScheduledPlan | null;
 
+  // plans — the program feeding today's session (see "Mis planes")
+  activePlan: ActiveProgram | null;
+  /** Days with exercises in the active plan's week. */
+  plannedDaysPerWeek: number;
+  /** Non-null while today's session was generated from the body map. */
+  freeSession: { label: string } | null;
+
   // habits / derived
   racha: number;
   weekDays: WeekDay[];
@@ -158,6 +189,8 @@ export interface AppState {
   sessionsCount: number;
   earned: Record<string, number>;
   prHistory: PRHistoryItem[];
+  /** Recent sessions with their sets — input for the Pulse rules. */
+  trainingSessions: TrainingSession[];
 
   // nutrition
   meals: Meal[];
@@ -183,7 +216,7 @@ export interface AppState {
   restActive: boolean;
   restLeft: number;
   restTotal: number;
-  prFlash: { ej: string; val: string } | null;
+  setFeedback: SetFeedback | null;
 
   // progress
   metric: MetricKey;
@@ -202,12 +235,16 @@ const initialState: AppState = {
   assignedMealsBy: null,
   scheduledWorkout: null,
   scheduledMeals: null,
+  activePlan: null,
+  plannedDaysPerWeek: 0,
+  freeSession: null,
   racha: 0,
   weekDays: [],
   heatmap: Array.from({ length: 12 }, () => Array.from({ length: 7 }, () => 0)),
   sessionsCount: 0,
   earned: {},
   prHistory: [],
+  trainingSessions: [],
   meals: [],
   mealStatus: {},
   mealNotes: {},
@@ -229,7 +266,7 @@ const initialState: AppState = {
   restActive: false,
   restLeft: REST_DEFAULT,
   restTotal: REST_DEFAULT,
-  prFlash: null,
+  setFeedback: null,
   metric: 'peso',
   metricVals: { peso: 70, grasa: 20, musculo: 35 },
   histories: { peso: [], grasa: [], musculo: [] },
@@ -263,7 +300,15 @@ interface AppContextValue {
    *  the exercise's plan target weight/reps (RPE defaulted) rather than the live steppers —
    *  used by the widget's "done" quick-log, which auto-advances once the target is hit. */
   guardarSet: (override?: { slotId: string }) => void;
-  finishWorkout: () => void;
+  /** Closes today's session and evaluates its card. Resolves to the session id
+   *  (for the result screen), or null if there was nothing to close. */
+  finishWorkout: () => Promise<string | null>;
+  /** Replaces today's (still empty) session with one generated from the body map. */
+  startFreeSession: (label: string, items: FreeSessionExercise[]) => Promise<void>;
+  /** Drops today's free session while nothing was logged, back to the plan day. */
+  discardFreeSession: () => Promise<void>;
+  /** Makes another program the active plan (see "Mis planes"). */
+  activatePlan: (programId: string) => Promise<void>;
   startEditEx: () => void;
   startAddEx: () => void;
   cancelExForm: () => void;
@@ -273,7 +318,6 @@ interface AppContextValue {
   addRest: () => void;
   reduceRest: () => void;
   skipRest: () => void;
-  dismissPrFlash: () => void;
   addRecommendedExercise: (exercise: {
     name: string;
     sets: number;
@@ -292,6 +336,24 @@ interface AppContextValue {
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
+
+function toExercises(items: PlanExercise[]): Exercise[] {
+  return items.map(e => ({
+    id: e.slotId,
+    exerciseId: e.exerciseId,
+    nombre: e.nombre,
+    sub: `${e.target}×${e.reps} · RPE 8`,
+    target: e.target,
+    reps: e.reps,
+    peso: e.peso,
+    step: e.step,
+    basePR: e.basePR,
+    muscleGroup: e.muscleGroup,
+    wxId: e.wxId,
+    gifPath: e.gifPath,
+    instructions: e.instructions,
+  }));
+}
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AppState>(initialState);
@@ -312,7 +374,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const restEndAtRef = useRef<number | null>(null);
   /** Set the moment rest ends (naturally, skipped, or reduced to zero) — consumed by the next GUARDAR SET tap to measure rep time. */
   const workStartedAtRef = useRef<number | null>(null);
-  const prTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const feedbackSeq = useRef(0);
   const noteTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // ── initial load ──────────────────────────────────────────────────────────
@@ -346,19 +409,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
 
         const todayWeekday = weekdayOf(new Date());
-        // Plan/meal-plan first: assignments from coach/nutritionist may replace them
-        let [plan, mealPlan] = await Promise.all([getPlan(userId, todayWeekday), getMealPlan(userId, todayWeekday)]);
+        // Meal plan first: an assignment from the nutritionist may replace it.
+        // A coach's workout lands in its own program (see applyCoachWorkout).
+        let mealPlan = await getMealPlan(userId, todayWeekday);
         let assignedWorkoutBy: string | null = null;
         let assignedMealsBy: string | null = null;
         let scheduledWorkout: ScheduledPlan | null = null;
         let scheduledMeals: ScheduledPlan | null = null;
         try {
-          const sync = await syncAssignments(userId, plan.templateId, mealPlan.mealPlanId);
+          const sync = await syncAssignments(userId, mealPlan.mealPlanId);
           assignedWorkoutBy = sync.workoutBy;
           assignedMealsBy = sync.mealsBy;
           scheduledWorkout = sync.scheduledWorkout;
           scheduledMeals = sync.scheduledMeals;
-          if (sync.workoutChanged) plan = await getPlan(userId, todayWeekday);
           if (sync.mealsChanged) mealPlan = await getMealPlan(userId, todayWeekday);
         } catch {
           // Offline — keep last-known assignment authors for attribution banners
@@ -368,16 +431,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         await syncMobileData(userId);
 
-        const [profile, session, entries, water, histories, photos] =
+        // Sequential on purpose: each may create the default program, and two
+        // concurrent creations would leave two active plans.
+        const plan = await getTodayPlan(userId);
+        const activePlan = await getActiveProgram(userId);
+        const weekSummary = await getWeekSummary(userId);
+        const session = plan.session;
+
+        const [profile, entries, water, histories, photos] =
           await Promise.all([
             getAthleteProfile(userId),
-            getTodaySession(userId),
             getTodayMealEntries(userId),
             getTodayWater(userId),
             getMetricHistories(userId),
             getPhotos(userId),
           ]);
-        const [racha, weekDays, heatmap, sessionsCount, earned, prHistory] =
+        const [racha, weekDays, heatmap, sessionsCount, earned, prHistory, trainingSessions] =
           await Promise.all([
             computeStreak(userId),
             getWeekDays(userId),
@@ -385,27 +454,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             getCompletedSessionsCount(userId),
             evaluateAchievements(userId),
             getPRHistory(userId),
+            getTrainingSessions(userId, addDays(new Date(), -TRAINING_HISTORY_DAYS)),
           ]);
         if (cancelled) return;
 
         templateIdRef.current = plan.templateId;
         mealPlanIdRef.current = mealPlan.mealPlanId;
 
-        const exercises: Exercise[] = plan.exercises.map(e => ({
-          id: e.slotId,
-          exerciseId: e.exerciseId,
-          nombre: e.nombre,
-          sub: `${e.target}×${e.reps} · RPE 8`,
-          target: e.target,
-          reps: e.reps,
-          peso: e.peso,
-          step: e.step,
-          basePR: e.basePR,
-          muscleGroup: e.muscleGroup,
-          wxId: e.wxId,
-          gifPath: e.gifPath,
-          instructions: e.instructions,
-        }));
+        const exercises = toExercises(plan.exercises);
         const prMap: Record<string, number> = {};
         for (const e of exercises) prMap[e.id] = e.basePR;
 
@@ -452,12 +508,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           assignedMealsBy,
           scheduledWorkout,
           scheduledMeals,
+          activePlan,
+          plannedDaysPerWeek: weekSummary.filter(day => day.exerciseCount > 0).length,
+          freeSession: plan.free,
           racha,
           weekDays,
           heatmap,
           sessionsCount,
           earned,
           prHistory,
+          trainingSessions,
           meals: mealPlan.meals,
           mealStatus,
           mealNotes: entries.notes,
@@ -493,7 +553,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => () => {
     if (restTimer.current) clearInterval(restTimer.current);
-    if (prTimer.current) clearTimeout(prTimer.current);
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
     for (const t of Object.values(noteTimers.current)) clearTimeout(t);
   }, []);
 
@@ -503,15 +563,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const uid = userRef.current;
     if (!uid) return;
     try {
-      const [racha, weekDays, heatmap, sessionsCount, earned, prHistory] = await Promise.all([
+      const [racha, weekDays, heatmap, sessionsCount, earned, prHistory, trainingSessions] = await Promise.all([
         computeStreak(uid),
         getWeekDays(uid),
         getHeatmap(uid),
         getCompletedSessionsCount(uid),
         evaluateAchievements(uid),
         getPRHistory(uid),
+        getTrainingSessions(uid, addDays(new Date(), -TRAINING_HISTORY_DAYS)),
       ]);
-      setState(s => ({ ...s, racha, weekDays, heatmap, sessionsCount, earned, prHistory }));
+      setState(s => ({ ...s, racha, weekDays, heatmap, sessionsCount, earned, prHistory, trainingSessions }));
     } catch (e) {
       console.error('[app-state] refresh failed', e);
     }
@@ -540,28 +601,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const reloadPlan = useCallback(async () => {
     const uid = userRef.current;
     if (!uid) return;
-    const plan = await getPlan(uid, weekdayOf(new Date()));
+    const plan = await getTodayPlan(uid);
+    const activePlan = await getActiveProgram(uid);
+    const weekSummary = await getWeekSummary(uid);
     templateIdRef.current = plan.templateId;
     const previousPairs = await Promise.all(plan.exercises.map(async exercise => [
       exercise.exerciseId,
       await getPreviousExerciseSession(uid, exercise.exerciseId),
     ] as const));
     setState(s => {
-      const exercises: Exercise[] = plan.exercises.map(e => ({
-        id: e.slotId,
-        exerciseId: e.exerciseId,
-        nombre: e.nombre,
-        sub: `${e.target}×${e.reps} · RPE 8`,
-        target: e.target,
-        reps: e.reps,
-        peso: e.peso,
-        step: e.step,
-        basePR: e.basePR,
-        muscleGroup: e.muscleGroup,
-        wxId: e.wxId,
-        gifPath: e.gifPath,
-        instructions: e.instructions,
-      }));
+      const exercises = toExercises(plan.exercises);
       const prMap: Record<string, number> = {};
       for (const e of exercises) prMap[e.id] = Math.max(e.basePR, s.prMap[e.id] ?? 0);
       const exIndex = Math.min(s.exIndex, Math.max(0, exercises.length - 1));
@@ -578,6 +627,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         exIndex,
         curReps: cur?.reps ?? s.curReps,
         curPeso: cur?.peso ?? s.curPeso,
+        activePlan,
+        plannedDaysPerWeek: weekSummary.filter(day => day.exerciseCount > 0).length,
+        // `log` stays as-is: it's optimistic and keyed by slot, and templates are
+        // only swapped (free session, plan switch) while nothing is logged today.
+        freeSession: plan.free,
       };
     });
   }, []);
@@ -848,6 +902,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   }, [tickRestTimer]);
 
+  const showSetFeedback = useCallback((feedback: Omit<SetFeedback, 'id'>) => {
+    feedbackSeq.current += 1;
+    const id = feedbackSeq.current;
+    setState(s => ({ ...s, setFeedback: { ...feedback, id } }));
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+    feedbackTimer.current = setTimeout(
+      () => setState(s => (s.setFeedback?.id === id ? { ...s, setFeedback: null } : s)),
+      SET_FEEDBACK_MS,
+    );
+  }, []);
+
+  /** Moves the steppers to the first exercise after the plan behind them changed. */
+  const selectFirstExercise = useCallback(() =>
+    setState(s => {
+      const first = s.exercises[0];
+      return { ...s, exIndex: 0, curPeso: first?.peso ?? s.curPeso, curReps: first?.reps ?? s.curReps, curRpe: 8 };
+    }), []);
+
   const selectEx = useCallback((i: number) =>
     setState(s => {
       const e = s.exercises[i];
@@ -919,6 +991,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
       startRest(REST_DEFAULT);
 
+      const previous = s.previousSessions[ex.exerciseId];
+      const beating = previous != null
+        && comparePulse(previousPulseRef(previous), { weightKg: peso, reps, rpe }, Date.now()).beating;
+      const setNumber = (s.log[ex.id]?.length ?? 0) + 1;
+      showSetFeedback({ kind: beating ? 'beat' : 'saved', setNumber, exercise: ex.nombre, weightKg: peso });
+
       logSet(uid, templateIdRef.current, { slotId: ex.id, exerciseId: ex.exerciseId }, { peso, reps, rpe, workingSeconds })
         .then(({ isPR }) => {
           if (!isPR) return;
@@ -929,11 +1007,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               ...st,
               log: { ...st.log, [ex.id]: sets },
               prMap: { ...st.prMap, [ex.id]: Math.max(st.prMap[ex.id] ?? 0, set.peso) },
-              prFlash: { ej: ex.nombre, val: formatWeight(set.peso, weightUnitRef.current) },
             };
           });
-          if (prTimer.current) clearTimeout(prTimer.current);
-          prTimer.current = setTimeout(() => setState(st => ({ ...st, prFlash: null })), 4000);
+          showSetFeedback({ kind: 'record', setNumber, exercise: ex.nombre, weightKg: peso });
           return refreshDerived();
         })
         .catch(e => console.error('[set]', e));
@@ -954,20 +1030,58 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     commit();
-  }, [startRest, refreshDerived]);
+  }, [startRest, refreshDerived, showSetFeedback]);
 
-  const finishWorkout = useCallback(() => {
+  const finishWorkout = useCallback(async (): Promise<string | null> => {
     const uid = userRef.current;
-    if (!uid) return;
+    if (!uid) return null;
     setState(s => ({ ...s, sessionDone: true, restActive: false }));
     if (restTimer.current) clearInterval(restTimer.current);
     restEndAtRef.current = null;
     saveRestTimerState(CLEARED_REST_STATE).catch(() => {});
-    getTodaySession(uid)
-      .then(session => (session ? dbFinishSession(session.sessionId) : undefined))
-      .then(() => syncCheckIn({ workoutCompleted: true }))
-      .catch(e => console.error('[finish]', e));
+    try {
+      const session = await getTodaySession(uid);
+      if (!session) return null;
+      await dbFinishSession(session.sessionId);
+      try {
+        await createSessionCard(uid, session.sessionId);
+      } catch (e) {
+        // The session is closed either way; the result screen retries the card.
+        console.error('[session-card]', e);
+      }
+      await syncCheckIn({ workoutCompleted: true });
+      return session.sessionId;
+    } catch (e) {
+      console.error('[finish]', e);
+      return null;
+    }
   }, [syncCheckIn]);
+
+  const startFreeSession = useCallback(async (label: string, items: FreeSessionExercise[]) => {
+    const uid = userRef.current;
+    if (!uid) return;
+    await dbStartFreeSession(uid, label, items);
+    setState(s => ({ ...s, log: {}, sessionDone: false }));
+    await reloadPlan();
+    selectFirstExercise();
+  }, [reloadPlan, selectFirstExercise]);
+
+  const discardFreeSession = useCallback(async () => {
+    const uid = userRef.current;
+    if (!uid) return;
+    await dbDiscardFreeSession(uid);
+    setState(s => ({ ...s, log: {} }));
+    await reloadPlan();
+    selectFirstExercise();
+  }, [reloadPlan, selectFirstExercise]);
+
+  const activatePlan = useCallback(async (programId: string) => {
+    const uid = userRef.current;
+    if (!uid) return;
+    await activateProgram(uid, programId);
+    await reloadPlan();
+    selectFirstExercise();
+  }, [reloadPlan, selectFirstExercise]);
 
   const startEditEx = useCallback(() =>
     setState(s => ({ ...s, editingEx: true, addingEx: false })), []);
@@ -1075,9 +1189,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, restActive: false, restLeft: REST_DEFAULT, restTotal: REST_DEFAULT }));
   }, []);
 
-  const dismissPrFlash = useCallback(() =>
-    setState(s => ({ ...s, prFlash: null })), []);
-
   const addRecommendedExercise = useCallback(async (exercise: {
     name: string;
     sets: number;
@@ -1151,9 +1262,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setMeal, setMealNote, setWater,
       startAddMeal, startEditMeal, cancelMealForm, setMealDraft, saveMealForm, deleteMeal,
       selectEx, incPeso, decPeso, incReps, decReps, setRpe, guardarSet,
-      finishWorkout,
+      finishWorkout, startFreeSession, discardFreeSession, activatePlan,
       startEditEx, startAddEx, cancelExForm, saveEditEx, saveAddEx, deleteEx,
-      addRest, reduceRest, skipRest, dismissPrFlash,
+      addRest, reduceRest, skipRest,
       addRecommendedExercise,
       setMetric, incWeighIn, decWeighIn, registrarPeso, addProgressPhoto,
     }}>

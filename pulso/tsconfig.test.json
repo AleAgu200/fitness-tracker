@@ -1,0 +1,16 @@
+{
+  // Compiles the pure rule modules and their tests to CommonJS for `node --test`.
+  // Only files reachable from tests/ are built, so they must not import React
+  // Native, Expo or the database.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    // package.json has no "type": "module", so nodenext emits CommonJS.
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "customConditions": null,
+    "outDir": ".test-build",
+    "rootDir": "."
+  },
+  "include": ["tests/**/*.ts"]
+}

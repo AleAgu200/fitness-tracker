@@ -71,6 +71,34 @@ export function inferExerciseMuscles(
   return broadGroup ? FALLBACKS[broadGroup] : [];
 }
 
+/** Coarse equipment buckets for the free-session filter. Cable and machine are
+ *  merged: at the gym they're usually the same station. */
+export type EquipmentKind = 'bodyweight' | 'dumbbell' | 'barbell' | 'machine';
+
+const EQUIPMENT_FROM_COLUMN: Record<string, EquipmentKind | null> = {
+  barbell: 'barbell',
+  dumbbell: 'dumbbell',
+  cable: 'machine',
+  machine: 'machine',
+  bodyweight: 'bodyweight',
+  other: null,
+};
+
+const EQUIPMENT_RULES: { terms: string[]; kind: EquipmentKind }[] = [
+  { terms: ['mancuerna', 'dumbbell'], kind: 'dumbbell' },
+  { terms: ['polea', 'cable', 'máquina', 'maquina', 'machine', 'prensa', 'jalón', 'pec deck', 'smith'], kind: 'machine' },
+  { terms: ['barra', 'barbell', 'press banca', 'sentadilla', 'peso muerto', 'press militar', 'hip thrust'], kind: 'barbell' },
+  { terms: ['dominada', 'fondos', 'plancha', 'flexiones', 'push-up', 'crunch', 'sit-up', 'dead bug', 'mountain', 'elevación de piernas', 'caminata', 'isométrica'], kind: 'bodyweight' },
+];
+
+/** Equipment for an exercise: the catalog column when known, otherwise a
+ *  best-effort guess from its name. Null means "unknown". */
+export function inferEquipment(exerciseName: string, column: string | null): EquipmentKind | null {
+  if (column && column in EQUIPMENT_FROM_COLUMN) return EQUIPMENT_FROM_COLUMN[column];
+  const normalized = exerciseName.trim().toLocaleLowerCase('es');
+  return EQUIPMENT_RULES.find(rule => rule.terms.some(term => normalized.includes(term)))?.kind ?? null;
+}
+
 export function exerciseTargetsMuscle(
   exerciseMuscles: DetailedMuscleKey[],
   selected: string,

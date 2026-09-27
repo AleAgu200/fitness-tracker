@@ -4,11 +4,13 @@ import { useEffect, useState } from 'react';
 import { ScrollView, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CORE_MESSAGES } from '@/components/pulse/labels';
 import { AnimatedBar, Card, GlowPulse, Label, PressableScale } from '@/components/ui/kit';
 import { F, useColors, withAlpha } from '@/constants/colors';
 import { useApp } from '@/context/app-state';
 import { usePreferences } from '@/context/preferences';
 import { useSession } from '@/context/session';
+import { usePulse } from '@/hooks/use-pulse';
 import { displayWeight } from '@/lib/units';
 
 type PulseTab = 'core' | 'cards' | 'week' | 'team';
@@ -30,12 +32,8 @@ export default function PulsoScreen() {
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<PulseTab>('core');
   const [shareWithTeam, setShareWithTeam] = useState(false);
-
-  // Belt-and-suspenders: the tab bar already hides this route (see (tabs)/_layout.tsx),
-  // but block direct navigation too (deep link, dev menu, etc).
-  if (!loading && !isSuperAdmin) {
-    return <Redirect href={'/(tabs)/hoy' as any} />;
-  }
+  // Same rules as the Núcleo on Hoy — one definition of state and momentum.
+  const { core } = usePulse();
 
   useEffect(() => {
     SecureStore.getItemAsync(TEAM_SHARE_KEY)
@@ -43,25 +41,16 @@ export default function PulsoScreen() {
       .catch(() => {});
   }, []);
 
-  const totalTargets = state.exercises.reduce((total, exercise) => total + exercise.target, 0);
+  // Belt-and-suspenders: the tab bar already hides this route (see (tabs)/_layout.tsx),
+  // but block direct navigation too (deep link, dev menu, etc).
+  if (!loading && !isSuperAdmin) {
+    return <Redirect href={'/(tabs)/hoy' as any} />;
+  }
+
   const completedSets = Object.values(state.log).reduce((total, sets) => total + sets.length, 0);
-  const workoutPct = state.sessionDone ? 100 : totalTargets
-    ? Math.min(100, Math.round(completedSets / totalTargets * 100))
-    : 0;
-  const mealsDone = state.meals.filter(meal =>
-    ['cumplido', 'sustituido'].includes(state.mealStatus[meal.id] ?? '')).length;
-  const nutritionPct = state.meals.length ? Math.round(mealsDone / state.meals.length * 100) : 0;
-  const hydrationPct = Math.min(100, state.water * 10);
-  const momentum = Math.round(
-    workoutPct * 0.45 +
-    nutritionPct * 0.2 +
-    hydrationPct * 0.15 +
-    Math.min(100, state.racha * 10) * 0.2,
-  );
-  const coreState = momentum >= 80 ? 'CARGADO'
-    : momentum >= 55 ? 'ACTIVO'
-      : momentum >= 25 ? 'REACTIVANDO'
-        : 'LATENTE';
+  const momentum = core.momentum;
+  const coreState = core.state;
+  const componentValue = (key: string) => core.components.find(component => component.key === key)?.value ?? 0;
 
   const earnedCards = Object.entries(state.earned)
     .sort((a, b) => b[1] - a[1])
@@ -143,19 +132,15 @@ export default function PulsoScreen() {
                   </View>
                 </View>
                 <Text style={{ fontFamily: F.inter, fontSize: 12, lineHeight: 18, color: C.textSecondary, textAlign: 'center', marginTop: 20 }}>
-                  {coreState === 'CARGADO'
-                    ? 'Tu sistema está respondiendo con fuerza y consistencia.'
-                    : coreState === 'ACTIVO'
-                      ? 'Tu pulso está estable. Una acción más fortalece el día.'
-                      : 'No necesitás recuperar todo hoy. Reactivá el sistema con algo pequeño.'}
+                  {CORE_MESSAGES[coreState]}
                 </Text>
               </View>
             </GlowPulse>
             {[
-              { label: 'ENTRENO', value: workoutPct, color: accent },
-              { label: 'NUTRICIÓN', value: nutritionPct, color: C.cyan },
-              { label: 'HIDRATACIÓN', value: hydrationPct, color: C.orange },
-              { label: 'CONTINUIDAD', value: Math.min(100, state.racha * 10), color: C.red },
+              { label: 'SESIONES 7D', value: componentValue('sessions'), color: accent },
+              { label: 'NUTRICIÓN', value: componentValue('nutrition'), color: C.cyan },
+              { label: 'HIDRATACIÓN', value: componentValue('hydration'), color: C.orange },
+              { label: 'CONTINUIDAD', value: componentValue('continuity'), color: C.red },
             ].map(signal => (
               <Card key={signal.label} style={{ padding: 12, marginBottom: 7 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>

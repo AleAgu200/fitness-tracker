@@ -99,7 +99,8 @@
         {
           "androidAppId": "ca-app-pub-8542922303101158~6914743738"
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,

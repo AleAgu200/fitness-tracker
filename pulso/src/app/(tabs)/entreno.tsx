@@ -1,15 +1,16 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, Alert, ScrollView, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EntrenoAdGate } from '@/components/entreno-ad-gate';
 import { ExerciseAnimationModal } from '@/components/exercise-animation-modal';
 import { ExercisePlanForm, ExercisePlanValues, ExistingPlanExercise } from '@/components/exercise-plan-form';
-import { AnimatedBar, Card, GlowPulse, Label, PressableScale } from '@/components/ui/kit';
+import { PreviousPulse } from '@/components/pulse/previous-pulse';
+import { AnimatedBar, Card, GlowPulse, Label, PressableScale, SMALL_TARGET_HIT_SLOP } from '@/components/ui/kit';
 import { F, useColors, withAlpha } from '@/constants/colors';
-import { useApp } from '@/context/app-state';
+import { SetFeedback, useApp } from '@/context/app-state';
 import { usePreferences } from '@/context/preferences';
 import { useSession } from '@/context/session';
 import {
@@ -20,6 +21,7 @@ import {
   PlanExercise,
   updatePlanExercise,
 } from '@/db/plan';
+import { useNow } from '@/hooks/use-pulse';
 import { WEEKDAY_DISPLAY_ORDER, WEEKDAY_LABELS, WEEKDAY_SHORT_LABELS, weekdayOf } from '@/lib/dates';
 import {
   cancelRestTimerNotification,
@@ -31,6 +33,17 @@ import { displayWeight, formatWeight } from '@/lib/units';
 import { syncWorkoutWidgets } from '@/lib/widget-bridge';
 
 const RPE_VALUES = [6, 7, 8, 9, 10];
+
+/** Closing is the moment of payoff: land on the result, never back on the logger. */
+function openSessionResult(sessionId: string | null) {
+  if (sessionId) router.push({ pathname: '/resultado-sesion', params: { sessionId } });
+}
+
+function feedbackText(feedback: SetFeedback, weightUnit: 'kg' | 'lb'): string {
+  if (feedback.kind === 'record') return `⚡ NUEVO RÉCORD · ${formatWeight(feedback.weightKg, weightUnit).toUpperCase()}`;
+  if (feedback.kind === 'beat') return `✓ SERIE ${feedback.setNumber} · SUPERASTE TU PULSO ANTERIOR`;
+  return `✓ SERIE ${feedback.setNumber} GUARDADA`;
+}
 
 function Stepper({ label, value, onInc, onDec }: { label: string; value: string | number; onInc: () => void; onDec: () => void }) {
   const C = useColors();
@@ -254,16 +267,36 @@ function OtherDayPlanEditor({ weekday, onChanged }: { weekday: number; onChanged
 export default function EntrenoScreen() {
   const {
     state, selectEx, incPeso, decPeso, incReps, decReps, setRpe, guardarSet,
-    finishWorkout,
+    finishWorkout, discardFreeSession,
     startEditEx, startAddEx, cancelExForm, saveEditEx, saveAddEx, deleteEx,
-    addRest, reduceRest, skipRest, dismissPrFlash, addRecommendedExercise,
+    addRest, reduceRest, skipRest, addRecommendedExercise,
   } = useApp();
   const { accent, weightUnit } = usePreferences();
   const { userId } = useSession();
   const C = useColors();
   const insets = useSafeAreaInsets();
-  const { exercises, exIndex, log, curPeso, curReps, curRpe, restActive, restLeft, restTotal, prFlash, prMap, editingEx, addingEx, sessionDone, assignedWorkoutBy, scheduledWorkout } = state;
-  const isAssigned = assignedWorkoutBy != null;
+  const { exercises, exIndex, log, curPeso, curReps, curRpe, restActive, restLeft, restTotal, setFeedback, prMap, editingEx, addingEx, sessionDone, assignedWorkoutBy, scheduledWorkout, activePlan, freeSession } = state;
+  // Attribution only while the coach's plan is the one in force (see Mis planes).
+  const isAssigned = activePlan?.origin === 'coach' && freeSession == null;
+  const coachName = assignedWorkoutBy ?? 'tu coach';
+  const [finishing, setFinishing] = useState(false);
+
+  const now = useNow();
+
+  const finishAndReveal = useCallback(async () => {
+    if (finishing) return;
+    setFinishing(true);
+    try {
+      openSessionResult(await finishWorkout());
+    } finally {
+      setFinishing(false);
+    }
+  }, [finishWorkout, finishing]);
+
+  useEffect(() => {
+    if (setFeedback) AccessibilityInfo.announceForAccessibility(feedbackText(setFeedback, weightUnit));
+  }, [setFeedback, weightUnit]);
+
   const todayWeekday = weekdayOf(new Date());
   // Day tabs are local to this screen: only today's plan feeds the shared
   // AppState (used by Hoy/Pulso), so browsing another day here can't leak into
@@ -290,7 +323,7 @@ export default function EntrenoScreen() {
     } else if (params.action === 'reduce-rest') {
       reduceRest();
     } else if (params.action === 'finish') {
-      finishWorkout();
+      finishWorkout().then(openSessionResult).catch(e => console.error('[widget-finish]', e));
     }
     router.setParams({ action: undefined, slotId: undefined });
   }, [state.ready, params.action, params.slotId, guardarSet, finishWorkout, skipRest, addRest, reduceRest]);
@@ -334,6 +367,11 @@ export default function EntrenoScreen() {
   }, [activeEx?.nombre, restActive, restLeft, restTotal]);
 
   const totalSets = Object.values(log).reduce((a, sets) => a + sets.length, 0);
+  const todaysSessionId = sessionDone
+    ? state.trainingSessions.find(session =>
+      session.status === 'completed' && session.finishedAt != null
+      && new Date(session.finishedAt).toDateString() === new Date().toDateString())?.id ?? null
+    : null;
 
   useEffect(() => {
     // "Started" (vs the widget's "begin your training" CTA) means at least one set has
@@ -382,16 +420,19 @@ export default function EntrenoScreen() {
   const restMMSS = `${restMins}:${restSecs.toString().padStart(2, '0')}`;
 
   const hasPlan = exercises.length > 0;
-  const currentE1rm = curPeso * (1 + curReps / 30);
-  const previousBeat = previousSession
-    ? currentE1rm > previousSession.bestE1rm
-      ? 'SUPERÁS TU PULSO ANTERIOR'
-      : Math.abs(currentE1rm - previousSession.bestE1rm) < 0.05 && curRpe < previousSession.bestSet.rpe
-        ? 'MISMO RENDIMIENTO · MENOR ESFUERZO'
-        : currentE1rm >= previousSession.bestE1rm * 0.97
-          ? 'ESTÁS A UN PULSO DE IGUALARLO'
-          : 'HOY PODÉS CONSOLIDAR'
-    : null;
+  const totalTarget = exercises.reduce((total, exercise) => total + exercise.target, 0);
+  const canSwitchSession = totalSets === 0 && !sessionDone;
+
+  function confirmDiscardFreeSession() {
+    Alert.alert(
+      'Volver al plan',
+      'La sesión libre se descarta y Entreno vuelve a mostrar tu plan de hoy.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Volver al plan', onPress: () => { discardFreeSession().catch(e => console.error('[free-session-discard]', e)); } },
+      ],
+    );
+  }
 
   return (
     <>
@@ -402,39 +443,36 @@ export default function EntrenoScreen() {
     >
       <View style={{ paddingTop: insets.top + 16, paddingHorizontal: 16 }}>
 
-        {/* PR FLASH — pulsing red light */}
-        {prFlash && (
-          <Animated.View entering={FadeInDown.duration(260).easing(Easing.out(Easing.cubic))} exiting={FadeOutUp.duration(250)}>
-            <GlowPulse color={C.red} intensity={0.22} period={650} style={{ marginBottom: 14 }}>
-              <PressableScale onPress={dismissPrFlash} haptic="none" style={{ borderWidth: 1, borderColor: C.red, backgroundColor: 'rgba(255,61,90,0.1)', padding: 14 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <Text style={{ fontSize: 22, color: C.red }}>⚡</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontFamily: F.monoXBold, fontSize: 13, letterSpacing: 1.4, color: C.red, textTransform: 'uppercase' }}>¡NUEVO RÉCORD!</Text>
-                    <Text style={{ fontFamily: F.interSemi, fontSize: 15, color: C.textPrimary, marginTop: 3 }}>
-                      {prFlash.ej} — {prFlash.val}
-                    </Text>
-                  </View>
-                </View>
-              </PressableScale>
-            </GlowPulse>
-          </Animated.View>
-        )}
-
         {/* Header */}
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-          <View>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+          <View style={{ flex: 1 }}>
             <Label style={{ marginBottom: 6 }}>
-              {isAssigned ? `PLAN DE ${assignedWorkoutBy?.toUpperCase()}` : `${WEEKDAY_LABELS[selectedWeekday]}${isToday ? ' · HOY' : ''}`}
+              {freeSession && isToday
+                ? 'SESIÓN LIBRE · HOY'
+                : isAssigned ? `PLAN DE ${coachName.toUpperCase()}` : `${WEEKDAY_LABELS[selectedWeekday]}${isToday ? ' · HOY' : ''}`}
             </Label>
-            <Text style={{ fontFamily: F.grotesk, fontSize: 27, color: C.textPrimary }}>Entreno</Text>
+            <Text accessibilityRole="header" style={{ fontFamily: F.grotesk, fontSize: 27, color: C.textPrimary }}>Entreno</Text>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
-            <Text style={{ fontFamily: F.monoXBold, fontSize: 20, color: accent, fontVariant: ['tabular-nums'] as any }}>
+            <Text style={{ fontFamily: F.monoXBold, fontSize: 20, color: C.textPrimary, fontVariant: ['tabular-nums'] as any }}>
               {displayWeight(totalTonelaje, weightUnit).toLocaleString()}
             </Text>
             <Label style={{ marginTop: 4 }}>TONELAJE {weightUnit}</Label>
           </View>
+        </View>
+
+        {/* Plan + free-session entry points */}
+        <View style={{ flexDirection: 'row', gap: 18, marginBottom: 14 }}>
+          <PressableScale onPress={() => router.push('/mis-planes')} hitSlop={SMALL_TARGET_HIT_SLOP}>
+            <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 1, color: C.textSecondary }}>
+              {`◆ ${(activePlan?.name ?? 'MIS PLANES').toUpperCase()} →`}
+            </Text>
+          </PressableScale>
+          {isToday && canSwitchSession && !freeSession && hasPlan && (
+            <PressableScale onPress={() => router.push('/sesion-libre')} hitSlop={SMALL_TARGET_HIT_SLOP}>
+              <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 1, color: C.textSecondary }}>SESIÓN LIBRE →</Text>
+            </PressableScale>
+          )}
         </View>
 
         {/* DAY TABS — one plan per day of the week */}
@@ -469,12 +507,42 @@ export default function EntrenoScreen() {
 
         {isToday ? (
         <>
+        {/* SESSION PROGRESS — exercise position and sets done */}
+        {hasPlan && (
+          <View
+            accessible
+            accessibilityLabel={`Ejercicio ${exIndex + 1} de ${exercises.length}. ${totalSets} de ${totalTarget} series.`}
+            style={{ marginBottom: 14 }}
+          >
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+              <Label>{`EJERCICIO ${String(exIndex + 1).padStart(2, '0')} / ${String(exercises.length).padStart(2, '0')}`}</Label>
+              <Label>{`${totalSets}/${totalTarget} SERIES`}</Label>
+            </View>
+            <AnimatedBar fill={totalTarget ? totalSets / totalTarget : 0} color={C.cyan} height={4} />
+          </View>
+        )}
+
+        {/* FREE SESSION BANNER */}
+        {freeSession && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: C.border, padding: 12, marginBottom: 12 }}>
+            <View style={{ flex: 1 }}>
+              <Label style={{ color: C.cyan }}>SESIÓN LIBRE</Label>
+              <Text style={{ fontFamily: F.interSemi, fontSize: 13, color: C.textPrimary, marginTop: 3 }}>{freeSession.label}</Text>
+            </View>
+            {canSwitchSession && (
+              <PressableScale onPress={confirmDiscardFreeSession} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 12, borderWidth: 1, borderColor: C.border }}>
+                <Text style={{ fontFamily: F.monoBold, fontSize: 10, color: C.textSecondary }}>VOLVER AL PLAN</Text>
+              </PressableScale>
+            )}
+          </View>
+        )}
+
         {/* ASSIGNED PLAN BANNER */}
         {isAssigned && (
           <Animated.View entering={FadeInDown.duration(280)} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: C.cyan, backgroundColor: 'rgba(61,220,255,0.06)', padding: 12, marginBottom: 12 }}>
             <Text style={{ fontFamily: F.mono, fontSize: 13, color: C.cyan }}>◆</Text>
             <Text style={{ flex: 1, fontFamily: F.inter, fontSize: 12, color: C.textSecondary, lineHeight: 17 }}>
-              Plan asignado por <Text style={{ color: C.cyan, fontFamily: F.interSemi }}>{assignedWorkoutBy}</Text>. Podés ajustarlo; desde el portal solo tu entrenador puede cambiar el entrenamiento.
+              Plan asignado por <Text style={{ color: C.cyan, fontFamily: F.interSemi }}>{coachName}</Text>. Podés ajustarlo; desde el portal solo tu entrenador puede cambiar el entrenamiento.
             </Text>
           </Animated.View>
         )}
@@ -502,6 +570,14 @@ export default function EntrenoScreen() {
             <Text style={{ fontFamily: F.inter, fontSize: 12, color: C.textSecondary, marginTop: 6 }}>
               Podés seguir registrando sets si querés
             </Text>
+            {todaysSessionId && (
+              <PressableScale
+                onPress={() => router.push({ pathname: '/resultado-sesion', params: { sessionId: todaysSessionId } })}
+                style={{ marginTop: 10, minHeight: 44, justifyContent: 'center', paddingHorizontal: 16, borderWidth: 1, borderColor: C.border }}
+              >
+                <Text style={{ fontFamily: F.monoBold, fontSize: 10, letterSpacing: 0.6, color: C.textPrimary }}>VER RESULTADO →</Text>
+              </PressableScale>
+            )}
           </Animated.View>
         )}
 
@@ -542,11 +618,22 @@ export default function EntrenoScreen() {
               No hay ejercicios registrados para este día
             </Text>
             <PressableScale
-              onPress={startAddEx}
-              style={{ borderWidth: 1, borderColor: accent, paddingVertical: 12, paddingHorizontal: 22, alignItems: 'center', alignSelf: 'stretch' }}
+              onPress={() => router.push('/sesion-libre')}
+              haptic="medium"
+              containerStyle={{ alignSelf: 'stretch' }}
+              style={{ backgroundColor: accent, paddingVertical: 13, paddingHorizontal: 22, alignItems: 'center', marginBottom: 8 }}
             >
-              <Text style={{ fontFamily: F.monoBold, fontSize: 11, letterSpacing: 0.6, color: accent, textTransform: 'uppercase' }}>
-                + AGREGAR EJERCICIO
+              <Text style={{ fontFamily: F.monoBold, fontSize: 11, letterSpacing: 0.6, color: C.onAccent, textTransform: 'uppercase' }}>
+                SESIÓN LIBRE · ELEGIR MÚSCULOS
+              </Text>
+            </PressableScale>
+            <PressableScale
+              onPress={startAddEx}
+              containerStyle={{ alignSelf: 'stretch' }}
+              style={{ borderWidth: 1, borderColor: C.border, paddingVertical: 12, paddingHorizontal: 22, alignItems: 'center' }}
+            >
+              <Text style={{ fontFamily: F.monoBold, fontSize: 11, letterSpacing: 0.6, color: C.textPrimary, textTransform: 'uppercase' }}>
+                + AGREGAR EJERCICIO AL PLAN
               </Text>
             </PressableScale>
           </Card>
@@ -580,52 +667,14 @@ export default function EntrenoScreen() {
               </View>
             </View>
 
-            {/* PREVIOUS PULSE */}
-            {previousSession ? (
-              <View style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.bgEl }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 9 }}>
-                  <Label style={{ color: C.cyan }}>◉ PULSO ANTERIOR</Label>
-                  <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textTertiary }}>
-                    {previousSession.completedAt.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' }).toUpperCase()}
-                  </Text>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-                  <Text style={{ fontFamily: F.monoXBold, fontSize: 22, color: C.textPrimary }}>
-                    {displayWeight(previousSession.bestSet.peso, weightUnit)} {weightUnit.toUpperCase()} × {previousSession.bestSet.reps}
-                  </Text>
-                  <Text style={{ fontFamily: F.mono, fontSize: 10, color: C.textTertiary }}>
-                    RPE {previousSession.bestSet.rpe}
-                  </Text>
-                </View>
-                <View style={{ flexDirection: 'row', gap: 5, marginTop: 9 }}>
-                  {previousSession.sets.map((set, index) => (
-                    <View
-                      key={`${set.peso}-${set.reps}-${index}`}
-                      style={{ flex: 1, borderWidth: 1, borderColor: C.border, paddingVertical: 6, alignItems: 'center' }}
-                    >
-                      <Text style={{ fontFamily: F.mono, fontSize: 8, color: C.textSecondary }}>
-                        {displayWeight(set.peso, weightUnit)}×{set.reps}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-                <Text style={{
-                  fontFamily: F.monoBold,
-                  fontSize: 9,
-                  letterSpacing: 0.6,
-                  color: currentE1rm > previousSession.bestE1rm ? accent : C.cyan,
-                  marginTop: 10,
-                }}>
-                  {previousBeat}
-                </Text>
-              </View>
-            ) : (
-              <View style={{ padding: 11, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.bgEl }}>
-                <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textTertiary }}>
-                  ◉ PRIMER PULSO · ESTA SESIÓN CREARÁ TU REFERENCIA
-                </Text>
-              </View>
-            )}
+            {/* PREVIOUS PULSE — context right before the input */}
+            <PreviousPulse
+              previous={previousSession}
+              current={{ weightKg: curPeso, reps: curReps, rpe: curRpe }}
+              now={now}
+              weightUnit={weightUnit}
+              accent={accent}
+            />
 
             {/* STEPPERS */}
             <View style={{ flexDirection: 'row', gap: 1, backgroundColor: C.border }}>
@@ -658,9 +707,17 @@ export default function EntrenoScreen() {
               </View>
             </View>
 
-            <PressableScale onPress={guardarSet} disabled={restActive} haptic="success" style={{ padding: 15, backgroundColor: accent, alignItems: 'center' }}>
+            {/* The screen's only accent CTA. For ≤ 1.5 s after a save it carries
+                the confirmation instead of shifting the layout. */}
+            <PressableScale
+              onPress={() => guardarSet()}
+              disabled={restActive}
+              haptic="success"
+              accessibilityLabel={restActive ? 'Guardar serie, disponible al terminar el descanso' : 'Guardar serie'}
+              style={{ minHeight: 48, padding: 15, backgroundColor: setFeedback?.kind === 'record' ? C.red : accent, alignItems: 'center', justifyContent: 'center' }}
+            >
               <Text style={{ fontFamily: F.monoXBold, fontSize: 12, letterSpacing: 0.8, color: C.onAccent, textTransform: 'uppercase' }}>
-                {restActive ? 'SALTÁ EL DESCANSO PARA GUARDAR' : '✓ GUARDAR SET'}
+                {setFeedback ? feedbackText(setFeedback, weightUnit) : restActive ? 'SALTÁ EL DESCANSO PARA GUARDAR' : '✓ GUARDAR SET'}
               </Text>
             </PressableScale>
 
@@ -778,12 +835,13 @@ export default function EntrenoScreen() {
             {totalSets > 0 && !sessionDone && (
               <Animated.View entering={FadeInDown.duration(300)}>
                 <PressableScale
-                  onPress={finishWorkout}
+                  onPress={() => void finishAndReveal()}
+                  disabled={finishing}
                   haptic="success"
-                  style={{ marginTop: 14, padding: 15, borderWidth: 1, borderColor: accent, alignItems: 'center' }}
+                  style={{ marginTop: 14, padding: 15, borderWidth: 1, borderColor: C.textSecondary, alignItems: 'center' }}
                 >
-                  <Text style={{ fontFamily: F.monoXBold, fontSize: 12, letterSpacing: 0.8, color: accent, textTransform: 'uppercase' }}>
-                    ■ FINALIZAR SESIÓN
+                  <Text style={{ fontFamily: F.monoXBold, fontSize: 12, letterSpacing: 0.8, color: C.textPrimary, textTransform: 'uppercase' }}>
+                    {finishing ? 'CERRANDO…' : `■ TERMINAR SESIÓN${totalTarget > totalSets ? ` · ${totalTarget - totalSets} SERIES SIN HACER` : ''}`}
                   </Text>
                 </PressableScale>
               </Animated.View>
