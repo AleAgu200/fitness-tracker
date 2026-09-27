@@ -19,6 +19,7 @@ interface Overview {
   progress: ProgressData;
   sharedCards: SharedCard[];
   planSelection: { coachPlanSelected: boolean; selectedAt: number } | null;
+  mealPlanSelection?: { nutritionistPlanSelected: boolean; selectedAt: number } | null;
   plans: { workout: Plan | null; mealPlan: Plan | null };
   checkins: Checkin[];
   signals: Signal[];
@@ -269,7 +270,9 @@ export default function AthleteRecordPage({ params }: { params: Promise<{ athlet
           }}
           sharedCards={overview.sharedCards ?? []}
           planSelection={overview.planSelection ?? null}
+          mealPlanSelection={overview.mealPlanSelection ?? null}
           isCoach={overview.organizations.some(organization => organization.discipline === "coach")}
+          isNutritionist={overview.organizations.some(organization => organization.discipline === "nutritionist")}
           period={period}
           onPeriodChange={setPeriod}
           loading={refreshing}

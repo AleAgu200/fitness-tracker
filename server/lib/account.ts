@@ -8,6 +8,7 @@ import {
   assignedMealPlans,
   assignedWorkouts,
   athleteDailySummaries,
+  athleteMealPlanSelections,
   athletePlanSelections,
   athleteProfiles,
   attentionSignals,
@@ -229,7 +230,7 @@ async function purgeAccount(deletionId: string, now: number): Promise<boolean> {
 
     // The rest cascades from the user row: auth sessions and credentials,
     // profile, messages, push devices, AI generation jobs, subscription,
-    // shared cards and plan selection. Billing events keep the store receipt
+    // shared cards and plan selections. Billing events keep the store receipt
     // with the user reference nulled (they carry no health data).
     await tx.delete(user).where(eq(user.id, userId));
 
@@ -276,7 +277,7 @@ export async function exportAccountData(userId: string) {
 
   const [
     profile, measurements, sessions, sets, nutrition, summaries, consents, care, checkins, notes,
-    workouts, mealPlans, conversation, subscription, cards, planSelection,
+    workouts, mealPlans, conversation, subscription, cards, planSelection, mealPlanSelection,
   ] = await Promise.all([
     db.select().from(athleteProfiles).where(eq(athleteProfiles.userId, userId)),
     db.select().from(bodyMeasurements).where(eq(bodyMeasurements.athleteId, userId)).orderBy(asc(bodyMeasurements.measuredAt)),
@@ -307,6 +308,7 @@ export async function exportAccountData(userId: string) {
       .from(subscriptions).where(eq(subscriptions.userId, userId)),
     db.select().from(sharedSessionCards).where(eq(sharedSessionCards.athleteId, userId)),
     db.select().from(athletePlanSelections).where(eq(athletePlanSelections.athleteId, userId)),
+    db.select().from(athleteMealPlanSelections).where(eq(athleteMealPlanSelections.athleteId, userId)),
   ]);
 
   const organizationNames = new Map(clients.map(client => [client.organizationId, client.organizationName]));
@@ -333,5 +335,6 @@ export async function exportAccountData(userId: string) {
     subscription: subscription[0] ?? null,
     sharedCards: cards,
     planSelection: planSelection[0] ?? null,
+    mealPlanSelection: mealPlanSelection[0] ?? null,
   };
 }

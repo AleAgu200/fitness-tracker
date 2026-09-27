@@ -13,6 +13,11 @@ export const programs = sqliteTable('programs', {
   // plan intact while the athlete temporarily trains on another one.
   origin:    text('origin', { enum: ['own', 'coach', 'ai'] }).notNull().default('own'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  // Without Plus only the most recently activated own plan stays usable; the
+  // rest are read-only (see lib/plan-limits).
+  lastActivatedAt: integer('last_activated_at', { mode: 'timestamp_ms' }),
+  // Deleting a plan archives it: logged sessions keep pointing at its templates.
+  archivedAt: integer('archived_at', { mode: 'timestamp_ms' }),
 });
 
 export const programPhases = sqliteTable('program_phases', {

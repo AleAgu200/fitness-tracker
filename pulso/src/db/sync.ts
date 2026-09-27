@@ -20,7 +20,8 @@ export type SyncEntityType =
   | 'body_measurement'
   | 'checkin_response'
   | 'session_card'
-  | 'plan_selection';
+  | 'plan_selection'
+  | 'meal_plan_selection';
 export type SyncOperation = 'create' | 'update' | 'delete';
 export type SharingCategory = 'training' | 'nutrition' | 'metrics' | 'checkins' | 'photos';
 

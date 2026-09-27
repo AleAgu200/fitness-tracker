@@ -39,6 +39,18 @@ export const athletePlanSelections = pgTable("athlete_plan_selections", {
 });
 
 /**
+ * The nutrition counterpart: whether the nutritionist's meal plan is the one
+ * the athlete follows. Arrives only with the nutrition consent and says
+ * nothing about the athlete's other meal plans.
+ */
+export const athleteMealPlanSelections = pgTable("athlete_meal_plan_selections", {
+  athleteId: text("athleteId").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+  nutritionistPlanSelected: boolean("nutritionistPlanSelected").notNull(),
+  selectedAt: milliseconds("selectedAt").notNull(),
+  updatedAt: milliseconds("updatedAt").notNull(),
+});
+
+/**
  * Account deletion lifecycle. Requested → (30-day grace, cancellable by the
  * athlete) → purged. No foreign key to `user` on purpose: the row outlives the
  * account as the proof that it was purged, with `userId` cleared and only a

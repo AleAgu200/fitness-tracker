@@ -84,6 +84,17 @@ La opción 1 es el MVP; la 2 se apoya en `effectiveAt`/`endsAt`, que ya existen 
 
 Tabla local nueva `saved_plans` (id, athleteId, name, payloadJson, source, savedAt, lastUsedAt), donde `source` distingue si vino de un profesional, de la IA o de edición propia. El servidor sólo necesita saber cuál está activo, para que el portal muestre la verdad.
 
+### Decisiones resueltas — 2026-09-27
+
+Se implementó sobre las tablas existentes (`programs` y `meal_plans`, con `origin`, `lastActivatedAt` y `archivedAt`; migración local 0012) en vez de un `saved_plans` con payload JSON, para que editar un plan siga usando el mismo editor.
+
+- **Límite sin Plus:** un plan propio por disciplina. Los del coach, la nutricionista y PULSO IA no cuentan. Con Plus, planes propios ilimitados.
+- **Plus vencido:** sigue utilizable el plan propio activado más recientemente; los demás quedan en solo lectura (se ven, se pueden borrar, no se activan ni renombran). Nunca se borra nada.
+- **Crear:** en blanco o copiando cualquier plan (incluido el del profesional). El nuevo pasa a ser el activo.
+- **Renombrar y borrar:** sólo planes propios y no activos para borrar. Borrar archiva: el historial registrado conserva sus referencias.
+- **Dieta:** mismo modelo. El plan de la nutricionista vive en su propio plan; el primero se activa solo y las versiones siguientes lo actualizan sin cambiar el activo. Mis planes tiene pestañas ENTRENO | DIETA.
+- **Portal:** `meal_plan_selection` (consentimiento de nutrición) le muestra a la nutricionista si su plan es el activo, igual que `plan_selection` al coach.
+
 ---
 
 ## 3. Exportación de datos — siempre gratis

@@ -14,7 +14,13 @@ export const mealPlans = sqliteTable('meal_plans', {
   targetFatG:     integer('target_fat_g').notNull(),
   phaseId:        text('phase_id').references(() => programPhases.id, { onDelete: 'set null' }),
   active:         integer('active', { mode: 'boolean' }).notNull().default(true),
+  // Same library model as programs: the nutritionist's plan lives apart from
+  // the athlete's own ones, and one plan is active at a time.
+  origin:         text('origin', { enum: ['own', 'nutritionist', 'ai'] }).notNull().default('own'),
   createdAt:      integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  lastActivatedAt: integer('last_activated_at', { mode: 'timestamp_ms' }),
+  // Deleting a plan archives it: logged meals keep pointing at its slots.
+  archivedAt:     integer('archived_at', { mode: 'timestamp_ms' }),
 });
 
 export const mealSlots = sqliteTable('meal_slots', {
