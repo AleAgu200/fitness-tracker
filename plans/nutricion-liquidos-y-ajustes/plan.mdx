@@ -1,0 +1,34 @@
+---
+title: "PULSO — Nutrición 3/3: líquidos y ajustes"
+brief: "Prototipo de revisión: recipientes personales, bebidas con nutrientes, confirmar comida y ajustar cantidades o componentes."
+kind: "plan"
+status: "draft"
+localOnly: true
+---
+
+# Líquidos con recipientes propios y comidas ajustables
+
+Llenas tu botella de 500 ml y la registras con un toque desde Hoy. A media tarde tomas un vaso de leche: suma mililitros y nutrientes en una sola entrada. En el almuerzo comiste menos arroz del planificado y ajustas la cantidad sin duplicar la comida.
+
+Este es el tercero de tres prototipos del diseño de Nutrición de PULSO. Las decisiones, el canvas de 12 pantallas y los criterios de aceptación están en el plan principal, `plans/nutricion-registro-y-liquidos`.
+
+<Callout id="prototype-scope" tone="decision">
+
+**Solo navegación con datos ficticios.** Los botones cambian de pantalla y volver a Hoy reinicia el ejemplo; no se guardan bebidas ni comidas. Los botones punteados con **↗ 1** o **↗ 2** continúan en el prototipo 1 (escanear y registrar) o 2 (comparar y planificar). La meta de 2,5 L solo demuestra la interfaz; no es una prescripción.
+
+</Callout>
+
+## Cómo revisarlo
+
+1. **Hoy → Botella, Vaso o Café.** Observa el cambio de volumen y la opción Deshacer.
+2. **Hoy → Otra bebida.** Registra la leche: una entrada suma volumen y nutrientes.
+3. **Hoy → Editar líquidos.** Revisa los recipientes y la edición de capacidad y bebida habitual.
+4. **Hoy → Confirmar comida.** Comprueba el estado confirmado del almuerzo.
+5. **Hoy → Ajustar.** Cambia la cantidad y prueba sustituir un elemento del almuerzo.
+
+## Qué confirmar
+
+- Un toque registra la combinación del recipiente y siempre ofrece deshacer.
+- El indicador separa volumen total de agua sola y permite seguir tras la meta.
+- Una bebida con nutrientes no se cuenta dos veces.
+- Ajustar o reabrir una comida modifica su registro, no crea un duplicado.

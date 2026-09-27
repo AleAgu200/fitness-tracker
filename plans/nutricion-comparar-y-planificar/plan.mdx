@@ -1,0 +1,34 @@
+---
+title: "PULSO — Nutrición 2/3: comparar y planificar"
+brief: "Prototipo de revisión: comparar productos, simular el impacto, añadir a fechas o a la semana habitual y guardar en Mis alimentos."
+kind: "plan"
+status: "draft"
+localOnly: true
+---
+
+# Comparar y planificar sin registrar consumo
+
+Tienes un yogur revisado en pantalla. Antes de comerlo quieres saber si conviene frente a otro, cómo encaja en el día y, si te gusta, dejarlo planificado para el lunes o guardarlo para otra compra. Ninguna de esas acciones registra consumo.
+
+Este es el segundo de tres prototipos del diseño de Nutrición de PULSO. Las decisiones, el canvas de 12 pantallas y los criterios de aceptación están en el plan principal, `plans/nutricion-registro-y-liquidos`.
+
+<Callout id="prototype-scope" tone="decision">
+
+**Solo navegación con datos ficticios.** Los botones cambian de pantalla; no se guardan alimentos, fechas ni repeticiones. Los botones punteados con **↗ 1** o **↗ 3** continúan en el prototipo 1 (escanear y registrar) o 3 (líquidos y ajustes). Los productos y cantidades no son recomendaciones nutricionales.
+
+</Callout>
+
+## Cómo revisarlo
+
+1. **Revisar producto → Comparar.** Mira la comparación por 100 g y cambia a las porciones elegidas.
+2. **Revisar producto → Ver cómo encaja.** Comprueba que la simulación indica fecha y base de cálculo, y que no modifica el registro.
+3. **Añadir al plan.** Elige lunes, martes o miércoles; luego prueba la repetición semanal.
+4. **Guardar para después → Mis alimentos.** Confirma que guardar no toca calorías, líquidos ni plan.
+5. **Plan.** Revisa la vista por fechas y abre un día planificado.
+
+## Qué confirmar
+
+- La comparación siempre usa bases compatibles y no inventa una puntuación de salud.
+- La simulación distingue consumo real de planificación y solo guarda al confirmar el destino.
+- Repetir cada semana es explícito; una fecha puntual no altera la semana habitual.
+- Mis alimentos se entiende como biblioteca, no como registro.
