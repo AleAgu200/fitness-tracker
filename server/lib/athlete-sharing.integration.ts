@@ -78,6 +78,31 @@ test("the coach sees only whether their plan is selected, and the latest switch 
   assert.deepEqual(overview?.planSelection, { coachPlanSelected: false, selectedAt: now });
 });
 
+test("the nutritionist sees only whether their meal plan is selected, gated by the nutrition consent", async () => {
+  const { athleteId, coachId: nutritionistId, organizationId } = await seedCoachedAthlete({ discipline: "nutritionist", categories: ["nutrition"] });
+  const now = Date.now();
+
+  await push(athleteId, mutation(athleteId, { entityType: "meal_plan_selection", entityId: athleteId, operation: "update", payload: { nutritionistPlanSelected: false, selectedAt: now } }));
+  await push(athleteId, mutation(athleteId, { entityType: "meal_plan_selection", entityId: athleteId, operation: "update", payload: { nutritionistPlanSelected: true, selectedAt: now - 60_000 } }));
+
+  let overview = await getAthleteOverview(nutritionistId, athleteId);
+  assert.deepEqual(overview?.mealPlanSelection, { nutritionistPlanSelected: false, selectedAt: now });
+  assert.equal(overview?.planSelection, null, "a nutritionist never sees the training selection");
+
+  await setAthleteSharingConsent({ athleteUserId: athleteId, organizationId, category: "nutrition", granted: false });
+  overview = await getAthleteOverview(nutritionistId, athleteId);
+  assert.equal(overview?.mealPlanSelection, null, "revoking nutrition hides the selection");
+});
+
+test("an invalid meal plan selection is rejected", async () => {
+  const { athleteId } = await seedCoachedAthlete({ discipline: "nutritionist", categories: ["nutrition"] });
+  const result = await push(athleteId, mutation(athleteId, {
+    entityType: "meal_plan_selection", entityId: athleteId, operation: "update", payload: { coachPlanSelected: true, selectedAt: Date.now() },
+  }));
+  assert.equal(result.status, "rejected");
+  assert.equal(result.error, "invalid_meal_plan_selection");
+});
+
 test("overview ranges report coverage and distinguish empty from unauthorized", async () => {
   const { athleteId, coachId } = await seedCoachedAthlete({ categories: ["training"] });
   const empty = await getAthleteOverview(coachId, athleteId, 7);

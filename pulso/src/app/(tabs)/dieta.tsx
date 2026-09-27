@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeInDown, LinearTransition, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -331,10 +332,11 @@ export default function DietaScreen() {
 
   // Also re-derives when today's own meal count changes, so the dot under
   // today's tab updates without waiting for a manual refresh.
-  useEffect(() => { refreshWeekMealCounts(); }, [refreshWeekMealCounts, state.meals.length]);
+  useEffect(() => { refreshWeekMealCounts(); }, [refreshWeekMealCounts, state.meals.length, state.activeMealPlan?.id]);
 
   const hasPlan = state.meals.length > 0;
-  const isAssigned = state.assignedMealsBy != null;
+  // The banner speaks for the nutritionist's plan only while it's the active one.
+  const isAssigned = state.activeMealPlan?.origin === 'nutritionist' && state.assignedMealsBy != null;
   const formOpen = state.addingMeal || state.editingMealId != null;
 
   const consumed = state.meals.reduce((acc, m) => {
@@ -367,7 +369,16 @@ export default function DietaScreen() {
       keyboardShouldPersistTaps="handled"
     >
       <View style={{ paddingTop: insets.top + 16, paddingHorizontal: 16 }}>
-        <Label style={{ marginBottom: 6 }}>{isAssigned ? `PLAN DE ${state.assignedMealsBy?.toUpperCase()}` : 'PLAN NUTRICIONAL'}</Label>
+        <PressableScale
+          onPress={() => router.push({ pathname: '/mis-planes', params: { tab: 'dieta' } })}
+          accessibilityRole="link"
+          accessibilityLabel={`Plan activo: ${state.activeMealPlan?.name ?? 'plan nutricional'}. Abrir mis planes`}
+          style={{ alignSelf: 'flex-start', minHeight: 24, justifyContent: 'center', marginBottom: 6 }}
+        >
+          <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 1, color: C.textSecondary }}>
+            {`◆ ${(state.activeMealPlan?.name ?? 'MIS PLANES').toUpperCase()} →`}
+          </Text>
+        </PressableScale>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 9, marginBottom: 16 }}>
           <Text style={{ fontFamily: F.grotesk, fontSize: 27, color: C.textPrimary }}>Nutrición</Text>
           {/* Meals differ from one weekday to the next now. Without naming the
@@ -524,7 +535,7 @@ export default function DietaScreen() {
         </Card>
         </>
         ) : (
-          <OtherDayMealEditor weekday={selectedWeekday} onChanged={refreshWeekMealCounts} />
+          <OtherDayMealEditor key={state.activeMealPlan?.id} weekday={selectedWeekday} onChanged={refreshWeekMealCounts} />
         )}
       </View>
     </ScrollView>

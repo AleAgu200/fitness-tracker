@@ -17,6 +17,7 @@ export const syncMutationSchema = z.object({
     "checkin_response",
     "session_card",
     "plan_selection",
+    "meal_plan_selection",
   ]),
   entityId: z.string().min(1).max(128),
   operation: z.enum(["create", "update", "delete"]),

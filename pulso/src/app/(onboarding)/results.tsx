@@ -13,9 +13,8 @@ import {
   completeOnboarding,
   setOnboardingStepIfInProgress,
 } from '@/db/onboarding';
-import { MealDraft, getMealPlan, replaceWeekMealSlots } from '@/db/nutrition';
+import { applyGeneratedMealPlan, MealDraft } from '@/db/nutrition';
 import { applyGeneratedPlan, AssignedExercise } from '@/db/plan';
-import { weekdayOf } from '@/lib/dates';
 
 function catalogKey(source: string, id: string): string {
   return `${source}:${id}`;
@@ -106,8 +105,9 @@ export default function ResultsScreen() {
       // A coach's plan stays available in "Mis planes".
       await applyGeneratedPlan(userId, exercisesByWeekday);
 
-      const { mealPlanId } = await getMealPlan(userId, weekdayOf(new Date()));
-      await replaceWeekMealSlots(mealPlanId, week);
+      // Same for meals: the AI meal plan is its own and becomes the active one;
+      // the athlete's and the nutritionist's plans stay in "Mis planes".
+      await applyGeneratedMealPlan(userId, week);
 
       await reloadAll();
       await clearGenerationProfile(userId);

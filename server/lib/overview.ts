@@ -7,6 +7,7 @@ import {
   assignedMealPlans,
   assignedWorkouts,
   athleteDailySummaries,
+  athleteMealPlanSelections,
   athletePlanSelections,
   athleteProfiles,
   attentionSignals,
@@ -55,7 +56,8 @@ export async function getAthleteOverview(professionalUserId: string, athleteId: 
   const clientIds = [...new Set(contexts.map(context => context.organizationClientId))];
   const organizationIds = [...new Set(contexts.map(context => context.organizationId))];
   const sinceDate = new Date(Date.now() - periodDays * 86_400_000).toISOString().slice(0, 10);
-  const [sharedCards, planSelection] = await Promise.all([
+  const nutritionGranted = permissions.nutrition.status === "granted";
+  const [sharedCards, planSelection, mealPlanSelection] = await Promise.all([
     // Cards are shared deliberately by the athlete; the training consent still
     // gates them at read time, so revoking it hides them immediately.
     trainingGranted
@@ -73,6 +75,11 @@ export async function getAthleteOverview(professionalUserId: string, athleteId: 
     trainingGranted && contexts.some(context => context.discipline === "coach")
       ? db.select({ coachPlanSelected: athletePlanSelections.coachPlanSelected, selectedAt: athletePlanSelections.selectedAt })
           .from(athletePlanSelections).where(eq(athletePlanSelections.athleteId, athleteId))
+      : Promise.resolve([]),
+    // Same for nutrition: only whether the nutritionist's plan is the active one.
+    nutritionGranted && contexts.some(context => context.discipline === "nutritionist")
+      ? db.select({ nutritionistPlanSelected: athleteMealPlanSelections.nutritionistPlanSelected, selectedAt: athleteMealPlanSelections.selectedAt })
+          .from(athleteMealPlanSelections).where(eq(athleteMealPlanSelections.athleteId, athleteId))
       : Promise.resolve([]),
   ]);
   const [athleteRows, profileRows, summaries, team, workoutPlans, mealPlans, checkins, signals, tasks, activity, writer] = await Promise.all([
@@ -212,6 +219,7 @@ export async function getAthleteOverview(professionalUserId: string, athleteId: 
     },
     sharedCards,
     planSelection: planSelection[0] ?? null,
+    mealPlanSelection: mealPlanSelection[0] ?? null,
     plans: { workout: workoutPlans[0] ?? null, mealPlan: mealPlans[0] ?? null },
     checkins,
     signals,

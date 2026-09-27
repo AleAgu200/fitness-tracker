@@ -22,9 +22,12 @@ import {
   ProgressPhoto,
 } from '@/db/measurements';
 import {
+  activateMealPlan as dbActivateMealPlan,
   addMealSlot,
+  createOwnMealPlan,
   deleteMealSlot,
   getMealPlan,
+  MealPlanOrigin,
   getTodayMealEntries,
   getTodayWater,
   MealStatusDb,
@@ -37,6 +40,7 @@ import {
   ActiveProgram,
   activateProgram,
   addPlanExercise,
+  createOwnProgram,
   deletePlanExercise,
   getActiveProgram,
   getWeekSummary,
@@ -177,6 +181,8 @@ export interface AppState {
 
   // plans — the program feeding today's session (see "Mis planes")
   activePlan: ActiveProgram | null;
+  /** The meal plan feeding Dieta and today's meals (see "Mis planes"). */
+  activeMealPlan: { id: string; name: string; origin: MealPlanOrigin } | null;
   /** Days with exercises in the active plan's week. */
   plannedDaysPerWeek: number;
   /** Non-null while today's session was generated from the body map. */
@@ -236,6 +242,7 @@ const initialState: AppState = {
   scheduledWorkout: null,
   scheduledMeals: null,
   activePlan: null,
+  activeMealPlan: null,
   plannedDaysPerWeek: 0,
   freeSession: null,
   racha: 0,
@@ -309,6 +316,13 @@ interface AppContextValue {
   discardFreeSession: () => Promise<void>;
   /** Makes another program the active plan (see "Mis planes"). */
   activatePlan: (programId: string) => Promise<void>;
+  /** Creates an own training plan (empty or a copy) and makes it active. The
+   *  caller checks PULSO Plus with lib/plan-limits. */
+  createTrainingPlan: (options: { name?: string; sourceProgramId?: string | null; entitled: boolean }) => Promise<void>;
+  /** Makes another meal plan the active one (see "Mis planes"). */
+  activateMealPlan: (mealPlanId: string) => Promise<void>;
+  /** Creates an own meal plan (empty or a copy) and makes it active. */
+  createMealPlan: (options: { name?: string; sourceMealPlanId?: string | null; entitled: boolean }) => Promise<void>;
   startEditEx: () => void;
   startAddEx: () => void;
   cancelExForm: () => void;
@@ -409,20 +423,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
 
         const todayWeekday = weekdayOf(new Date());
-        // Meal plan first: an assignment from the nutritionist may replace it.
-        // A coach's workout lands in its own program (see applyCoachWorkout).
-        let mealPlan = await getMealPlan(userId, todayWeekday);
+        // Assignments land in their own plans (applyCoachWorkout,
+        // applyNutritionistMealPlan); the first of each becomes the active one.
         let assignedWorkoutBy: string | null = null;
         let assignedMealsBy: string | null = null;
         let scheduledWorkout: ScheduledPlan | null = null;
         let scheduledMeals: ScheduledPlan | null = null;
         try {
-          const sync = await syncAssignments(userId, mealPlan.mealPlanId);
+          const sync = await syncAssignments(userId);
           assignedWorkoutBy = sync.workoutBy;
           assignedMealsBy = sync.mealsBy;
           scheduledWorkout = sync.scheduledWorkout;
           scheduledMeals = sync.scheduledMeals;
-          if (sync.mealsChanged) mealPlan = await getMealPlan(userId, todayWeekday);
         } catch {
           // Offline — keep last-known assignment authors for attribution banners
           const meta = await getStoredAssignmentMeta(userId);
@@ -430,6 +442,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           assignedMealsBy = meta.mealsBy;
         }
         await syncMobileData(userId);
+        const mealPlan = await getMealPlan(userId, todayWeekday);
 
         // Sequential on purpose: each may create the default program, and two
         // concurrent creations would leave two active plans.
@@ -509,6 +522,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           scheduledWorkout,
           scheduledMeals,
           activePlan,
+          activeMealPlan: mealPlan.plan,
           plannedDaysPerWeek: weekSummary.filter(day => day.exerciseCount > 0).length,
           freeSession: plan.free,
           racha,
@@ -643,7 +657,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // athlete is actually logging.
     const mealPlan = await getMealPlan(uid, weekdayOf(new Date()));
     mealPlanIdRef.current = mealPlan.mealPlanId;
-    setState(s => ({ ...s, meals: mealPlan.meals }));
+    setState(s => ({ ...s, meals: mealPlan.meals, activeMealPlan: mealPlan.plan }));
   }, []);
 
   const reloadProfile = useCallback(async () => {
@@ -1083,6 +1097,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     selectFirstExercise();
   }, [reloadPlan, selectFirstExercise]);
 
+  const createTrainingPlan = useCallback(async (options: { name?: string; sourceProgramId?: string | null; entitled: boolean }) => {
+    const uid = userRef.current;
+    if (!uid) return;
+    await createOwnProgram(uid, options);
+    await reloadPlan();
+    selectFirstExercise();
+  }, [reloadPlan, selectFirstExercise]);
+
+  const activateMealPlan = useCallback(async (mealPlanId: string) => {
+    const uid = userRef.current;
+    if (!uid) return;
+    await dbActivateMealPlan(uid, mealPlanId);
+    await reloadMeals();
+  }, [reloadMeals]);
+
+  const createMealPlan = useCallback(async (options: { name?: string; sourceMealPlanId?: string | null; entitled: boolean }) => {
+    const uid = userRef.current;
+    if (!uid) return;
+    await createOwnMealPlan(uid, options);
+    await reloadMeals();
+  }, [reloadMeals]);
+
   const startEditEx = useCallback(() =>
     setState(s => ({ ...s, editingEx: true, addingEx: false })), []);
 
@@ -1263,6 +1299,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       startAddMeal, startEditMeal, cancelMealForm, setMealDraft, saveMealForm, deleteMeal,
       selectEx, incPeso, decPeso, incReps, decReps, setRpe, guardarSet,
       finishWorkout, startFreeSession, discardFreeSession, activatePlan,
+      createTrainingPlan, activateMealPlan, createMealPlan,
       startEditEx, startAddEx, cancelExForm, saveEditEx, saveAddEx, deleteEx,
       addRest, reduceRest, skipRest,
       addRecommendedExercise,

@@ -1,7 +1,8 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 
 import { nanoid } from '@/lib/id';
 import { todayStr } from '@/lib/dates';
+import { canCreateOwnPlan, copyPlanName, nextPlanName, normalizePlanName, OWN_PLAN_LIMIT_ERROR } from '@/lib/plan-limits';
 import { db } from './index';
 import { enqueueSyncMutation } from './sync';
 import {
@@ -38,28 +39,261 @@ export interface MealDraft {
   g: number;
 }
 
+export type MealPlanOrigin = 'own' | 'nutritionist' | 'ai';
+
+const DEFAULT_MEAL_PLAN_NAMES: Record<MealPlanOrigin, string> = {
+  own: 'Plan personal',
+  nutritionist: 'Plan de tu nutricionista',
+  ai: 'Plan PULSO IA',
+};
+
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** The active meal plan; falls back to the oldest own plan, then creates one. */
 async function getOrCreateMealPlan(athleteId: string): Promise<string> {
   const rows = await db
     .select({ id: mealPlans.id })
     .from(mealPlans)
-    .where(and(eq(mealPlans.athleteId, athleteId), eq(mealPlans.active, true)))
+    .where(and(eq(mealPlans.athleteId, athleteId), eq(mealPlans.active, true), isNull(mealPlans.archivedAt)))
     .limit(1);
   if (rows[0]) return rows[0].id;
 
+  const [own] = await db.select({ id: mealPlans.id }).from(mealPlans)
+    .where(and(eq(mealPlans.athleteId, athleteId), eq(mealPlans.origin, 'own'), isNull(mealPlans.archivedAt)))
+    .orderBy(asc(mealPlans.createdAt))
+    .limit(1);
+  if (own) {
+    await db.update(mealPlans).set({ active: true, lastActivatedAt: new Date() }).where(eq(mealPlans.id, own.id));
+    return own.id;
+  }
   const id = nanoid();
-  await db.insert(mealPlans).values({
+  await db.transaction(async tx => insertMealPlan(tx, athleteId, id, 'own', { active: true }));
+  return id;
+}
+
+async function insertMealPlan(
+  tx: Transaction,
+  athleteId: string,
+  id: string,
+  origin: MealPlanOrigin,
+  options: { active: boolean; name?: string },
+): Promise<void> {
+  const now = new Date();
+  if (options.active) {
+    await tx.update(mealPlans).set({ active: false }).where(eq(mealPlans.athleteId, athleteId));
+  }
+  await tx.insert(mealPlans).values({
     id,
     athleteId,
     coachId: null,
-    name: 'Plan personal',
+    name: options.name ?? DEFAULT_MEAL_PLAN_NAMES[origin],
     targetKcal: 0,
     targetProteinG: 0,
     targetCarbsG: 0,
     targetFatG: 0,
-    active: true,
-    createdAt: new Date(),
+    active: options.active,
+    origin,
+    createdAt: now,
+    lastActivatedAt: options.active ? now : null,
   });
+  if (options.active) await recordMealPlanSelection(tx, athleteId, origin);
+}
+
+/**
+ * Tells the care team whether the nutritionist's plan is the one in force —
+ * never the content of the athlete's other plans. Only once a nutritionist
+ * plan exists, and it leaves the phone only with the nutrition consent.
+ */
+async function recordMealPlanSelection(tx: Transaction, athleteId: string, activeOrigin: MealPlanOrigin): Promise<void> {
+  const [assigned] = await tx.select({ id: mealPlans.id }).from(mealPlans)
+    .where(and(eq(mealPlans.athleteId, athleteId), eq(mealPlans.origin, 'nutritionist'))).limit(1);
+  if (!assigned) return;
+  const now = new Date();
+  await enqueueSyncMutation(tx, {
+    athleteId,
+    entityType: 'meal_plan_selection',
+    entityId: `meal_plan_selection_${athleteId}`,
+    operation: 'update',
+    occurredAt: now,
+    payload: { nutritionistPlanSelected: activeOrigin === 'nutritionist', selectedAt: now.getTime() },
+  });
+}
+
+async function findMealPlan(athleteId: string, origin: MealPlanOrigin) {
+  const [row] = await db.select().from(mealPlans)
+    .where(and(eq(mealPlans.athleteId, athleteId), eq(mealPlans.origin, origin), isNull(mealPlans.archivedAt)))
+    .orderBy(asc(mealPlans.createdAt))
+    .limit(1);
+  return row ?? null;
+}
+
+export interface MealPlanSummary {
+  id: string;
+  name: string;
+  origin: MealPlanOrigin;
+  active: boolean;
+  createdAt: number;
+  lastActivatedAt: number | null;
+  targetKcal: number;
+  /** Meal count per weekday (1 = Sunday .. 7 = Saturday). */
+  dayCounts: Record<number, number>;
+}
+
+/** Every meal plan the athlete keeps on this phone, active first. */
+export async function listMealPlans(athleteId: string): Promise<MealPlanSummary[]> {
+  await getOrCreateMealPlan(athleteId);
+  const rows = await db.select().from(mealPlans)
+    .where(and(eq(mealPlans.athleteId, athleteId), isNull(mealPlans.archivedAt)));
+  const slots = rows.length
+    ? await db.select({ mealPlanId: mealSlots.mealPlanId, weekday: mealSlots.weekday }).from(mealSlots)
+        .where(inArray(mealSlots.mealPlanId, rows.map(row => row.id)))
+    : [];
+  return rows.map(row => {
+    const dayCounts: Record<number, number> = {};
+    for (const slot of slots) {
+      if (slot.mealPlanId === row.id) dayCounts[slot.weekday] = (dayCounts[slot.weekday] ?? 0) + 1;
+    }
+    return {
+      id: row.id,
+      name: row.name,
+      origin: row.origin,
+      active: row.active,
+      createdAt: row.createdAt.getTime(),
+      lastActivatedAt: row.lastActivatedAt?.getTime() ?? null,
+      targetKcal: row.targetKcal,
+      dayCounts,
+    };
+  }).sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name, 'es'));
+}
+
+/** Switches the athlete's meal plan. One active plan at a time, atomically.
+ *  Meals already marked today stay in the log under the plan they belonged to. */
+export async function activateMealPlan(athleteId: string, mealPlanId: string): Promise<void> {
+  await db.transaction(async tx => {
+    const [target] = await tx.select({ id: mealPlans.id, origin: mealPlans.origin }).from(mealPlans)
+      .where(and(eq(mealPlans.id, mealPlanId), eq(mealPlans.athleteId, athleteId), isNull(mealPlans.archivedAt))).limit(1);
+    if (!target) throw new Error('meal_plan_not_found');
+    await tx.update(mealPlans).set({ active: false }).where(eq(mealPlans.athleteId, athleteId));
+    await tx.update(mealPlans).set({ active: true, lastActivatedAt: new Date() }).where(eq(mealPlans.id, mealPlanId));
+    await recordMealPlanSelection(tx, athleteId, target.origin);
+  });
+}
+
+/** Creates another own meal plan — empty or a copy of any plan the athlete
+ *  has — and activates it so it can be built in Dieta. Refuses when the free
+ *  own-plan quota is used and the account has no PULSO Plus. */
+export async function createOwnMealPlan(
+  athleteId: string,
+  options: { name?: string; sourceMealPlanId?: string | null; entitled: boolean },
+): Promise<string> {
+  const taken = (await db.select({ name: mealPlans.name }).from(mealPlans)
+    .where(and(eq(mealPlans.athleteId, athleteId), isNull(mealPlans.archivedAt)))).map(row => row.name);
+  const id = nanoid();
+  await db.transaction(async tx => {
+    const own = await tx.select({ id: mealPlans.id, origin: mealPlans.origin, createdAt: mealPlans.createdAt, lastActivatedAt: mealPlans.lastActivatedAt })
+      .from(mealPlans)
+      .where(and(eq(mealPlans.athleteId, athleteId), eq(mealPlans.origin, 'own'), isNull(mealPlans.archivedAt)));
+    const limited = own.map(row => ({ ...row, createdAt: row.createdAt.getTime(), lastActivatedAt: row.lastActivatedAt?.getTime() ?? null }));
+    if (!canCreateOwnPlan(limited, options.entitled)) throw new Error(OWN_PLAN_LIMIT_ERROR);
+    let name = options.name ? normalizePlanName(options.name) : null;
+    let sourceSlots: (typeof mealSlots.$inferSelect)[] = [];
+    if (options.sourceMealPlanId) {
+      const [source] = await tx.select({ name: mealPlans.name }).from(mealPlans)
+        .where(and(eq(mealPlans.id, options.sourceMealPlanId), eq(mealPlans.athleteId, athleteId))).limit(1);
+      if (!source) throw new Error('meal_plan_not_found');
+      name ??= copyPlanName(source.name, taken);
+      sourceSlots = await tx.select().from(mealSlots).where(eq(mealSlots.mealPlanId, options.sourceMealPlanId));
+    }
+    await insertMealPlan(tx, athleteId, id, 'own', {
+      active: true,
+      name: name ?? nextPlanName(DEFAULT_MEAL_PLAN_NAMES.own, taken),
+    });
+    if (sourceSlots.length) {
+      await tx.insert(mealSlots).values(sourceSlots.map(slot => ({ ...slot, id: nanoid(), mealPlanId: id })));
+    }
+  });
+  await syncPlanTargets(id);
   return id;
+}
+
+export async function renameMealPlan(athleteId: string, mealPlanId: string, name: string): Promise<void> {
+  const clean = normalizePlanName(name);
+  if (!clean) throw new Error('invalid_name');
+  await db.update(mealPlans).set({ name: clean })
+    .where(and(eq(mealPlans.id, mealPlanId), eq(mealPlans.athleteId, athleteId), eq(mealPlans.origin, 'own')));
+}
+
+/** "Deletes" an own, inactive meal plan by archiving it, so meals already
+ *  logged against its slots keep their history. */
+export async function archiveMealPlan(athleteId: string, mealPlanId: string): Promise<void> {
+  const [row] = await db.select({ active: mealPlans.active, origin: mealPlans.origin }).from(mealPlans)
+    .where(and(eq(mealPlans.id, mealPlanId), eq(mealPlans.athleteId, athleteId))).limit(1);
+  if (!row || row.origin !== 'own') throw new Error('meal_plan_not_deletable');
+  if (row.active) throw new Error('meal_plan_active');
+  await db.update(mealPlans).set({ archivedAt: new Date() }).where(eq(mealPlans.id, mealPlanId));
+}
+
+export interface MealDayOutline {
+  weekday: number;
+  meals: { label: string; time: string; kcal: number }[];
+}
+
+/** Read-only content of any meal plan, per weekday, for previewing it. */
+export async function getMealPlanOutline(athleteId: string, mealPlanId: string): Promise<MealDayOutline[]> {
+  const [owner] = await db.select({ id: mealPlans.id }).from(mealPlans)
+    .where(and(eq(mealPlans.id, mealPlanId), eq(mealPlans.athleteId, athleteId))).limit(1);
+  if (!owner) return [];
+  const slots = await db.select().from(mealSlots).where(eq(mealSlots.mealPlanId, mealPlanId)).orderBy(asc(mealSlots.slotOrder));
+  return Array.from({ length: DAYS_PER_WEEK }, (_, i) => ({
+    weekday: i + 1,
+    meals: slots.filter(slot => slot.weekday === i + 1)
+      .map(slot => ({ label: slot.name, time: slot.scheduledTime ?? '', kcal: slot.targetKcal ?? 0 })),
+  }));
+}
+
+/** Whether the nutritionist's plan already lives in its own plan on this phone. */
+export async function hasNutritionistMealPlan(athleteId: string): Promise<boolean> {
+  return (await findMealPlan(athleteId, 'nutritionist')) != null;
+}
+
+/**
+ * Stores the nutritionist's published plan in its own meal plan, so the
+ * athlete's own plans are never overwritten. The first one becomes active;
+ * later versions update it without switching plans.
+ */
+export async function applyNutritionistMealPlan(
+  athleteId: string,
+  assignment: { name: string | null; nutritionistName: string; week: { weekday: number; meals: MealDraft[] }[] },
+): Promise<{ activated: boolean }> {
+  const name = assignment.name?.trim() || `Plan de ${assignment.nutritionistName}`;
+  const existing = await findMealPlan(athleteId, 'nutritionist');
+  let mealPlanId = existing?.id;
+  if (existing) {
+    await db.update(mealPlans).set({ name }).where(eq(mealPlans.id, existing.id));
+  } else {
+    mealPlanId = nanoid();
+    const id = mealPlanId;
+    await db.transaction(async tx => insertMealPlan(tx, athleteId, id, 'nutritionist', { active: true, name }));
+  }
+  await replaceWeekMealSlots(mealPlanId!, assignment.week);
+  return { activated: !existing };
+}
+
+/** Applies an accepted AI meal plan as the athlete's AI plan and activates it —
+ *  accepting it is the athlete's explicit choice. Other plans stay untouched. */
+export async function applyGeneratedMealPlan(
+  athleteId: string,
+  week: { weekday: number; meals: MealDraft[] }[],
+): Promise<void> {
+  const existing = await findMealPlan(athleteId, 'ai');
+  let mealPlanId = existing?.id;
+  if (!mealPlanId) {
+    mealPlanId = nanoid();
+    const id = mealPlanId;
+    await db.transaction(async tx => insertMealPlan(tx, athleteId, id, 'ai', { active: false }));
+  }
+  await replaceWeekMealSlots(mealPlanId, week);
+  await activateMealPlan(athleteId, mealPlanId);
 }
 
 /** The plan's targets describe a *day*, not the week, so the per-slot figures
@@ -82,12 +316,15 @@ async function syncPlanTargets(mealPlanId: string): Promise<void> {
 export async function getMealPlan(
   athleteId: string,
   weekday: number,
-): Promise<{ mealPlanId: string; meals: MealSlotUI[] }> {
+): Promise<{ mealPlanId: string; plan: { id: string; name: string; origin: MealPlanOrigin }; meals: MealSlotUI[] }> {
   // Plans written before meals had a weekday are spread across the week by
   // migration 0005, not here: doing it lazily on read cannot tell those rows
   // apart from a new plan whose only meal happens to fall on the default day,
   // and would silently copy that one meal onto all seven.
   const mealPlanId = await getOrCreateMealPlan(athleteId);
+  const [plan] = await db.select({ id: mealPlans.id, name: mealPlans.name, origin: mealPlans.origin }).from(mealPlans)
+    .where(eq(mealPlans.id, mealPlanId)).limit(1);
+  if (!plan) throw new Error('meal_plan_not_found');
 
   const slots = await db
     .select()
@@ -96,6 +333,7 @@ export async function getMealPlan(
     .orderBy(asc(mealSlots.slotOrder));
   return {
     mealPlanId,
+    plan,
     meals: slots.map(s => ({
       id: s.id,
       label: s.name,

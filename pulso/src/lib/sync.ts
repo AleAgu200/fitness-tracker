@@ -5,7 +5,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { and, eq, inArray } from 'drizzle-orm';
 
-import { DAYS_PER_WEEK, replaceWeekMealSlots } from '@/db/nutrition';
+import { applyNutritionistMealPlan, DAYS_PER_WEEK, hasNutritionistMealPlan } from '@/db/nutrition';
 import { applyCoachWorkout, AssignedExercise, hasCoachProgram } from '@/db/plan';
 import { db } from '@/db';
 import {
@@ -30,6 +30,7 @@ interface WorkoutAssignment {
 
 interface MealPlanAssignment {
   version: number;
+  name?: string | null;
   payload: {
     nutritionistName: string;
     meals: { label: string; time: string; n: string; kcal: number; p: number; c: number; g: number }[];
@@ -81,10 +82,7 @@ export async function getStoredAssignmentMeta(userId: string): Promise<{ workout
   };
 }
 
-export async function syncAssignments(
-  userId: string,
-  mealPlanId: string,
-): Promise<SyncResult> {
+export async function syncAssignments(userId: string): Promise<SyncResult> {
   const res = await apiFetch<{
     workout: WorkoutAssignment | null;
     mealPlan: MealPlanAssignment | null;
@@ -122,7 +120,9 @@ export async function syncAssignments(
   if (res.mealPlan) {
     result.mealsBy = res.mealPlan.payload.nutritionistName || 'tu nutricionista';
     const applied = Number(await kv.get(k.mVersion)) || 0;
-    if (res.mealPlan.version > applied) {
+    // Nutritionist plans used to be written over the athlete's own plan, so the
+    // first sync after that changed re-applies the current version into its own.
+    if (res.mealPlan.version > applied || !(await hasNutritionistMealPlan(userId))) {
       // A nutritionist still assigns a single daily template. Applying it to
       // every weekday keeps that meaning intact now that plans are per-day,
       // instead of leaving six days empty.
@@ -135,10 +135,11 @@ export async function syncAssignments(
         c: m.c,
         g: m.g,
       }));
-      await replaceWeekMealSlots(
-        mealPlanId,
-        Array.from({ length: DAYS_PER_WEEK }, (_, i) => ({ weekday: i + 1, meals: assigned })),
-      );
+      await applyNutritionistMealPlan(userId, {
+        name: res.mealPlan.name ?? null,
+        nutritionistName: result.mealsBy,
+        week: Array.from({ length: DAYS_PER_WEEK }, (_, i) => ({ weekday: i + 1, meals: assigned })),
+      });
       await kv.set(k.mVersion, String(res.mealPlan.version));
       result.mealsChanged = true;
     }
@@ -280,6 +281,8 @@ const CATEGORY_BY_ENTITY: Record<string, SharingCategory> = {
   // they leave the phone only with the training consent.
   session_card: 'training',
   plan_selection: 'training',
+  // Whether the nutritionist's plan is the active one: nutrition data.
+  meal_plan_selection: 'nutrition',
 };
 
 async function pushAllowedOutbox(athleteId: string, deviceId: string) {

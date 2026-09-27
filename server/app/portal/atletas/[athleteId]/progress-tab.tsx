@@ -94,18 +94,21 @@ function CategoryPanel({ title, state, period, updatedAt, children }: {
   );
 }
 
-export function ProgressTab({ progress, freshnessAt, sharedCards, planSelection, isCoach, period, onPeriodChange, loading }: {
+export function ProgressTab({ progress, freshnessAt, sharedCards, planSelection, mealPlanSelection, isCoach, isNutritionist, period, onPeriodChange, loading }: {
   progress: ProgressData;
   freshnessAt: Record<"training" | "nutrition" | "metrics", number | null>;
   sharedCards: SharedCard[];
   planSelection: { coachPlanSelected: boolean; selectedAt: number } | null;
+  mealPlanSelection: { nutritionistPlanSelected: boolean; selectedAt: number } | null;
   isCoach: boolean;
+  isNutritionist: boolean;
   period: Period;
   onPeriodChange: (period: Period) => void;
   loading: boolean;
 }) {
   const { training, nutrition, metrics, states } = progress;
   const trainingVisible = states.training !== "revoked" && states.training !== "not_authorized";
+  const nutritionVisible = states.nutrition !== "revoked" && states.nutrition !== "not_authorized";
 
   return (
     <div className="flex flex-col gap-4">
@@ -185,6 +188,21 @@ export function ProgressTab({ progress, freshnessAt, sharedCards, planSelection,
             </p>
           ) : (
             <p className="mt-3 text-sm text-fg-sec">Todavía no hay datos de qué plan usa (llegan con la próxima sincronización de su app).</p>
+          )}
+        </section>
+      )}
+
+      {isNutritionist && nutritionVisible && (
+        <section className="border border-line bg-card p-4">
+          <h3 className="font-mono-app text-[10px] tracking-[1px] text-fg-ter">DIETA EN USO</h3>
+          {mealPlanSelection ? (
+            <p className={`mt-3 text-sm ${mealPlanSelection.nutritionistPlanSelected ? "text-fg" : "text-warn"}`}>
+              {mealPlanSelection.nutritionistPlanSelected
+                ? `Sigue tu plan de alimentación desde el ${shortDate(mealPlanSelection.selectedAt)}.`
+                : `Desde el ${shortDate(mealPlanSelection.selectedAt)} eligió temporalmente otro plan de alimentación. Tu plan sigue disponible en su app; el contenido del otro plan no se comparte.`}
+            </p>
+          ) : (
+            <p className="mt-3 text-sm text-fg-sec">Todavía no hay datos de qué plan de alimentación usa (llegan con la próxima sincronización de su app).</p>
           )}
         </section>
       )}

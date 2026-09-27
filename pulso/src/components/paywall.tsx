@@ -17,6 +17,7 @@ import { purchasesSupported } from '@/lib/purchases';
 const BENEFITS = [
   { title: 'Planes con IA sin límite', detail: 'Regenerá y ajustá tu plan cuando cambie tu objetivo.' },
   { title: 'Sin anuncios', detail: 'Entrá directo al entreno, sin esperas.' },
+  { title: 'Planes propios sin límite', detail: 'Guardá varios planes de entreno y de dieta y alterná entre ellos.' },
 ];
 
 /**
@@ -72,13 +73,21 @@ export function Paywall({ visible, onClose, reason }: { visible: boolean; onClos
             <Text style={{ fontFamily: F.grotesk, fontSize: 24, lineHeight: 30, color: C.textPrimary }}>
               {reason === 'free_quota_exhausted'
                 ? 'Ya usaste tu plan gratis'
-                : 'Llevá PULSO más lejos'}
+                : reason === 'plan_limit'
+                  ? 'Más planes propios con Plus'
+                  : 'Llevá PULSO más lejos'}
             </Text>
 
             {reason === 'free_quota_exhausted' && (
               <Text style={{ fontFamily: F.inter, fontSize: 13, lineHeight: 20, color: C.textSecondary }}>
                 Generaste {freeUsed} de {freeLimit} {freeLimit === 1 ? 'plan incluido' : 'planes incluidos'}.
                 Tu plan actual y todo tu registro siguen funcionando igual.
+              </Text>
+            )}
+
+            {reason === 'plan_limit' && (
+              <Text style={{ fontFamily: F.inter, fontSize: 13, lineHeight: 20, color: C.textSecondary }}>
+                Sin Plus podés tener un plan propio, además de los de tu equipo y el de PULSO IA. Tus planes nunca se borran.
               </Text>
             )}
 

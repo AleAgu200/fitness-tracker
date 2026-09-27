@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import {
   athleteDailySummaries,
+  athleteMealPlanSelections,
   athletePlanSelections,
   attentionSignals,
   bodyMeasurements,
@@ -112,6 +113,11 @@ const sessionCardUnsharePayload = z.object({
 
 const planSelectionPayload = z.object({
   coachPlanSelected: z.boolean(),
+  selectedAt: z.number().int().positive(),
+});
+
+const mealPlanSelectionPayload = z.object({
+  nutritionistPlanSelected: z.boolean(),
   selectedAt: z.number().int().positive(),
 });
 
@@ -432,6 +438,18 @@ async function applyDomainMutation(tx: any, athleteId: string, deviceId: string,
           target: athletePlanSelections.athleteId,
           set: { ...parsed.data, updatedAt: now },
           setWhere: sql`${athletePlanSelections.selectedAt} <= ${parsed.data.selectedAt}`,
+        });
+      return { status: "acked" as const };
+    }
+    case "meal_plan_selection": {
+      if (mutation.operation !== "update") return { status: "rejected" as const, error: "unsupported_operation" };
+      const parsed = mealPlanSelectionPayload.safeParse(mutation.payload);
+      if (!parsed.success) return { status: "rejected" as const, error: "invalid_meal_plan_selection" };
+      await tx.insert(athleteMealPlanSelections).values({ athleteId, ...parsed.data, updatedAt: now })
+        .onConflictDoUpdate({
+          target: athleteMealPlanSelections.athleteId,
+          set: { ...parsed.data, updatedAt: now },
+          setWhere: sql`${athleteMealPlanSelections.selectedAt} <= ${parsed.data.selectedAt}`,
         });
       return { status: "acked" as const };
     }

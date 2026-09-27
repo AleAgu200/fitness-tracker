@@ -1,7 +1,8 @@
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { nanoid } from '@/lib/id';
 import { todayStr, WEEKDAY_LABELS } from '@/lib/dates';
+import { canCreateOwnPlan, copyPlanName, nextPlanName, normalizePlanName, OWN_PLAN_LIMIT_ERROR } from '@/lib/plan-limits';
 import { db } from './index';
 import { enqueueSyncMutation } from './sync';
 import {
@@ -48,10 +49,11 @@ async function getOrCreateActiveProgramId(athleteId: string): Promise<string> {
   const [own] = await db
     .select({ id: programs.id })
     .from(programs)
-    .where(and(eq(programs.athleteId, athleteId), eq(programs.origin, 'own')))
+    .where(and(eq(programs.athleteId, athleteId), eq(programs.origin, 'own'), isNull(programs.archivedAt)))
+    .orderBy(asc(programs.createdAt))
     .limit(1);
   if (own) {
-    await db.update(programs).set({ active: true }).where(eq(programs.id, own.id));
+    await db.update(programs).set({ active: true, lastActivatedAt: new Date() }).where(eq(programs.id, own.id));
     return own.id;
   }
   return createProgram(athleteId, 'own', { active: true });
@@ -86,29 +88,41 @@ async function createProgram(
 ): Promise<string> {
   const programId = nanoid();
   await db.transaction(async tx => {
-    if (options.active) {
-      await tx.update(programs).set({ active: false }).where(eq(programs.athleteId, athleteId));
-    }
-    await tx.insert(programs).values({
-      id: programId,
-      athleteId,
-      coachId: null,
-      name: options.name ?? DEFAULT_PROGRAM_NAMES[origin],
-      startDate: todayStr(),
-      active: options.active,
-      origin,
-      createdAt: new Date(),
-    });
-    if (options.active) await recordPlanSelection(tx, athleteId, origin);
+    await insertProgram(tx, athleteId, programId, origin, options);
   });
   return programId;
+}
+
+async function insertProgram(
+  tx: Transaction,
+  athleteId: string,
+  programId: string,
+  origin: ProgramOrigin,
+  options: { active: boolean; name?: string },
+): Promise<void> {
+  const now = new Date();
+  if (options.active) {
+    await tx.update(programs).set({ active: false }).where(eq(programs.athleteId, athleteId));
+  }
+  await tx.insert(programs).values({
+    id: programId,
+    athleteId,
+    coachId: null,
+    name: options.name ?? DEFAULT_PROGRAM_NAMES[origin],
+    startDate: todayStr(),
+    active: options.active,
+    origin,
+    createdAt: now,
+    lastActivatedAt: options.active ? now : null,
+  });
+  if (options.active) await recordPlanSelection(tx, athleteId, origin);
 }
 
 async function findProgram(athleteId: string, origin: ProgramOrigin) {
   const [row] = await db
     .select()
     .from(programs)
-    .where(and(eq(programs.athleteId, athleteId), eq(programs.origin, origin)))
+    .where(and(eq(programs.athleteId, athleteId), eq(programs.origin, origin), isNull(programs.archivedAt)))
     .orderBy(asc(programs.createdAt))
     .limit(1);
   return row ?? null;
@@ -130,17 +144,19 @@ export interface ProgramSummary extends ActiveProgram {
   active: boolean;
   startDate: string;
   endDate: string | null;
+  createdAt: number;
+  lastActivatedAt: number | null;
   /** Exercise count per weekday (1 = Sunday .. 7 = Saturday). */
   dayCounts: Record<number, number>;
 }
 
-/** Every training plan the athlete has on this phone, active first. Makes sure
- *  an own plan exists so there's always somewhere to go back to. */
+/** Every training plan the athlete keeps on this phone (archived ones aside),
+ *  active first. There is always an active one to come back to. */
 export async function listPrograms(athleteId: string): Promise<ProgramSummary[]> {
   await getOrCreateActiveProgramId(athleteId);
-  if (!(await findProgram(athleteId, 'own'))) await createProgram(athleteId, 'own', { active: false });
 
-  const rows = await db.select().from(programs).where(eq(programs.athleteId, athleteId));
+  const rows = await db.select().from(programs)
+    .where(and(eq(programs.athleteId, athleteId), isNull(programs.archivedAt)));
   const summaries: ProgramSummary[] = [];
   for (const row of rows) {
     summaries.push({
@@ -150,6 +166,8 @@ export async function listPrograms(athleteId: string): Promise<ProgramSummary[]>
       active: row.active,
       startDate: row.startDate,
       endDate: row.endDate,
+      createdAt: row.createdAt.getTime(),
+      lastActivatedAt: row.lastActivatedAt?.getTime() ?? null,
       dayCounts: Object.fromEntries((await getProgramWeekSummary(row.id)).map(day => [day.weekday, day.exerciseCount])),
     });
   }
@@ -160,12 +178,115 @@ export async function listPrograms(athleteId: string): Promise<ProgramSummary[]>
 export async function activateProgram(athleteId: string, programId: string): Promise<void> {
   await db.transaction(async tx => {
     const [target] = await tx.select({ id: programs.id, origin: programs.origin }).from(programs)
-      .where(and(eq(programs.id, programId), eq(programs.athleteId, athleteId))).limit(1);
+      .where(and(eq(programs.id, programId), eq(programs.athleteId, athleteId), isNull(programs.archivedAt))).limit(1);
     if (!target) throw new Error('program_not_found');
     await tx.update(programs).set({ active: false }).where(eq(programs.athleteId, athleteId));
-    await tx.update(programs).set({ active: true }).where(eq(programs.id, programId));
+    await tx.update(programs).set({ active: true, lastActivatedAt: new Date() }).where(eq(programs.id, programId));
     await recordPlanSelection(tx, athleteId, target.origin);
   });
+}
+
+/**
+ * Creates another own plan — empty, or a copy of any plan the athlete has
+ * (a coach's included) — and makes it the active one so it can be built in
+ * Entreno right away. Refuses when the free own-plan quota is used and the
+ * account has no PULSO Plus (lib/plan-limits).
+ */
+export async function createOwnProgram(
+  athleteId: string,
+  options: { name?: string; sourceProgramId?: string | null; entitled: boolean },
+): Promise<string> {
+  const taken = (await db.select({ name: programs.name }).from(programs)
+    .where(and(eq(programs.athleteId, athleteId), isNull(programs.archivedAt)))).map(row => row.name);
+  const programId = nanoid();
+  await db.transaction(async tx => {
+    const own = await tx.select({ id: programs.id, origin: programs.origin, createdAt: programs.createdAt, lastActivatedAt: programs.lastActivatedAt })
+      .from(programs)
+      .where(and(eq(programs.athleteId, athleteId), eq(programs.origin, 'own'), isNull(programs.archivedAt)));
+    const limited = own.map(row => ({ ...row, createdAt: row.createdAt.getTime(), lastActivatedAt: row.lastActivatedAt?.getTime() ?? null }));
+    if (!canCreateOwnPlan(limited, options.entitled)) throw new Error(OWN_PLAN_LIMIT_ERROR);
+    let name = options.name ? normalizePlanName(options.name) : null;
+    let sourceTemplates: (typeof workoutTemplates.$inferSelect)[] = [];
+    if (options.sourceProgramId) {
+      const [source] = await tx.select({ name: programs.name }).from(programs)
+        .where(and(eq(programs.id, options.sourceProgramId), eq(programs.athleteId, athleteId))).limit(1);
+      if (!source) throw new Error('program_not_found');
+      name ??= copyPlanName(source.name, taken);
+      sourceTemplates = await tx.select().from(workoutTemplates)
+        .where(and(eq(workoutTemplates.programId, options.sourceProgramId), eq(workoutTemplates.kind, 'plan')));
+    }
+    await insertProgram(tx, athleteId, programId, 'own', {
+      active: true,
+      name: name ?? nextPlanName(DEFAULT_PROGRAM_NAMES.own, taken),
+    });
+    for (const template of sourceTemplates) {
+      const templateId = nanoid();
+      await tx.insert(workoutTemplates).values({ ...template, id: templateId, programId, coachId: null, createdAt: new Date() });
+      const slots = await tx.select().from(templateExerciseSlots).where(eq(templateExerciseSlots.templateId, template.id));
+      if (slots.length) {
+        await tx.insert(templateExerciseSlots).values(slots.map(slot => ({ ...slot, id: nanoid(), templateId })));
+      }
+    }
+  });
+  return programId;
+}
+
+/** Renames one of the athlete's own plans; assigned and AI plans keep theirs. */
+export async function renameProgram(athleteId: string, programId: string, name: string): Promise<void> {
+  const clean = normalizePlanName(name);
+  if (!clean) throw new Error('invalid_name');
+  await db.update(programs).set({ name: clean })
+    .where(and(eq(programs.id, programId), eq(programs.athleteId, athleteId), eq(programs.origin, 'own')));
+}
+
+/**
+ * "Deletes" an own plan that isn't active. It's archived rather than removed:
+ * sessions already logged keep their template references and history.
+ */
+export async function archiveProgram(athleteId: string, programId: string): Promise<void> {
+  const [row] = await db.select({ active: programs.active, origin: programs.origin }).from(programs)
+    .where(and(eq(programs.id, programId), eq(programs.athleteId, athleteId))).limit(1);
+  if (!row || row.origin !== 'own') throw new Error('program_not_deletable');
+  if (row.active) throw new Error('program_active');
+  await db.update(programs).set({ archivedAt: new Date() }).where(eq(programs.id, programId));
+}
+
+export interface ProgramDayOutline {
+  weekday: number;
+  exercises: { nombre: string; target: number; reps: number }[];
+}
+
+/** Read-only content of any plan, per weekday, for previewing it in "Mis
+ *  planes" without activating it. Unseeded days show the base template. */
+export async function getProgramOutline(athleteId: string, programId: string): Promise<ProgramDayOutline[]> {
+  const [owner] = await db.select({ id: programs.id }).from(programs)
+    .where(and(eq(programs.id, programId), eq(programs.athleteId, athleteId))).limit(1);
+  if (!owner) return [];
+  const templates = await db.select({ id: workoutTemplates.id, weekday: workoutTemplates.weekday })
+    .from(workoutTemplates).where(eq(workoutTemplates.programId, programId));
+  const rows = templates.length
+    ? await db.select({
+        templateId: templateExerciseSlots.templateId,
+        nombre: exercises.name,
+        target: templateExerciseSlots.targetSets,
+        reps: templateExerciseSlots.targetReps,
+      }).from(templateExerciseSlots)
+        .innerJoin(exercises, eq(templateExerciseSlots.exerciseId, exercises.id))
+        .where(inArray(templateExerciseSlots.templateId, templates.map(t => t.id)))
+        .orderBy(asc(templateExerciseSlots.slotOrder))
+    : [];
+  const base = templates.find(t => t.weekday === null);
+  const outline: ProgramDayOutline[] = [];
+  for (let weekday = 1; weekday <= 7; weekday++) {
+    const template = templates.find(t => t.weekday === weekday) ?? base;
+    outline.push({
+      weekday,
+      exercises: template
+        ? rows.filter(row => row.templateId === template.id).map(({ nombre, target, reps }) => ({ nombre, target, reps }))
+        : [],
+    });
+  }
+  return outline;
 }
 
 /**
