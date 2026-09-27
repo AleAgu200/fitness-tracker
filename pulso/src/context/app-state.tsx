@@ -318,11 +318,11 @@ interface AppContextValue {
   activatePlan: (programId: string) => Promise<void>;
   /** Creates an own training plan (empty or a copy) and makes it active. The
    *  caller checks PULSO Plus with lib/plan-limits. */
-  createTrainingPlan: (options: { name?: string; sourceProgramId?: string | null }) => Promise<void>;
+  createTrainingPlan: (options: { name?: string; sourceProgramId?: string | null; entitled: boolean }) => Promise<void>;
   /** Makes another meal plan the active one (see "Mis planes"). */
   activateMealPlan: (mealPlanId: string) => Promise<void>;
   /** Creates an own meal plan (empty or a copy) and makes it active. */
-  createMealPlan: (options: { name?: string; sourceMealPlanId?: string | null }) => Promise<void>;
+  createMealPlan: (options: { name?: string; sourceMealPlanId?: string | null; entitled: boolean }) => Promise<void>;
   startEditEx: () => void;
   startAddEx: () => void;
   cancelExForm: () => void;
@@ -1097,7 +1097,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     selectFirstExercise();
   }, [reloadPlan, selectFirstExercise]);
 
-  const createTrainingPlan = useCallback(async (options: { name?: string; sourceProgramId?: string | null }) => {
+  const createTrainingPlan = useCallback(async (options: { name?: string; sourceProgramId?: string | null; entitled: boolean }) => {
     const uid = userRef.current;
     if (!uid) return;
     await createOwnProgram(uid, options);
@@ -1112,7 +1112,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     await reloadMeals();
   }, [reloadMeals]);
 
-  const createMealPlan = useCallback(async (options: { name?: string; sourceMealPlanId?: string | null }) => {
+  const createMealPlan = useCallback(async (options: { name?: string; sourceMealPlanId?: string | null; entitled: boolean }) => {
     const uid = userRef.current;
     if (!uid) return;
     await createOwnMealPlan(uid, options);

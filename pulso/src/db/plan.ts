@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { nanoid } from '@/lib/id';
 import { todayStr, WEEKDAY_LABELS } from '@/lib/dates';
-import { copyPlanName, nextPlanName, normalizePlanName } from '@/lib/plan-limits';
+import { canCreateOwnPlan, copyPlanName, nextPlanName, normalizePlanName, OWN_PLAN_LIMIT_ERROR } from '@/lib/plan-limits';
 import { db } from './index';
 import { enqueueSyncMutation } from './sync';
 import {
@@ -189,17 +189,22 @@ export async function activateProgram(athleteId: string, programId: string): Pro
 /**
  * Creates another own plan — empty, or a copy of any plan the athlete has
  * (a coach's included) — and makes it the active one so it can be built in
- * Entreno right away. Whether the account may create it (PULSO Plus) is
- * decided by the caller with lib/plan-limits.
+ * Entreno right away. Refuses when the free own-plan quota is used and the
+ * account has no PULSO Plus (lib/plan-limits).
  */
 export async function createOwnProgram(
   athleteId: string,
-  options: { name?: string; sourceProgramId?: string | null },
+  options: { name?: string; sourceProgramId?: string | null; entitled: boolean },
 ): Promise<string> {
   const taken = (await db.select({ name: programs.name }).from(programs)
     .where(and(eq(programs.athleteId, athleteId), isNull(programs.archivedAt)))).map(row => row.name);
   const programId = nanoid();
   await db.transaction(async tx => {
+    const own = await tx.select({ id: programs.id, origin: programs.origin, createdAt: programs.createdAt, lastActivatedAt: programs.lastActivatedAt })
+      .from(programs)
+      .where(and(eq(programs.athleteId, athleteId), eq(programs.origin, 'own'), isNull(programs.archivedAt)));
+    const limited = own.map(row => ({ ...row, createdAt: row.createdAt.getTime(), lastActivatedAt: row.lastActivatedAt?.getTime() ?? null }));
+    if (!canCreateOwnPlan(limited, options.entitled)) throw new Error(OWN_PLAN_LIMIT_ERROR);
     let name = options.name ? normalizePlanName(options.name) : null;
     let sourceTemplates: (typeof workoutTemplates.$inferSelect)[] = [];
     if (options.sourceProgramId) {

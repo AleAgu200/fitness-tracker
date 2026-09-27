@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 
 import { nanoid } from '@/lib/id';
 import { todayStr } from '@/lib/dates';
-import { copyPlanName, nextPlanName, normalizePlanName } from '@/lib/plan-limits';
+import { canCreateOwnPlan, copyPlanName, nextPlanName, normalizePlanName, OWN_PLAN_LIMIT_ERROR } from '@/lib/plan-limits';
 import { db } from './index';
 import { enqueueSyncMutation } from './sync';
 import {
@@ -180,16 +180,21 @@ export async function activateMealPlan(athleteId: string, mealPlanId: string): P
 }
 
 /** Creates another own meal plan — empty or a copy of any plan the athlete
- *  has — and activates it so it can be built in Dieta. The caller checks
- *  PULSO Plus with lib/plan-limits. */
+ *  has — and activates it so it can be built in Dieta. Refuses when the free
+ *  own-plan quota is used and the account has no PULSO Plus. */
 export async function createOwnMealPlan(
   athleteId: string,
-  options: { name?: string; sourceMealPlanId?: string | null },
+  options: { name?: string; sourceMealPlanId?: string | null; entitled: boolean },
 ): Promise<string> {
   const taken = (await db.select({ name: mealPlans.name }).from(mealPlans)
     .where(and(eq(mealPlans.athleteId, athleteId), isNull(mealPlans.archivedAt)))).map(row => row.name);
   const id = nanoid();
   await db.transaction(async tx => {
+    const own = await tx.select({ id: mealPlans.id, origin: mealPlans.origin, createdAt: mealPlans.createdAt, lastActivatedAt: mealPlans.lastActivatedAt })
+      .from(mealPlans)
+      .where(and(eq(mealPlans.athleteId, athleteId), eq(mealPlans.origin, 'own'), isNull(mealPlans.archivedAt)));
+    const limited = own.map(row => ({ ...row, createdAt: row.createdAt.getTime(), lastActivatedAt: row.lastActivatedAt?.getTime() ?? null }));
+    if (!canCreateOwnPlan(limited, options.entitled)) throw new Error(OWN_PLAN_LIMIT_ERROR);
     let name = options.name ? normalizePlanName(options.name) : null;
     let sourceSlots: (typeof mealSlots.$inferSelect)[] = [];
     if (options.sourceMealPlanId) {
@@ -319,6 +324,7 @@ export async function getMealPlan(
   const mealPlanId = await getOrCreateMealPlan(athleteId);
   const [plan] = await db.select({ id: mealPlans.id, name: mealPlans.name, origin: mealPlans.origin }).from(mealPlans)
     .where(eq(mealPlans.id, mealPlanId)).limit(1);
+  if (!plan) throw new Error('meal_plan_not_found');
 
   const slots = await db
     .select()

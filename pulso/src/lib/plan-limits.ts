@@ -38,29 +38,39 @@ export function lockedPlanIds(plans: LimitedPlan[], entitled: boolean): Set<stri
   return new Set(own.slice(FREE_OWN_PLAN_LIMIT).map(plan => plan.id));
 }
 
+/** Longest plan name kept, so list rows never wrap into a paragraph. */
+export const MAX_PLAN_NAME_LENGTH = 40;
+
 /** Trimmed plan name, or null when empty. Names are capped for list rows. */
 export function normalizePlanName(name: string): string | null {
-  const trimmed = name.replace(/\s+/g, ' ').trim().slice(0, 40);
+  const trimmed = name.replace(/\s+/g, ' ').trim().slice(0, MAX_PLAN_NAME_LENGTH);
   return trimmed || null;
+}
+
+/** The stem shortened so the suffix always fits: a distinct suffix per
+ *  attempt then guarantees a distinct name, however long the stem. */
+function withSuffix(stem: string, suffix: string): string {
+  return `${stem.slice(0, MAX_PLAN_NAME_LENGTH - suffix.length).trimEnd()}${suffix}`;
+}
+
+function firstFree(taken: string[], candidate: (attempt: number) => string): string {
+  const used = new Set(taken.map(name => name.trim().toLowerCase()));
+  for (let attempt = 1; ; attempt++) {
+    const name = candidate(attempt);
+    if (!used.has(name.toLowerCase())) return name;
+  }
 }
 
 /** "Plan personal", then "Plan personal 2", "3"… skipping names in use. */
 export function nextPlanName(base: string, taken: string[]): string {
-  const used = new Set(taken.map(name => name.trim().toLowerCase()));
-  if (!used.has(base.toLowerCase())) return base;
-  for (let n = 2; ; n++) {
-    const candidate = `${base} ${n}`;
-    if (!used.has(candidate.toLowerCase())) return candidate;
-  }
+  return firstFree(taken, n => n === 1 ? base.slice(0, MAX_PLAN_NAME_LENGTH) : withSuffix(base, ` ${n}`));
 }
 
 /** Name for a copy: "Fuerza (copia)", "Fuerza (copia 2)"… */
 export function copyPlanName(source: string, taken: string[]): string {
-  const base = `${source.replace(/ \(copia(?: \d+)?\)$/, '')} (copia)`.slice(0, 40);
-  const used = new Set(taken.map(name => name.trim().toLowerCase()));
-  if (!used.has(base.toLowerCase())) return base;
-  for (let n = 2; ; n++) {
-    const candidate = base.replace(/\)$/, ` ${n})`);
-    if (!used.has(candidate.toLowerCase())) return candidate;
-  }
+  const stem = source.replace(/ \(copia(?: \d+)?\)$/, '');
+  return firstFree(taken, n => withSuffix(stem, n === 1 ? ' (copia)' : ` (copia ${n})`));
 }
+
+/** Thrown by the creation operations when the free own-plan quota is used. */
+export const OWN_PLAN_LIMIT_ERROR = 'own_plan_limit';

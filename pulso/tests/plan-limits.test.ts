@@ -55,6 +55,17 @@ describe('plan names', () => {
     assert.equal(nextPlanName('Plan personal', ['plan personal', 'Plan personal 2']), 'Plan personal 3');
   });
 
+  it('keeps copies of maximum-length names within the limit and terminating', () => {
+    const long = 'x'.repeat(40);
+    const first = copyPlanName(long, []);
+    assert.equal(first.length, 40);
+    assert.ok(first.endsWith(' (copia)'));
+    const second = copyPlanName(long, [long, first]);
+    assert.equal(second.length, 40);
+    assert.ok(second.endsWith(' (copia 2)'));
+    assert.equal(nextPlanName(long, [long]).length, 40);
+  });
+
   it('numbers copies without stacking suffixes', () => {
     assert.equal(copyPlanName('Fuerza', []), 'Fuerza (copia)');
     assert.equal(copyPlanName('Fuerza (copia)', ['Fuerza (copia)']), 'Fuerza (copia 2)');

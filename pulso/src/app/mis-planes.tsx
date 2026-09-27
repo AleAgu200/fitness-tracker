@@ -21,7 +21,7 @@ import {
 } from '@/db/nutrition';
 import { archiveProgram, getProgramOutline, listPrograms, ProgramOrigin, ProgramSummary, renameProgram } from '@/db/plan';
 import { mondayOf, WEEKDAY_DISPLAY_ORDER, WEEKDAY_LABELS, WEEKDAY_SHORT_LABELS, weekdayOf } from '@/lib/dates';
-import { canCreateOwnPlan, lockedPlanIds, nextPlanName } from '@/lib/plan-limits';
+import { canCreateOwnPlan, lockedPlanIds, nextPlanName, OWN_PLAN_LIMIT_ERROR } from '@/lib/plan-limits';
 import { sessionTime } from '@/lib/pulse-engine';
 
 type Tab = 'entreno' | 'dieta';
@@ -188,8 +188,8 @@ function TrainingPlans() {
           + (state.freeSession ? ' Hoy seguís con tu sesión libre.' : '');
       }}
       onActivate={activatePlan}
-      onCreate={async (name, sourceId) => {
-        await createTrainingPlan({ name, sourceProgramId: sourceId });
+      onCreate={async (name, sourceId, entitled) => {
+        await createTrainingPlan({ name, sourceProgramId: sourceId, entitled });
         router.dismissTo('/entreno');
       }}
       onRename={async (id, name) => {
@@ -275,8 +275,8 @@ function MealPlans() {
           + (current ? ` “${current.name}” queda guardado acá.` : '');
       }}
       onActivate={activateMealPlan}
-      onCreate={async (name, sourceId) => {
-        await createMealPlan({ name, sourceMealPlanId: sourceId });
+      onCreate={async (name, sourceId, entitled) => {
+        await createMealPlan({ name, sourceMealPlanId: sourceId, entitled });
         router.dismissTo('/dieta');
       }}
       onRename={async (id, name) => {
@@ -325,7 +325,7 @@ function PlanLibrary({
   onOpen: () => void;
   switchText: (item: PlanItem, current: PlanItem | null) => string;
   onActivate: (id: string) => Promise<void>;
-  onCreate: (name: string | undefined, sourceId: string | null) => Promise<void>;
+  onCreate: (name: string | undefined, sourceId: string | null, entitled: boolean) => Promise<void>;
   onRename: (id: string, name: string) => Promise<void>;
   onArchive: (id: string) => Promise<void>;
   loadOutline: (id: string) => Promise<{ weekday: number; lines: string[] }[]>;
@@ -384,11 +384,16 @@ function PlanLibrary({
     setBusy(true);
     setError(null);
     try {
-      await onCreate(newName.trim() || undefined, sourceId);
+      await onCreate(newName.trim() || undefined, sourceId, entitled);
       setCreating(false);
       setNewName('');
       setSourceId(null);
     } catch (e) {
+      if (e instanceof Error && e.message === OWN_PLAN_LIMIT_ERROR) {
+        setCreating(false);
+        setPaywall(true);
+        return;
+      }
       console.error('[plan-create]', e);
       setError('No se pudo crear el plan. Intentá de nuevo.');
     } finally {
