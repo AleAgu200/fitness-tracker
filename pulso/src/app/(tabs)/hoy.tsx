@@ -379,7 +379,7 @@ function Mission({ accent, weekdayLabel, loggedSets, todaysSessionId, recovering
     <View style={{ borderTopWidth: 1, borderBottomWidth: 1, borderColor: C.border, paddingVertical: 14 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <View style={{ flex: 1, gap: 4 }}>
-          <Label style={{ color: sessionDone ? accent : undefined }}>{eyebrow}</Label>
+          <Label style={sessionDone ? { color: accent } : undefined}>{eyebrow}</Label>
           <Text style={{ fontFamily: F.grotesk, fontSize: 19, color: C.textPrimary }}>{title}</Text>
           <Text style={{ fontFamily: F.inter, fontSize: 12, lineHeight: 17, color: C.textSecondary }}>{detail}</Text>
         </View>
