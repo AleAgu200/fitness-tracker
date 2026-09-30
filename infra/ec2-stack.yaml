@@ -103,6 +103,9 @@ Resources:
                 Action:
                   - s3:ListBucket
                 Resource: !GetAtt MediaBucket.Arn
+        # Sending email is granted by infra/ses-permission-stack.yaml, a separate
+        # stack: updating this one re-resolves LatestAmiId and would replace the
+        # instance (and its PostgreSQL data) whenever a newer AMI exists.
       Tags:
         - Key: Name
           Value: pulso-backend

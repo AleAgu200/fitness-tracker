@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.129.0",
+    "@aws-sdk/client-sesv2": "^3.1143.0",
     "@tailwindcss/postcss": "^4.3.2",
     "@types/better-sqlite3": "^7.6.13",
     "better-auth": "^1.6.22",

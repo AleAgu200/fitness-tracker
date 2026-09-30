@@ -12,13 +12,14 @@ import {
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { SocialButtons } from '@/components/auth/social-buttons';
 import { LightningBackground } from '@/components/ui/lightning-bg';
 import { F, useColors, withAlpha } from '@/constants/colors';
 import { usePreferences } from '@/context/preferences';
 import { useSession } from '@/context/session';
 import { startOnboarding } from '@/db/onboarding';
 import { getLatestWeightMeasurement, saveAthleteProfile, saveInitialWeight } from '@/db/profile';
-import { getActiveSession, isUserExistsError, signIn, signUp } from '@/lib/auth';
+import { AuthError, getActiveSession, isUserExistsError, signIn, signUp } from '@/lib/auth';
 import { getInitials } from '@/lib/names';
 import { pushAthleteProfile } from '@/lib/profile-sync';
 
@@ -85,7 +86,21 @@ export default function SignUpScreen() {
 
     try {
       await signUp(email, password, nombre.trim());
-      await signIn(email, password);
+      try {
+        await signIn(email, password);
+      } catch (signInError) {
+        // With verification required the account exists but can't enter yet.
+        if (signInError instanceof AuthError && signInError.kind === 'email_not_verified') {
+          Alert.alert(
+            'Confirmá tu correo',
+            `Te enviamos un enlace a ${email.trim().toLowerCase()}. Confirmalo y después ingresá.`,
+            [{ text: 'IR A INICIAR SESIÓN', onPress: () => router.replace('/(auth)/login' as any) }],
+            { cancelable: false },
+          );
+          return;
+        }
+        throw signInError;
+      }
 
       const session = await getActiveSession();
       if (!session?.userId) throw new Error('session_not_found');
@@ -146,12 +161,8 @@ export default function SignUpScreen() {
           { cancelable: false },
         );
       } else {
-        const msg = e instanceof Error ? e.message : '';
-        if (msg.includes('UNIQUE') || msg.includes('unique')) {
-          setError('Ese email ya está registrado');
-        } else {
-          setError('Error al crear la cuenta. Intentá de nuevo.');
-        }
+        // What was typed stays in the form so the athlete can fix and retry.
+        setError(e instanceof AuthError ? e.userMessage : 'No pudimos crear la cuenta. Probá de nuevo.');
       }
     } finally {
       setLoading(false);
@@ -309,6 +320,19 @@ export default function SignUpScreen() {
           : <Text style={{ fontFamily: F.monoBold, fontSize: 12, letterSpacing: 0.8, color: C.onAccent, textTransform: 'uppercase' }}>CREAR CUENTA</Text>
         }
       </TouchableOpacity>
+
+      <View style={{ marginTop: 10 }}>
+        <SocialButtons
+          disabled={loading}
+          onError={setError}
+          onSignedIn={async () => {
+            // A new social account has no profile yet: the start gate sends it
+            // to onboarding, which asks for the same data as this form.
+            await refresh();
+            router.replace('/' as any);
+          }}
+        />
+      </View>
 
       <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 28, gap: 6 }}>
         <Text style={{ fontFamily: F.inter, fontSize: 14, color: C.textSecondary }}>¿Ya tenés cuenta?</Text>

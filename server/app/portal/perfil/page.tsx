@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { startGoogleLink, takeGoogleError } from "../google";
 import { api } from "../lib";
 import { usePortalUser } from "../portal-context";
 
@@ -139,8 +140,74 @@ export default function PerfilPage() {
             <div className="mt-3 h-1.5 bg-elev"><div className="h-full bg-volt transition-all" style={{ width: `${completion}%` }} /></div>
             <p className="mt-3 text-xs leading-5 text-fg-ter">Completá especialidad, credenciales y presentación para mantener contexto en tu equipo.</p>
           </div>
+          <GoogleAccess />
         </aside>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Linking Google here is what lets it be used to sign in to the portal. It
+ * needs this signed-in session and a Google account with the same address.
+ */
+function GoogleAccess() {
+  const [enabled, setEnabled] = useState(false);
+  const [linked, setLinked] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("google") === "vinculado") {
+      url.searchParams.delete("google");
+      window.history.replaceState(null, "", url.pathname + url.search);
+      setMessage({ ok: true, text: "Google quedó vinculado. Ya podés ingresar con él." });
+    } else {
+      const error = takeGoogleError();
+      if (error) setMessage({ ok: false, text: error });
+    }
+    api<{ google?: boolean }>("/api/portal/signup")
+      .then(result => setEnabled(Boolean(result.google)))
+      .catch(() => undefined);
+    api<{ providerId: string }[]>("/api/auth/list-accounts")
+      .then(accounts => setLinked(accounts.some(account => account.providerId === "google")))
+      .catch(() => setLinked(null));
+  }, []);
+
+  if (!enabled && !linked) return null;
+
+  async function link() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await startGoogleLink("/portal/perfil");
+    } catch {
+      setMessage({ ok: false, text: "No se pudo abrir Google. Probá de nuevo." });
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="border border-line bg-card p-5">
+      <div className="font-mono-app text-[10px] tracking-[1px] text-fg-mid">ACCESO CON GOOGLE</div>
+      {linked ? (
+        <p className="mt-3 text-sm leading-6 text-fg-sec"><span className="text-neon">Vinculado.</span> Podés ingresar al portal con tu cuenta de Google.</p>
+      ) : (
+        <>
+          <p className="mt-3 text-xs leading-5 text-fg-ter">Vinculá la cuenta de Google con el mismo correo que usás en PULSO para ingresar con ella.</p>
+          <button
+            type="button"
+            onClick={() => void link()}
+            disabled={busy || linked === null}
+            className="mt-4 flex w-full cursor-pointer items-center justify-center gap-2 border border-[#747775] bg-white p-2.5 text-sm font-semibold text-[#1F1F1F] hover:bg-[#f2f2f2] disabled:opacity-60"
+          >
+            <span aria-hidden className="font-bold">G</span>
+            {busy ? "Abriendo Google…" : "Vincular Google"}
+          </button>
+        </>
+      )}
+      {message && <p aria-live="polite" className={`mt-3 text-xs leading-5 ${message.ok ? "text-neon" : "text-danger"}`}>{message.text}</p>}
     </div>
   );
 }

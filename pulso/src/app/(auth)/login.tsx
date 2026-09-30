@@ -19,11 +19,12 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { SocialButtons } from '@/components/auth/social-buttons';
 import { LightningBackground, LightningHandle } from '@/components/ui/lightning-bg';
 import { F, useColors } from '@/constants/colors';
 import { usePreferences } from '@/context/preferences';
 import { useSession } from '@/context/session';
-import { signIn } from '@/lib/auth';
+import { AuthError, resendVerificationEmail, signIn } from '@/lib/auth';
 
 export default function LoginScreen() {
   const { refresh } = useSession();
@@ -33,6 +34,8 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
+  const [unverified, setUnverified] = useState(false);
+  const [notice, setNotice]     = useState<string | null>(null);
 
   const lightningRef = useRef<LightningHandle>(null);
   const wasArmed = useRef(false);
@@ -67,6 +70,8 @@ export default function LoginScreen() {
     }
     setLoading(true);
     setError(null);
+    setUnverified(false);
+    setNotice(null);
 
     // Discharge then climb back up like a capacitor while the request is in flight,
     // syncing the storm to the same tension. Capped below full so it never lies about completion.
@@ -104,10 +109,28 @@ export default function LoginScreen() {
       lightningRef.current?.pulse(C.red, 0.6);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
 
-      const msg = e instanceof Error ? e.message : 'error';
-      setError(msg === 'invalid_credentials' ? 'Email o contraseña incorrectos' : 'Error al iniciar sesión');
+      // What was typed stays; the password is never shown back.
+      setError(e instanceof AuthError ? e.userMessage : 'No pudimos completar la acción. Probá de nuevo.');
+      setUnverified(e instanceof AuthError && e.kind === 'email_not_verified');
       setLoading(false);
     }
+  }
+
+  async function handleResendVerification() {
+    try {
+      await resendVerificationEmail(email);
+      setUnverified(false);
+      setError(null);
+      setNotice('Te enviamos otro enlace. Revisá tu correo (y la carpeta de spam).');
+    } catch (e) {
+      setError(e instanceof AuthError ? e.userMessage : 'No pudimos enviar el enlace. Probá de nuevo.');
+    }
+  }
+
+  async function handleSocialSignedIn() {
+    await refresh();
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    router.replace('/' as any);
   }
 
   // Dark "uncharged" mask over a bright button — it recedes from the right as charge builds,
@@ -180,9 +203,28 @@ export default function LoginScreen() {
           />
         </View>
 
+        <TouchableOpacity
+          onPress={() => router.push({ pathname: '/(auth)/recuperar', params: { email: email.trim() } } as any)}
+          accessibilityRole="link"
+          activeOpacity={0.7}
+          style={{ alignSelf: 'flex-end', minHeight: 32, justifyContent: 'center' }}
+        >
+          <Text style={{ fontFamily: F.inter, fontSize: 13, color: C.textSecondary }}>¿Olvidaste tu contraseña?</Text>
+        </TouchableOpacity>
+
         {error && (
-          <View style={{ backgroundColor: 'rgba(255,61,90,0.1)', borderWidth: 1, borderColor: C.red, padding: 12 }}>
-            <Text style={{ fontFamily: F.mono, fontSize: 11, color: C.red }}>{error}</Text>
+          <View accessibilityRole="alert" style={{ backgroundColor: 'rgba(255,61,90,0.1)', borderWidth: 1, borderColor: C.red, padding: 12, gap: 10 }}>
+            <Text style={{ fontFamily: F.mono, fontSize: 11, lineHeight: 16, color: C.red }}>{error}</Text>
+            {unverified && (
+              <TouchableOpacity onPress={() => void handleResendVerification()} activeOpacity={0.7} style={{ minHeight: 32, justifyContent: 'center' }}>
+                <Text style={{ fontFamily: F.monoBold, fontSize: 11, color: C.textPrimary }}>REENVIAR ENLACE DE CONFIRMACIÓN</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+        {notice && (
+          <View accessibilityLiveRegion="polite" style={{ borderWidth: 1, borderColor: accent, padding: 12 }}>
+            <Text style={{ fontFamily: F.mono, fontSize: 11, lineHeight: 16, color: C.textPrimary }}>{notice}</Text>
           </View>
         )}
 
@@ -199,6 +241,8 @@ export default function LoginScreen() {
             </Text>
           </View>
         </TouchableOpacity>
+
+        <SocialButtons disabled={loading} onSignedIn={handleSocialSignedIn} onError={setError} />
       </Animated.View>
 
       {/* Switch to sign up */}

@@ -17,14 +17,28 @@ const VARIANTS = {
   development: { id: 'com.lalomaster.pulso', name: 'PULSO Dev', scheme: 'pulso-dev' },
 } as const;
 
+/**
+ * Google Sign-In needs its URL scheme (the reversed iOS client ID) on iOS
+ * only; Android works from the package + SHA-1 registered in Google Cloud.
+ * Without an iOS client the plugin is left out and the app hides the button.
+ */
+function googleSignInPlugin(): [string, { iosUrlScheme: string }] | null {
+  const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim();
+  if (!iosClientId) return null;
+  const prefix = iosClientId.replace(/\.apps\.googleusercontent\.com$/, '');
+  return ['@react-native-google-signin/google-signin', { iosUrlScheme: `com.googleusercontent.apps.${prefix}` }];
+}
+
 export default ({ config }: ConfigContext): ExpoConfig => {
   const variant = process.env.APP_VARIANT === 'production' ? VARIANTS.production : VARIANTS.development;
+  const google = googleSignInPlugin();
   return {
     ...config,
     name: variant.name,
     slug: config.slug ?? 'pulso',
     scheme: variant.scheme,
-    ios: { ...config.ios, bundleIdentifier: variant.id },
+    ios: { ...config.ios, bundleIdentifier: variant.id, usesAppleSignIn: true },
     android: { ...config.android, package: variant.id },
+    plugins: [...(config.plugins ?? []), 'expo-apple-authentication', ...(google ? [google] : [])],
   };
 };
