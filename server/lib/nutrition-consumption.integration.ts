@@ -95,3 +95,23 @@ test("a consumption mixing grams into a millilitre basis or with negative values
   assert.equal(bad.status, "rejected");
   assert.equal(bad.error, "invalid_nutrition_consumption");
 });
+
+test("a cached barcode answers without calling Open Food Facts and invalid codes never do", async () => {
+  const { foodBarcodeCache } = await import("@/db/schema");
+  const { lookupBarcode } = await import("@/lib/open-food-facts");
+  const barcode = "7501055303786";
+  await db.insert(foodBarcodeCache).values({
+    barcode,
+    found: true,
+    product: { product_name: "Refresco de cola", quantity: "600 ml", nutriments: { "energy-kcal_100g": 42, proteins_100g: 0, carbohydrates_100g: 10.6, fat_100g: 0 } },
+    fetchedAt: Date.now(),
+  }).onConflictDoNothing();
+
+  const found = await lookupBarcode(barcode);
+  assert.equal(found.status, "found");
+  if (found.status === "found") {
+    assert.deepEqual(found.draft.basis, { amount: 100, unit: "ml" });
+    assert.equal(found.draft.nutrients.kcal, 42);
+  }
+  assert.equal((await lookupBarcode("1234567890123")).status, "invalid");
+});

@@ -336,13 +336,25 @@ function DayView({ offerUndo }: { offerUndo: (message: string, action: () => voi
             )}
           </Card>
 
-          <PressableScale
-            onPress={() => setLogger({ mode: 'extra' })}
-            haptic="medium"
-            style={{ minHeight: 50, justifyContent: 'center', alignItems: 'center', backgroundColor: accent, marginBottom: 14 }}
-          >
-            <Text style={{ fontFamily: F.monoBold, fontSize: 11, letterSpacing: 0.6, color: C.onAccent }}>+ AGREGAR LO QUE COMISTE</Text>
-          </PressableScale>
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
+            <PressableScale
+              onPress={() => setLogger({ mode: 'extra' })}
+              haptic="medium"
+              containerStyle={{ flex: 1 }}
+              style={{ minHeight: 50, justifyContent: 'center', alignItems: 'center', backgroundColor: accent }}
+            >
+              <Text style={{ fontFamily: F.monoBold, fontSize: 11, letterSpacing: 0.6, color: C.onAccent }}>+ AGREGAR LO QUE COMISTE</Text>
+            </PressableScale>
+            {isToday && (
+              <PressableScale
+                onPress={() => router.push('/escanear')}
+                accessibilityLabel="Escanear código de barras o tabla nutricional"
+                style={{ minHeight: 50, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14, borderWidth: 1, borderColor: C.textSecondary }}
+              >
+                <Text style={{ fontFamily: F.monoBold, fontSize: 11, letterSpacing: 0.6, color: C.textPrimary }}>ESCANEAR</Text>
+              </PressableScale>
+            )}
+          </View>
 
           <View style={{ marginBottom: 14 }}>
             <HydrationPanel

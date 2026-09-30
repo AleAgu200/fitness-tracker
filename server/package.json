@@ -13,6 +13,7 @@
     "accounts:purge": "node --import tsx --env-file-if-exists=.env.local --env-file-if-exists=.env scripts/purge-deleted-accounts.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.129.0",
     "@tailwindcss/postcss": "^4.3.2",
     "@types/better-sqlite3": "^7.6.13",
     "better-auth": "^1.6.22",

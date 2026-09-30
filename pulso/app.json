@@ -98,7 +98,23 @@
           "androidAppId": "ca-app-pub-8542922303101158~6914743738"
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "PULSO usa la cámara para leer códigos de barras y tablas nutricionales. No guarda las fotos.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "PULSO usa la cámara para fotografiar tablas nutricionales. La foto no se guarda.",
+          "photosPermission": "PULSO accede a la foto que elijas de una tabla nutricional o de tu progreso."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
