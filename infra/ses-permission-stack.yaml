@@ -1,0 +1,38 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Lets the PULSO backend send transactional email (account verification and
+  password recovery, server/lib/email.ts) through SES. Kept out of the
+  pulso-backend stack on purpose: that stack resolves the latest AMI on every
+  update, so changing it would replace the instance and its PostgreSQL data.
+  This stack only attaches an inline policy to the existing instance role.
+
+Parameters:
+  InstanceRoleName:
+    Type: String
+    Description: Role of the pulso-backend instance profile (pulso-backend-InstanceRole-...).
+
+  SendingDomain:
+    Type: String
+    Default: pulsofitness.tech
+    Description: Verified SES domain identity the email is sent from.
+
+Resources:
+  SendTransactionalEmail:
+    Type: AWS::IAM::RolePolicy
+    Properties:
+      RoleName: !Ref InstanceRoleName
+      PolicyName: send-transactional-email
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          # Only from the verified domain. The configuration set is listed
+          # because the domain identity has a default one, which SES authorizes too.
+          - Effect: Allow
+            Action:
+              - ses:SendEmail
+            Resource:
+              - !Sub 'arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/${SendingDomain}'
+              - !Sub 'arn:aws:ses:${AWS::Region}:${AWS::AccountId}:configuration-set/*'
+            Condition:
+              StringLike:
+                ses:FromAddress: !Sub '*@${SendingDomain}'

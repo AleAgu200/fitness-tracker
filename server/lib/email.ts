@@ -1,14 +1,17 @@
+import { SendEmailCommand, SESv2Client } from "@aws-sdk/client-sesv2";
+
 /**
  * Transactional email (account verification and password recovery).
  *
  * The transport is chosen by EMAIL_TRANSPORT:
  * - unset: email is off. Recovery and verification stay disabled, so the app
  *   says they aren't available instead of claiming a message was sent.
+ * - "ses": Amazon SES v2. Credentials come from the default chain — the EC2
+ *   instance role in production (infra/ses-permission-stack.yaml), a local
+ *   AWS profile in development. EMAIL_FROM must be on the verified domain;
+ *   replies go to EMAIL_REPLY_TO, the support inbox.
  * - "log": prints the message to the server console. Development only — a
  *   recovery link in production logs would hand over the account.
- *
- * The SES transport is added once the sending domain is verified (see the
- * master plan, M1); until then nothing here reaches a real inbox.
  */
 
 export interface EmailMessage {
@@ -24,9 +27,32 @@ const logTransport: Transport = async message => {
   console.info(`[email:log] to=${message.to} subject="${message.subject}"\n${message.text}`);
 };
 
+function sesTransport(): Transport {
+  const client = new SESv2Client({ region: process.env.SES_REGION || process.env.AWS_REGION || "us-east-2" });
+  const from = process.env.EMAIL_FROM || "PULSO <no-reply@pulsofitness.tech>";
+  const replyTo = process.env.EMAIL_REPLY_TO || "pulso@pulsofitness.tech";
+  return async message => {
+    await client.send(new SendEmailCommand({
+      FromEmailAddress: from,
+      ReplyToAddresses: [replyTo],
+      Destination: { ToAddresses: [message.to] },
+      Content: {
+        Simple: {
+          Subject: { Data: message.subject, Charset: "UTF-8" },
+          Body: {
+            Text: { Data: message.text, Charset: "UTF-8" },
+            Html: { Data: message.html, Charset: "UTF-8" },
+          },
+        },
+      },
+    }));
+  };
+}
+
 function resolveTransport(): Transport | null {
   const kind = process.env.EMAIL_TRANSPORT?.trim().toLowerCase();
   if (!kind) return null;
+  if (kind === "ses") return sesTransport();
   if (kind === "log") {
     if (process.env.NODE_ENV === "production") {
       console.error("[email] EMAIL_TRANSPORT=log is refused in production; email stays disabled.");
@@ -44,9 +70,22 @@ export function emailEnabled(): boolean {
   return transport != null;
 }
 
+/**
+ * Sends and never throws: a failure is logged (without the message, which
+ * carries a one-time link) and swallowed. Otherwise a recovery request would
+ * fail only for addresses that have an account, revealing who uses PULSO.
+ */
 export async function sendEmail(message: EmailMessage): Promise<void> {
-  if (!transport) throw new Error("email_disabled");
-  await transport(message);
+  if (!transport) {
+    console.error("[email] send skipped: no transport configured");
+    return;
+  }
+  try {
+    await transport(message);
+  } catch (error) {
+    const e = error as { name?: string; message?: string };
+    console.error(`[email] send failed subject="${message.subject}": ${e.name ?? "Error"} ${e.message ?? ""}`);
+  }
 }
 
 function escapeHtml(text: string): string {
