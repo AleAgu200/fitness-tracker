@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { user } from "@/db/schema";
 import { auth } from "@/lib/auth";
+import { googleWebSignInEnabled } from "@/lib/auth-providers";
 import { initializeProfessionalAccount } from "@/lib/professional-profile";
 
 const signupSchema = z.object({
@@ -15,8 +16,13 @@ const signupSchema = z.object({
   signupCode: z.string().max(120).optional(),
 });
 
+/** What the portal's login/signup screen should offer. */
 export function GET() {
-  return Response.json({ requiresCode: Boolean(process.env.PROFESSIONAL_SIGNUP_CODE) });
+  return Response.json({
+    requiresCode: Boolean(process.env.PROFESSIONAL_SIGNUP_CODE),
+    // Sign-in only: a Google account must be linked from the profile first.
+    google: googleWebSignInEnabled(process.env),
+  });
 }
 
 export async function POST(request: Request) {

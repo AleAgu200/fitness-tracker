@@ -76,6 +76,9 @@ export async function signInWithIdToken(
   return call("social_failed", () => authClient.signIn.social({
     provider,
     idToken: { token: token.idToken, nonce: token.nonce, user: token.user },
+    // Athletes may create their account this way; the portal never does
+    // (server/lib/auth-providers.ts).
+    requestSignUp: true,
   }));
 }
 

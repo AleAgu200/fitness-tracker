@@ -17,20 +17,32 @@ export function parseList(value: string | undefined): string[] {
 }
 
 export interface SocialProviderConfig {
-  google?: { clientId: string[]; clientSecret: string };
-  apple?: { clientId: string; clientSecret: string; audience: string[] };
+  google?: { clientId: string[]; clientSecret: string; disableImplicitSignUp: true };
+  apple?: { clientId: string; clientSecret: string; audience: string[]; disableImplicitSignUp: true };
 }
 
+/**
+ * A provider only creates an account when the request asks for it
+ * (`requestSignUp`). The athlete app does; the professional portal doesn't,
+ * because professionals sign up through /api/portal/signup (role, discipline,
+ * organization, code) and a Google shortcut would skip all of that.
+ */
 export function socialProvidersFromEnv(env: Record<string, string | undefined>): SocialProviderConfig {
   const providers: SocialProviderConfig = {};
   const googleIds = parseList(env.GOOGLE_CLIENT_IDS);
   if (googleIds.length) {
-    // The secret only matters for a browser redirect flow, which PULSO doesn't use.
-    providers.google = { clientId: googleIds, clientSecret: env.GOOGLE_CLIENT_SECRET ?? "" };
+    // The secret is used by the portal's browser redirect; the app's ID-token
+    // sign-in works without it.
+    providers.google = { clientId: googleIds, clientSecret: env.GOOGLE_CLIENT_SECRET ?? "", disableImplicitSignUp: true };
   }
   const appleIds = parseList(env.APPLE_BUNDLE_IDS);
   if (appleIds.length) {
-    providers.apple = { clientId: appleIds[0], clientSecret: env.APPLE_CLIENT_SECRET ?? "", audience: appleIds };
+    providers.apple = { clientId: appleIds[0], clientSecret: env.APPLE_CLIENT_SECRET ?? "", audience: appleIds, disableImplicitSignUp: true };
   }
   return providers;
+}
+
+/** Google in a browser (the portal) needs the secret for the code exchange. */
+export function googleWebSignInEnabled(env: Record<string, string | undefined>): boolean {
+  return parseList(env.GOOGLE_CLIENT_IDS).length > 0 && Boolean(env.GOOGLE_CLIENT_SECRET);
 }

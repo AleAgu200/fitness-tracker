@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { startGoogleSignIn, takeGoogleError } from "./google";
 import { api, SessionUser } from "./lib";
 import { PortalContext } from "./portal-context";
 import { canAccessPortalPath, ProfessionalRole } from "@/lib/portal-access";
@@ -229,13 +230,31 @@ function Login({ onDone }: { onDone: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [charging, setCharging] = useState(false);
+  const [googleEnabled, setGoogleEnabled] = useState(false);
   const reducedMotion = useReducedMotion();
 
   useEffect(() => {
-    api<{ requiresCode: boolean }>("/api/portal/signup")
-      .then(result => setRequiresCode(result.requiresCode))
+    api<{ requiresCode: boolean; google?: boolean }>("/api/portal/signup")
+      .then(result => {
+        setRequiresCode(result.requiresCode);
+        setGoogleEnabled(Boolean(result.google));
+      })
       .catch(() => undefined);
+    // Coming back from Google with an error (unlinked account, cancelled…).
+    const googleError = takeGoogleError();
+    if (googleError) setError(googleError);
   }, []);
+
+  async function signInWithGoogle() {
+    setBusy(true);
+    setError(null);
+    try {
+      await startGoogleSignIn("/portal");
+    } catch {
+      setError("No se pudo abrir el acceso con Google. Probá de nuevo.");
+      setBusy(false);
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -334,6 +353,25 @@ function Login({ onDone }: { onDone: () => void }) {
         >
           {busy ? "PROCESANDO…" : mode === "login" ? "INGRESAR" : "CREAR MI ESPACIO"}
         </button>
+        {mode === "login" && googleEnabled && (
+          <>
+            <div className="my-4 flex items-center gap-3" aria-hidden>
+              <span className="h-px flex-1 bg-line" />
+              <span className="font-mono-app text-[9px] tracking-[1.4px] text-fg-ter">O</span>
+              <span className="h-px flex-1 bg-line" />
+            </div>
+            <button
+              type="button"
+              onClick={() => void signInWithGoogle()}
+              disabled={busy}
+              className="flex w-full cursor-pointer items-center justify-center gap-2.5 border border-[#747775] bg-white p-3 text-sm font-semibold text-[#1F1F1F] transition hover:bg-[#f2f2f2] disabled:opacity-60"
+            >
+              <span aria-hidden className="text-base font-bold">G</span>
+              Continuar con Google
+            </button>
+            <p className="mt-2 text-center text-[11px] leading-4 text-fg-ter">Primero vinculá Google desde tu Perfil.</p>
+          </>
+        )}
         <button type="button" onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(null); }} className="mt-4 w-full cursor-pointer py-2 text-sm text-fg-sec hover:text-volt">
           {mode === "login" ? "¿Primera vez? Crear cuenta profesional" : "Ya tengo una cuenta · Ingresar"}
         </button>

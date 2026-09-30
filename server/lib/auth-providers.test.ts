@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { parseList, socialProvidersFromEnv } from "./auth-providers";
+import { googleWebSignInEnabled, parseList, socialProvidersFromEnv } from "./auth-providers";
 
 describe("socialProvidersFromEnv", () => {
   it("enables nothing without identifiers", () => {
@@ -19,6 +19,20 @@ describe("socialProvidersFromEnv", () => {
     const { apple } = socialProvidersFromEnv({ APPLE_BUNDLE_IDS: "com.lalomaster.pulso,com.pulsofitness.pulsofitness" });
     assert.deepEqual(apple?.audience, ["com.lalomaster.pulso", "com.pulsofitness.pulsofitness"]);
     assert.equal(apple?.clientId, "com.lalomaster.pulso");
+  });
+});
+
+describe("sign-up and the portal", () => {
+  it("never creates accounts unless the request asks for it", () => {
+    const providers = socialProvidersFromEnv({ GOOGLE_CLIENT_IDS: "web", APPLE_BUNDLE_IDS: "com.lalomaster.pulso" });
+    assert.equal(providers.google?.disableImplicitSignUp, true);
+    assert.equal(providers.apple?.disableImplicitSignUp, true);
+  });
+
+  it("offers Google in the browser only with the secret", () => {
+    assert.equal(googleWebSignInEnabled({ GOOGLE_CLIENT_IDS: "web" }), false);
+    assert.equal(googleWebSignInEnabled({ GOOGLE_CLIENT_IDS: "web", GOOGLE_CLIENT_SECRET: "s" }), true);
+    assert.equal(googleWebSignInEnabled({ GOOGLE_CLIENT_SECRET: "s" }), false);
   });
 });
 
