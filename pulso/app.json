@@ -9,7 +9,6 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.lalomaster.pulso",
       "config": {
         "usesNonExemptEncryption": false
       }
@@ -21,8 +20,7 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false,
-      "package": "com.lalomaster.pulso"
+      "predictiveBackGestureEnabled": false
     },
     "web": {
       "output": "static",
