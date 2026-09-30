@@ -1,0 +1,301 @@
+---
+title: "PULSO — Plan maestro de lanzamiento en Honduras"
+brief: "Nutrición asistida, entrenamiento, planes Plus y publicación en iOS/Android; entregas basadas en el código existente."
+kind: "plan"
+status: "draft"
+localOnly: true
+---
+
+# PULSO — Plan maestro
+
+Publicar PULSO en App Store y Google Play para usuarios de Honduras, con una experiencia diaria convincente de nutrición y entrenamiento. El equipo es el propietario del proyecto y su agente de desarrollo. El volumen inicial de usuarios y la fecha de lanzamiento todavía no están fijados; se trabajará por entregas verificables, con infraestructura pequeña y créditos AWS donde sean aplicables.
+
+**Ejemplo del resultado:** una persona Plus abre Mis planes, genera una dieta adaptada a sus preferencias, la renombra y conserva su dieta anterior. Registra un producto escaneando su etiqueta, elige la porción y confirma los datos extraídos. Añade su botella de agua con un toque, entrena, recibe un logro real y comparte una imagen cuidada en WhatsApp o Instagram.
+
+Este es el documento rector desde el **29 de septiembre de 2026**. El índice `plans/README.md` identifica los planes de detalle y los históricos. Las decisiones explícitas del propietario están confirmadas; las soluciones técnicas y el orden son propuestas de ejecución. `draft` significa que el plan consolidado está disponible para revisión, no que deban reabrirse las decisiones confirmadas. Esta entrega modifica documentación; la implementación se hará por los hitos siguientes.
+
+## 1. Decisiones y alcance
+
+<Table id="master-decisions" columns={["Tema", "Decisión vigente", "Origen"]} rows={[
+  ["Mercado y objetivo", "Honduras; publicar en ambas tiendas; nutrición → entrenamiento → publicación como prioridades de producto.", "Confirmado 2026-09-29"],
+  ["Cuentas de publicación", "Play Console personal creado el 29/09/2026 y aún en verificación; Expo/EAS recién creado. Apple Developer pendiente. El desarrollo continúa sin esperar la verificación de Play.", "Confirmado por el propietario; accesos y verificación sin comprobar"],
+  ["Soporte", "Sitio help.pulsofitness.tech y correo pulso@pulsofitness.tech. Disponibilidad, DNS, recepción y envío todavía requieren validación.", "Destinos elegidos por el propietario"],
+  ["Identidad", "Conservar PULSO, sus colores, tipografía y Núcleo. Mejorar interacción, agua, widgets y colección de logros.", "Confirmado"],
+  ["Nutrición", "El usuario elige alimento y cantidad. Catálogo, etiqueta e IA asisten con nutrientes; edición manual queda como opción avanzada.", "Confirmado + precisión técnica"],
+  ["Escaneo", "Código de barras y foto/importación de etiqueta entran al lanzamiento, con revisión antes de guardar.", "Confirmado"],
+  ["IA y planes", "Generación accesible desde planes de dieta y entrenamiento; varias alternativas Plus, preferencias editables, renombrar IA y duplicar.", "Confirmado"],
+  ["Evaluación IA", "Evaluar planes y alimentos y proponer mejoras explicadas; aplicar cambios exige una acción del usuario.", "Confirmado + regla de aplicación"],
+  ["Monetización", "Suscripción Plus y anuncios. Plus sin cupos comerciales de uso; US$3 al mes propuestos, con sostenibilidad por validar. La app debe mantenerse con sus ingresos, sin techo fijo de gasto indicado.", "Restricciones confirmadas; viabilidad pendiente"],
+  ["Edad de acceso", "Lanzamiento solo para adultos, desde los 18 años cumplidos. No incluir usuarios de 16–17 años en esta versión.", "Confirmado"],
+  ["Respaldo", "Automático con Plus; recuperar una copia existente es gratis. Al vencer Plus se conserva una sola copia completa válida.", "Confirmado"],
+  ["Retención", "Un mes para datos sin finalidad autorizada, notas profesionales y copias operativas. M6 concreta los disparadores; la copia personal retenida tiene política independiente.", "Plazo confirmado; mecánica propuesta en M6"],
+  ["Profesionales", "Revisión de check-ins y seguimiento de atletas con poca actividad registrada son el núcleo del portal.", "Confirmado"],
+  ["Social", "Compartir resultados visuales en Instagram y WhatsApp, con revisión de datos visibles.", "Confirmado"],
+  ["Agenda", "Profesional propone; atleta confirma o pide cambio; recordatorios. Se programa después del lanzamiento inicial.", "Flujo confirmado; fase propuesta"],
+  ["Fotos de progreso", "Subida y posible evaluación IA se investigarán en una versión futura.", "Confirmado"],
+  ["Organizaciones y agencia", "Varias organizaciones, consentimientos separados y un plan activo por disciplina elegido por el atleta.", "Decisión vigente 2026-09-22/27"]
+]} />
+
+**Lanzamiento:** acceso fiable, correo y login social; nutrición real y líquidos; escaneo; planes IA utilizables; evaluación asistida básica; entrenamiento con widgets mejorados; logros y exportación social; respaldo/restauración; supervisión esencial; compras/anuncios y preparación de tiendas.
+
+**Después del lanzamiento:** agenda, documentos e informes profesionales PDF/CSV; fotos de progreso y su investigación IA; automatizaciones profesionales avanzadas. Duelos privados, rankings, grupos, pagos entre profesional y atleta, videollamada, reconocimiento de platos por foto y múltiples dispositivos escritores simultáneos quedan diferidos. No son requisitos de salida ni se anuncian como disponibles.
+
+**Localización:** español natural para Honduras, alimentos y marcas locales en las pruebas, zona `America/Tegucigalpa` como referencia inicial respetando la zona del usuario. Se conservan preferencias de unidades; el precio se muestra con moneda y formato entregados por la tienda. Distribución inicial limitada a Honduras, sin inferir residencia a partir de IP.
+
+## 2. Estado real revisado
+
+Inspección estática del repositorio al 2026-09-29; no certifica funcionamiento en producción ni en dispositivos. “Implementado” describe código conectado, mientras que “validado” exigirá evidencia de una prueba real.
+
+<Table id="master-current-state" columns={["Área", "Estado", "Evidencia y trabajo restante"]} rows={[
+  ["Auth", "Parcial", "server/lib/auth.ts: email/contraseña; pulso/src/lib/auth.ts y (auth)/login.tsx: clasificación limitada de errores. Faltan proveedores sociales, verificación y recuperación por correo."],
+  ["Generación IA", "Implementada; acceso poco visible", "Configuración → Regenerar plan con IA reutiliza (onboarding). Genera dieta y entrenamiento juntos. Falta entrada por disciplina en Mis planes y conservar varias generaciones."],
+  ["Duplicar", "Implementado; acceso poco visible", "mis-planes.tsx: Nuevo plan → Empezar desde → Copiar. Añadir acción directa por plan y crear copia inactiva hasta confirmación."],
+  ["Renombrar", "Parcial", "mis-planes.tsx permite nombres de planes propios, no originales IA. Ampliar permiso para IA del atleta conservando su origen."],
+  ["Nutrición", "Parcial", "db/schema/nutrition.ts y dieta.tsx: estados y totales planificados; una sustitución conserva macros del plan. Faltan componentes consumidos y snapshots."],
+  ["Líquidos", "Parcial", "db/nutrition.ts y dieta.tsx: agregado por vasos de 350 ml y límite visual de 10 vasos. Faltan eventos en ml, recipientes y contrato de sync de bebidas."],
+  ["Micronutrientes y escaneo", "Pendiente", "Catálogo actual kcal/P/C/G; los planes de nutrición tienen prototipos, sin OCR/barcode productivo."],
+  ["Widgets", "Implementados con diferencias", "iOS: src/widgets/entreno-widget-registry.ios.tsx abre enlaces a la app. Android: modules/pulso-widget tiene controles nativos de descanso. Mejorar ambos, no reconstruir Android desde cero."],
+  ["Logros", "Parcial", "db/seed.ts y db/achievements.ts: seis logros; Semana completa usa cinco sesiones acumuladas y adherencia nutricional requiere corregir denominadores."],
+  ["Compartir", "Equipo implementado; redes pendiente", "db/pulse.ts comparte tarjetas mediante consentimiento. expo-sharing está instalado; falta exportación visual de resultados y Wrapped."],
+  ["Portal", "Parcial", "checkins.ts, attention.ts y progress-tab.tsx ya tienen seguimiento y rangos 7/28/90. Faltan gráficas completas, reglas de inactividad de entrenamiento y UI de notas."],
+  ["Datos y cuenta", "Exportación/borrado implementados; restauración pendiente", "lib/account.ts exporta JSON y existen account/deletion y purga. Falta recuperación íntegra de historial y probar el ciclo real de borrado."],
+  ["Tiendas", "Configuración base; Play personal pendiente de verificación y EAS declarado", "eas.json tiene development/preview/production. Play fue creado el 29/09/2026, aún está en verificación; EAS recién creado. Apple Developer pendiente. No se verificaron permisos, firmas, productos ni envíos." ]
+]} />
+
+También se revisará como bloqueo de salida la diferencia de filtrado de evidencia de señales entre `server/lib/attention.ts` y `server/lib/overview.ts`: el expediente debe volver a aplicar consentimiento y organización. El hallazgo proviene del código y requiere prueba de regresión; no se afirma que haya ocurrido una exposición en producción.
+
+## 3. Entregas y dependencias
+
+Un solo frente principal de implementación a la vez. Las gestiones de cuentas, correo y pruebas de tiendas arrancan pronto por sus dependencias externas. No se prometen semanas de desarrollo sin medir el primer hito.
+
+<Table id="master-milestones" columns={["Hito", "Entrega verificable", "Depende de", "Salida / prioridad"]} rows={[
+  ["M0", "Base reproducible, inventario de servicios y ruta de prueba en iPhone; cuentas de publicación identificadas.", "Ninguna", "Primero; habilita validación real."],
+  ["M1", "Auth clara: errores, recuperación, verificación, Google y Apple.", "M0; dominio/correo/OAuth", "Bloqueo de publicación; probar temprano."],
+  ["M2", "Modelo de consumo y líquidos + migración sin pérdida + recibos idempotentes.", "M0", "Prioridad nutrición; base de M3/M4/M6."],
+  ["M3", "Hoy/Plan/Mis alimentos; recipientes; código y etiqueta; comparación y simulación.", "M2; proveedor probado", "Recorrido diario de nutrición completo."],
+  ["M4", "Biblioteca IA por disciplina; renombrar/duplicar; varias generaciones; evaluación y recomendaciones.", "M1/M2; proveedor y costo medido", "Valor Plus visible en dieta y entreno, sin cupos comerciales."],
+  ["M5", "Entrenamiento pulido; widgets de entreno y agua; colección de logros; compartir imágenes.", "M2/M3/M4", "Experiencia física en iPhone y Android."],
+  ["M6", "Respaldo/restauración y supervisión esencial fiables; revisión de permisos y semánticas.", "M2/M4", "Ningún dato perdido ni ausencia inferida sin evidencia."],
+  ["M7", "Compras/anuncios, beta completa, fichas, privacidad, soporte y envío a ambas tiendas.", "M1–M6; cuentas externas", "Lanzamiento Honduras tras cumplir criterios."],
+  ["M8", "Agenda, notas extendidas, documentos e informes profesionales.", "M7; uso real", "Posterior; no bloquea primera publicación."],
+  ["M9", "Fotos de progreso y evaluación IA acotada; investigación de experiencia social adicional.", "M7; protocolo y consentimiento de fotos", "Futuro; sin promesas de precisión corporal."]
+]} />
+
+<Diagram id="master-dependencies" caption="El modelo nutricional alimenta registro, IA, widgets y respaldo; publicación exige cerrar las ramas.">
+
+```html
+<div class="diagram-panel" data-rough><section class="diagram-card"><strong>Preparación</strong><div class="diagram-node">M0 · dispositivos y cuentas</div><div class="diagram-node">M1 · acceso y correo</div><p class="diagram-muted">Cuentas, SES y testers avanzan desde el inicio.</p></section><section class="diagram-card"><strong>Datos compartidos por las funciones</strong><div class="diagram-node">M2 · consumo + bebidas + sync</div><p class="diagram-muted">Snapshots, unidades, fechas y versiones coherentes.</p></section><section class="diagram-card"><strong>Experiencia diaria</strong><div class="diagram-node">M3 · nutrición y escaneo</div><div class="diagram-node">M4 · planes y asistencia IA</div><div class="diagram-node">M5 · entreno, widgets y compartir</div></section><section class="diagram-card"><strong>Salida</strong><div class="diagram-node">M6 · recuperación y supervisión</div><div class="diagram-node">M7 · beta → tiendas Honduras</div><p class="diagram-muted">M8 agenda y M9 fotos continúan después.</p></section></div>
+```
+
+```css
+.diagram-panel{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.diagram-card{padding:16px;border:1px solid var(--wf-line);background:var(--wf-card);display:flex;flex-direction:column;gap:10px}.diagram-node{padding:10px;background:var(--wf-paper);border:1px solid var(--wf-line)}.diagram-muted{color:var(--wf-muted);margin:0}
+```
+
+</Diagram>
+
+## 4. M0–M1 · Acceso, correo y pruebas desde Windows
+
+Reutilizar Better Auth y su esquema; no migrar autenticación a otro servicio para añadir Google. Reproducir primero el error observado en desarrollo y comparar con una build de distribución. Distinguir overlay de desarrollo, error de servidor y mensaje mostrado al usuario.
+
+**Cuentas:** Play Console es una cuenta personal creada el **29/09/2026** y sigue en verificación. Expo/EAS también fue creado recientemente. El desarrollo, pruebas locales, builds EAS y preparación de la ficha continúan sin esperar la verificación de Play; no se programa ni se promete el envío Android hasta que la cuenta quede verificada. Una vez habilitada, M0 confirma el acceso, la propiedad de la app y los permisos sin crear cuentas duplicadas. Por ser personal y posterior al 13/11/2023, la ruta de producción incluye prueba cerrada con al menos 12 testers inscritos de forma continua durante 14 días y posterior solicitud de acceso a producción; comenzar ese periodo solo cuando Play permita configurar la prueba. [Requisito oficial de Google Play](https://support.google.com/googleplay/android-developer/answer/14151465?hl=es).
+
+Verificar sesión EAS, permisos y correspondencia con el proyecto de `eas.json`; la disponibilidad declarada no certifica builds ni envíos. Apple Developer requiere alta y membresía antes de la distribución iOS firmada; el propietario completa contratación/identidad cuando corresponda. Preparación de código, documentación y pruebas locales puede avanzar mientras se resuelve Apple.
+
+**Soporte elegido:** usar `https://help.pulsofitness.tech` para ayuda, política de privacidad, términos y solicitud de eliminación de cuenta; rutas propuestas `/privacy`, `/terms` y `/delete-account`, todavía no declaradas como desplegadas. Contacto visible y receptor de respuestas: `pulso@pulsofitness.tech`. Verificar control de DNS y funcionamiento HTTPS; validar el remitente en `pulsofitness.tech` y envío/recepción reales antes de habilitar recuperación. El subdominio web de ayuda y el dominio del correo cumplen funciones diferentes. La respuesta del propietario fija los destinos, no certifica que el buzón o SES estén configurados.
+
+- Centralizar códigos estables y mensajes españoles: credenciales incorrectas, correo no verificado, sesión vencida, sin conexión, límite de intentos y fallo temporal. Una respuesta 422 no significa siempre cuenta existente. Los errores recuperables ofrecen acción y mantienen lo escrito sin volver a exponer la contraseña.
+- Implementar verificación de correo, reenvío limitado y recuperación con enlaces de un solo uso y expiración. Unificar respuestas que eviten revelar si una cuenta existe. Probar enlaces caducados y abiertos en otro dispositivo.
+- Google en ambos sistemas; Apple en iOS como alternativa equivalente de privacidad para login social, conforme a la sección 4.8 de [Apple](https://developer.apple.com/app-store/review/guidelines/#login-services). Vincular identidades mediante una sesión autenticada o prueba de propiedad; no fusionar cuentas únicamente porque el texto del correo coincide. Probar Apple con correo oculto y compras asociadas al usuario correcto.
+- Preferir SES para correo transaccional sobre AWS existente. Preparar dominio remitente, DKIM/SPF/DMARC, entrega/rebotes y dirección de soporte que pueda recibir respuestas. SES no es por sí solo un buzón de soporte. El envío a usuarios reales requiere [salir del sandbox SES](https://docs.aws.amazon.com/ses/latest/dg/request-production-access.html).
+- En sesión expirada se pide reautenticación sin borrar SQLite. La política de acceso local conserva el uso offline del dueño del dispositivo; cerrar sesión o cambiar de cuenta aísla datos, outbox, widgets y archivos temporales de cada usuario.
+
+**Prueba iOS:** reutilizar `pulso/eas.json`; EAS compila y envía desde Windows y el propietario instala en su iPhone. Ruta: development build para iteración → TestFlight interno → grupo externo → revisión de tienda. Se necesita cuenta Apple Developer y firma; no hace falta comprar un Mac. Expo Go no sustituye la prueba de widgets, compras y otros módulos nativos. [EAS y TestFlight](https://docs.expo.dev/submit/testflight/).
+
+**Android:** mientras Play sigue en verificación, usar emulador en Windows y distribución de desarrollo/preview autorizada por EAS para validar el binario; no afirmar que eso equivale a una prueba de Play. Cuando Play habilite la cuenta, completar la configuración, abrir una prueba cerrada y mantener al menos 12 testers inscritos de forma continua durante 14 días antes de solicitar producción. Preparar desde ahora el guion de pruebas y candidatos, sin contarlos hasta que puedan inscribirse en la prueba cerrada. No sustituir esta prueba Android con la del iPhone. [Requisito oficial de Google Play](https://support.google.com/googleplay/android-developer/answer/14151465?hl=es).
+
+**Archivos:** `server/lib/auth.ts`, `pulso/src/lib/auth.ts`, `pulso/src/lib/auth-client.ts`, `pulso/src/context/session.tsx`, `pulso/src/app/(auth)/`, `server/app/api/auth/[...all]/route.ts`, `pulso/eas.json`, `pulso/app.json`. Añadir servicio de correo y pantallas de recuperación como piezas nuevas.
+
+**Salida:** registro → verificación → login → contraseña olvidada → nueva contraseña; cancelación social, login social y sesión vencida tienen estados comprensibles. El error de desarrollo reportado queda reproducido o explícitamente documentado como no reproducido, con evidencia de la build probada.
+
+## 5. M2–M3 · Nutrición que no exige conocer los nutrientes
+
+La entrada primaria será alimento + cantidad/porción o lectura de etiqueta. Catálogo y etiqueta aportan datos; IA interpreta el texto, identifica componentes y explica opciones. El cálculo de porciones y totales es determinista. Una sugerencia sin fuente suficiente se muestra como estimación pendiente de revisión; micronutrientes desconocidos permanecen desconocidos. Premium reduce trabajo de captura, sin convertir una inferencia en una medición.
+
+### Modelo y migración
+
+Reutilizar `meal_plans`, slots, catálogo, SQLite y outbox. Añadir registros de consumo independientes de los slots, con fecha local/zona y snapshot de producto/componentes/cantidad. Conservar `source`, versión de fuente, procedencia y nivel de completitud por nutriente. Energía en kcal; macros/fibra/azúcares/saturadas en g; sodio y otros minerales en mg; vitaminas con unidad explícita por clave. Las porciones requieren equivalencia conocida a g o ml; densidad desconocida impide convertirlos entre sí.
+
+<AnnotatedCode id="nutrition-contract" filename="Contrato propuesto para consumo y bebidas; pendiente de implementar" language="ts" code={"type NutrientValue = { value: number | null; unit: 'kcal' | 'g' | 'mg' | 'ug'; source: string };\ntype Consumption = {\n  id: string; athleteId: string; localDate: string; timezone: string;\n  occurredAt: number; version: number; supersedesId: string | null;\n  planSlotId: string | null; amount: number; unit: 'g' | 'ml';\n  nutrients: Record<string, NutrientValue>;\n  beverage: { volumeMl: number; plainWater: boolean; containerId: string | null } | null;\n};"} annotations={[
+  {lines:"1",label:"Fuente y ausencia",note:"Null no equivale a cero. Estimaciones y valores de etiqueta se distinguen."},
+  {lines:"3-5",label:"Historia estable",note:"El registro pertenece al atleta y a una fecha; quitar un plan no elimina el consumo."},
+  {lines:"7",label:"Una sola entrada",note:"Una bebida puede sumar volumen y nutrientes sin duplicación."}
+]} />
+
+Versionar contratos de sync en ambos extremos. La transacción local incluye consumo y outbox; reintentar mantiene el mismo ID. Editar, sustituir y deshacer actualizan una sucesora o tombstone de la misma operación lógica. Los agregados de Hoy, progreso, logros, Wrapped y portal se derivan de esta fuente.
+
+El contrato de implementación ampliará el esquema ilustrativo: registros heredados llevan `timePrecision=date_only`, `occurredAt=null` y zona/cantidad física nulas cuando sean desconocidas. Cada componente nuevo conserva nombre, versión de fuente, base física, cantidad consumida y nutrientes por base. `Consumption.nutrients` representa totales consumidos. Un agregado heredado conserva sus totales y procedencia aunque no tenga componentes. Ninguna migración fabrica horas o cantidades para satisfacer campos obligatorios.
+
+Migrar comidas antiguas como estimaciones basadas en el plan, preservando cantidades conocidas; nunca inventar ingredientes. Migrar vasos heredados al volumen equivalente con marca `legacy_aggregate`, sin inventar hora ni recipiente. Archivar slots/planes conserva el historial. Prueba previa sobre copia de base; cambios aditivos y bandera de activación. Rollback desactiva nueva UI/escrituras y mantiene las nuevas filas; no ejecuta una migración destructiva que pierda consumos.
+
+### Interacción y captura
+
+- **Hoy:** fecha concreta, consumos, acciones de agregar/escaneo, comida confirmable y ajustes por componente. **Plan:** fechas y semana habitual, excepciones por fecha. **Mis alimentos:** guardados/recientes/favoritos offline. Guardar y planificar no registran consumo.
+- **Líquidos:** recipientes personales con capacidad y bebida habitual; tocar añade esa combinación con animación de llenado, háptico y Deshacer. Pulsación secundaria abre cantidad/bebida; también existe botón visible accesible. Volumen total y agua sola separados. Meta configurable, con registro permitido después de alcanzarla. Eliminar límite artificial de diez vasos.
+- **Escaneo:** cámara de código o foto/importación recortada de etiqueta; borrador con porción, fuente y campos dudosos. Revisión simple por defecto y edición detallada opcional. Etiquetas español/inglés, kcal/kJ, varias columnas y 100 g/ml. Denegación de cámara y falta de red tienen salida manual/biblioteca.
+- **Código:** proponer adaptador de Open Food Facts con cache de producto, atribución, límites y revisión de licencia; medir cobertura con productos hondureños antes de depender de él. Un código sin resultado abre lectura de etiqueta. No publicar datos privados o imágenes del usuario en ese catálogo. [API y condiciones de reutilización](https://openfoodfacts.github.io/documentation/docs/Product-Opener/api/).
+- **Etiqueta:** probar extracción estructurada por modelo con visión en Bedrock, condicionada a disponibilidad y créditos del proyecto. Comparar exactitud/costo con una muestra local antes de fijar modelo. PULSO no conserva la foto original después del procesamiento; no prometer retención cero del proveedor hasta verificar sus condiciones. No enviar imágenes en logs ni reintentarlas sin control.
+- **Comparar/simular:** bases físicas compatibles; cantidades reales claramente diferenciadas; hoy parte de consumo y días futuros de planificación. La simulación no escribe hasta confirmar destino y no suma dos veces plan/comida confirmada.
+
+**Archivos:** `pulso/src/db/schema/nutrition.ts`, `pulso/src/db/nutrition.ts`, `pulso/src/lib/foods.ts`, `pulso/src/components/food-picker.tsx`, `meal-plan-form.tsx`, `pulso/src/app/(tabs)/dieta.tsx`, `pulso/src/context/app-state.tsx`, ambos contratos de sync y `server/db/schema/library.ts`. Nuevas entidades/servicios de consumo, recipientes y extracción llevarán migraciones locales y de servidor emparejadas.
+
+**Salida:** una leche registrada actualiza una vez nutrientes y ml; editar o deshacer revierte ambos; borrar el plan no borra el consumo. Una persona Plus puede registrar un producto conocido o su etiqueta sin teclear macros/micros; los campos no disponibles se muestran honestamente. Probar alimentos locales y 30 etiquetas variadas como muestra inicial propuesta, con cero errores silenciosos de unidad en el conjunto de aceptación.
+
+## 6. M4 · Planes e IA dentro del lugar donde se usan
+
+Reutilizar el cuestionario, trabajos de generación, validación de payload y bibliotecas existentes. Revisar el control de cuotas existente para que Plus no tenga cupos comerciales por periodo; conservar autorización y controles técnicos de seguridad. `Mis planes` conserva pestañas ENTRENO/DIETA y muestra **Generar con IA**, **Crear manualmente**, **Duplicar**, **Renombrar** y **Evaluar** donde corresponde.
+
+Generar permite elegir disciplina, revisar preferencias previas y cambiar objetivo, días, equipo, restricciones, alimentos y horarios sin reiniciar el onboarding de cuenta. Revisar restricciones persistentes en cada solicitud. Mostrar elegibilidad Plus y disponibilidad del servicio antes del cuestionario, sin contador de generaciones restantes; progreso recuperable del trabajo y opción de volver mientras procesa.
+
+Cada generación aceptada crea un plan separado con `origin=ai`, `generationJobId` y preferencias de esa versión; el anterior sigue guardado. El usuario elige si activa el nuevo. `Duplicar` crea una copia propia con referencia al origen, permite nombre y edición inmediata y no cambia el activo sin confirmación. Renombrar un plan IA del atleta modifica su nombre local, no sus contenidos ni su procedencia. Originales profesionales conservan autoría; para editarlos se usa copia propia. Una sesión en curso conserva su versión de plan hasta terminar.
+
+### Evaluar y recomendar
+
+Evaluar dieta/alimentos muestra relación con el objetivo declarado, cantidades, variedad y datos disponibles; evaluar entrenamiento considera días, equipo, distribución y carga registrada. El resultado incluye evidencia, qué datos faltan y propuestas concretas. Ofrece revisar/aplicar una copia o ajuste; no modifica consumos pasados ni publica cambios en el plan profesional. Se calcula con la versión del plan consultado; si cambió, la aplicación exige recalcular o revisar el conflicto.
+
+La IA no diagnostica deficiencias, lesiones ni composición corporal. Restricciones/alergias requieren datos adecuados: mejorar las etiquetas del catálogo y tratar ingredientes desconocidos como no verificados; el filtro actual por nombres no demuestra ausencia de alérgenos. El sistema muestra límites cuando no puede evaluar, sin un puntaje de salud inventado.
+
+### Contratos y costos
+
+Extender los trabajos de `server/lib/generation/jobs.ts` y rutas `api/plans/generation-jobs` / `prepare-and-generate`: propósito `generate | evaluate | adjust`, disciplina, versión de entrada y clave idempotente. Respuesta con ID/estado recuperable; schema y IDs validados antes de persistir. Reintentos reutilizan el mismo trabajo y resultado disponible; registrar por separado el costo real de cada intento al proveedor. Fallos definitivos liberan el bloqueo de concurrencia. Activación separada del cálculo y transaccional.
+
+El servidor decide permisos Plus y controles técnicos; el cliente muestra el mismo contrato. Plus no tiene cupos diarios o mensuales de generación, evaluación ni extracción de etiquetas. Separar métricas de costo por esas operaciones, no saldos comerciales. Copiar/renombrar y cálculos locales no llaman al modelo. Mantener una tarea simultánea por atleta, tamaño de entrada/salida acotado, reintentos finitos, deduplicación y cache por contenido/versión cuando sea seguro. Son protecciones de seguridad/capacidad, no un cupo oculto; explicar esperas y fallos sin inventar generaciones agotadas. Medir la sostenibilidad del servicio sin cupos antes del lanzamiento; no prometer capacidad instantánea o disponibilidad absoluta.
+
+**Archivos:** `pulso/src/app/mis-planes.tsx`, `(onboarding)/review.tsx`, `generating.tsx`, `results.tsx`, `pulso/src/db/plan.ts`, `nutrition.ts`, `server/lib/generation/{jobs,schema,calculator,assemble,repair,openrouter}.ts`, `server/lib/entitlements.ts`, `pulso/src/components/paywall.tsx`. Adaptador Bedrock nuevo tras validar viabilidad; mantener la separación entre estructura sugerida y cálculo determinista.
+
+**Salida:** Plus genera dos entrenos diferentes y dos dietas, cambia preferencias, renombra y duplica cada tipo sin perder anteriores. Probar que generaciones sucesivas no encuentran un cupo comercial. Fallar/reintentar/reabrir un trabajo no duplica el plan ni encola duplicados; medir costos de reintentos. El caso sin Plus conserva sus planes y explica restricciones antes de hacer trabajo.
+
+## 7. M5 · Entrenamiento, widgets, logros y redes
+
+### Widgets interactivos
+
+“Widgets” abarca las superficies rápidas dentro de la app y las del sistema. Mantener identidad PULSO y dar respuesta visible a cada toque. Reutilizar `widget-bridge.ts`, registros iOS y módulo Android existente.
+
+El widget de entreno muestra ejercicio, siguiente paso y descanso; permite ajustar/omitir descanso, y registrar una serie solo cuando hay valores explícitos y sesión válida. El de líquidos usa recipientes favoritos, último registro y Deshacer. Abrir la app queda como acción secundaria para editar detalles o resolver estados que el sistema no permite manejar en segundo plano.
+
+Primero hacer una prueba técnica iOS en dispositivo con `expo-widgets`: documentar qué acción corre con la app activa, en segundo plano y terminada, más las restricciones del sistema. El SDK ofrece eventos de interacción; eso por sí solo no garantiza mutaciones duraderas con la app cerrada. [Widgets Expo SDK 56](https://docs.expo.dev/versions/v56.0.0/sdk/widgets/).
+
+Toda acción llevará ID, usuario, sesión/recipiente, versión y timestamp; una cola duradera en almacenamiento compartido se drena transaccionalmente en la base del atleta. No confirmar visualmente un registro que solo exista en memoria. Expirar comandos viejos de sesión, impedir duplicados y limpiar la superficie compartida al cambiar de cuenta. Si hace falta extensión nativa para acciones cerradas, dimensionarla en M0/M5; el requisito mínimo es registro confirmado al ejecutarse, no una promesa de segundo plano sin probar.
+
+La prueba técnica iPhone de M0 fija versiones de OS y estados soportados. Criterio propuesto en ambos sistemas: añadir/deshacer agua y ajustar/omitir descanso directamente desde el widget con app en segundo plano. Probar también app terminada, reinicio y dispositivo bloqueado. Si requiere extensión nativa o un estado no es viable, registrar la limitación y acordar el alcance antes de cerrar M5; cambiar publicidad no sustituye la interacción solicitada.
+
+### Logros con variedad y reglas correctas
+
+Reutilizar catálogo y motor actual. Corregir primero Semana completa y denominadores de nutrición. Propuesta inicial: **20 logros en cinco familias** (inicio, constancia, progreso personal, variedad y regreso), con próximos objetivos visibles y niveles. Datos de ejemplo del canvas no representan logros ganados. No premiar beber más allá de una meta, comer menos, entrenar con dolor o aumentar carga sin contexto. Usuario nuevo ve una colección navegable con condiciones claras, sin premios ficticios.
+
+Reglas versionadas con denominador/periodo y concesión idempotente. Los logros de entrenamiento usan sesiones reales; los nutricionales dependen de M2. Revisar cada logro heredado afectado por un error: recalcular conservando trazabilidad, sin reutilizar silenciosamente el mismo ID para un significado distinto.
+
+### Compartir algo que valga la pena
+
+Crear exportación **9:16** para historias y **4:5** para publicaciones, además de las tarjetas internas. Resultado de sesión, récord, logro y Wrapped con marca discreta PULSO, tipografía legible, selección de datos y previsualización. Peso, molestias y datos identificatorios ocultos inicialmente. Compartir no concede acceso al profesional.
+
+Reutilizar `expo-sharing`; añadir render a imagen. Abrir la hoja nativa para Instagram/WhatsApp o guardar imagen, con salida si la aplicación destino no está instalada. No prometer publicación directa ni medir la apertura de la hoja como publicación confirmada. El Wrapped exporta páginas elegidas; cerrar o cancelar no sube nada. Limpiar archivos temporales.
+
+**Archivos:** `pulso/src/widgets/`, `pulso/src/lib/widget-bridge.ts`, `pulso/modules/pulso-widget/android/`, `pulso/src/db/{achievements,seed,pulse}.ts`, `pulso/src/app/{progreso,resultado-sesion,resumen-semanal}.tsx`, `pulso/src/components/pulse/`. Mantener registro offline, contraste, texto ampliado y movimiento reducido.
+
+**Salida:** doble toque/reapertura de widget no duplica registros; cambio de cuenta no filtra datos; Android e iOS se prueban con las acciones prometidas. Veinte reglas trazables y renders compartibles revisados en Instagram/WhatsApp del iPhone y al menos un Android.
+
+## 8. M6 · Respaldo y supervisión
+
+### Respaldo independiente del profesional
+
+Reutilizar cuenta, outbox y control de dispositivo escritor. El consentimiento para respaldo propio es independiente de compartir categorías con organizaciones. Si el atleta autoriza respaldo y tiene Plus, incluir historial, planes propios/IA, consumos, bebidas, preferencias, tarjetas y logros. Excluir secretos, tokens y fotos futuras. Un manifiesto versionado incluye categorías, cobertura, checksum y fecha de última copia completa.
+
+Política propuesta: una copia completa diaria cuando la app tenga oportunidad de sincronizar y una copia al solicitarla, con hasta siete versiones completas mientras hay Plus; el sistema móvil no garantiza ejecución exacta a una hora. Mostrar pendiente/parcial/completa, última fecha y elementos excluidos. Una copia incompleta no sustituye una válida.
+
+Al vencer Plus, se detienen nuevos respaldos automáticos y queda **la copia completa válida más reciente**, congelada y restaurable/exportable gratis. La poda de versiones anteriores se ejecuta únicamente después de verificar la copia conservada y mostrar la política; no elimina datos del teléfono. La copia retenida se conserva hasta borrado explícito del respaldo o cuenta. La revocación al coach no la borra. Si no hay copia válida, se informa sin fingir respaldo.
+
+Restaurar reclama explícitamente dispositivo escritor, descarga/verifica y aplica en una base temporal antes de activar. Repetir restaura los mismos IDs. En dispositivo con datos nuevos, conservarlos y ofrecer combinación por ID/versión con conflictos explícitos; no reemplazar automáticamente la base. La restauración no reactiva consentimientos revocados ni puede resucitar una cuenta purgada. Recuperar una copia válida es gratuito incluso con Plus vencido.
+
+El manifiesto incluye revisión y cursor de servidor. Antes de habilitar escrituras se reconcilia la base restaurada con cambios remotos y tombstones posteriores: borrados y permisos actuales prevalecen sobre el snapshot. Restaurar no reenvía registros antiguos como nuevas mutaciones. Datos privados respaldados no se convierten en compartidos. Prueba obligatoria: copia congelada con Plus vencido, cambios y borrados remotos posteriores, y dos restauraciones consecutivas sin resurrección ni duplicación.
+
+Exportación JSON gratuita existente se mantiene; validar que refleje datos locales y remotos alcanzables e informe ausencias. Borrado de cuenta debe abarcar nuevas copias, consumos, imágenes temporales y trabajos de IA según la política vigente de gracia/purga. Conservar solo auditoría mínima realmente desvinculada; no retener payloads personales bajo el nombre de auditoría. Probar eliminación en un entorno de prueba, nunca sobre usuarios reales para validar.
+
+Distinguir copia personal, réplica compartida por categoría y respaldos operativos. Revocar organización A bloquea inmediatamente sus lecturas y preserva acceso autorizado de B y respaldo personal. **Retención confirmada: un mes** para datos sin finalidad autorizada, notas profesionales y copias operativas. Mecánica propuesta de M6: un mes calendario, calculado en UTC y ajustado al último día válido si el mes siguiente no tiene ese día. Para la réplica sin finalidad, contar desde la pérdida de la última finalidad autorizada; para notas profesionales, desde que termina la finalidad autorizada de esa relación. Las notas no quedan accesibles al profesional durante esa espera tras revocación. Para cada copia operativa, contar desde su creación; copiarla o restaurarla no reinicia su vencimiento ni el de datos pendientes de purga.
+
+No eliminar el historial activo del atleta cada mes ni aplicar ese plazo a la copia personal retenida al vencer Plus mientras mantenga su autorización independiente. Registrar `purgeAfter`, ejecutar purga comprobable y alertar sobre retrasos. Restaurar el servidor debe reaplicar borrados antes de servir datos; al vencer un dato, retirar también las copias operativas que lo contengan si no admiten purga selectiva, sin añadir otro mes de retención residual. Probar fechas de fin de mes, aislamiento entre organizaciones y ausencia de resurrección. La revisión previa a publicación debe confirmar que estos disparadores y el plazo son compatibles con los requisitos aplicables; cualquier excepción se documenta y se lleva al propietario, no se presupone retención perpetua por conservar auditoría.
+
+### Supervisión basada en registros
+
+Completar el recorrido existente check-in → respuesta → revisión → mensaje/tarea → seguimiento. El profesional ve pendientes, última sesión y sesiones previstas sin completar, con periodo, cobertura y responsable. Mostrar **“sin entrenamientos registrados”**, porque PULSO no tiene prueba de entrada física al gimnasio. Sincronización vieja, descanso, plan distinto y categoría revocada tienen estados propios; no se interpretan como inasistencia.
+
+Separar métricas de “registro”, “cumplimiento del plan” y “sustitución”; unificar móvil/portal/IA. La adherencia usa slots/sesiones previstos para fecha y versión activa, conserva extras aparte y explicita datos faltantes. Probar dos organizaciones con planes distintos y señal creada antes de revocación. Aplicar permiso de categoría a evidencia de señales, notas y actividad, además de filtrar por organización/asignación.
+
+UI mínima de notas con autor/visibilidad entra a supervisión esencial. Constructor avanzado de check-ins y agenda quedan en M8. Gráficas 7/28/90 y tendencias usan el motor validado; no debe volverse a construir el placeholder JSON que ya fue reemplazado.
+
+**Archivos:** `pulso/src/lib/{account,sync,profile-sync}.ts`, `pulso/src/db/account-data.ts`, `server/lib/{account,sync,attention,overview,checkins,permissions}.ts`, `server/db/schema/{tracking,care,athlete-sharing}.ts`, `server/app/portal/atletas/[athleteId]/`, `pulso/src/app/equipo.tsx`. Añadir almacenamiento privado/manifiestos de respaldo sin usar el bucket público de ejercicios.
+
+**Salida:** instalación limpia recupera historial completo dos veces sin duplicación; vencimiento deja una copia completa recuperable; revocación bloquea el portal sin afectar respaldo; check-in termina en acción visible y falta de sync no produce una acusación de ausencia.
+
+## 9. M7 · Publicación y operación pequeña
+
+Mantener Expo/React Native, Next.js, PostgreSQL/Drizzle y AWS existente. No reescribir infraestructura para el primer lanzamiento. Inventariar primero qué está desplegado y separar datos de prueba/producción. Región y servicios disponibles se verifican en el proyecto AWS antes de elegirlos.
+
+### Costos, Plus y anuncios
+
+Los créditos AWS son una restricción de financiación, no un presupuesto infinito. Verificar saldo, vencimiento y servicios/modelos elegibles antes de elegir Bedrock; la cobertura depende del programa de créditos. EAS, cuentas de tiendas y proveedores externos se contabilizan aparte. [Créditos AWS](https://aws.amazon.com/awscredits/) y [condiciones Activate](https://aws.amazon.com/activate/terms/).
+
+Reutilizar RevenueCat y anuncios. Plus elimina anuncios, mantiene planes propios múltiples y habilita generaciones/evaluaciones sin cupos comerciales y respaldo automático. Conservar el registro gratuito, exportación y recuperación de una copia existente. Reconciliar el anuncio actual de IA ilimitada con este contrato y sus protecciones técnicas explícitas; verificar si hay suscriptores reales. No cambiar condiciones de una suscripción existente sin una transición explícita.
+
+**Precio propuesto:** US$3 al mes para Plus, sin precio anual definido. **Restricción comercial confirmada:** sin cupos de uso; no se fija un techo monetario de gasto y la app debe mantenerse con sus ingresos. Esto no autoriza gasto sin límite ni demuestra que US$3 sea viable. Validar margen después de comisiones de tienda, impuestos aplicables, reembolsos, IA, almacenamiento, correo y operación, incluyendo usuarios gratuitos y copias retenidas. Los ingresos publicitarios no se atribuyen a usuarios Plus sin anuncios. Medir con y sin créditos AWS: los créditos facilitan el arranque, pero no acreditan sostenibilidad a largo plazo.
+
+Medir costo por operación, usuario y cohorte, y registrar costos agregados e ingresos netos. Evaluar uso esperado, uso intenso y abuso; calcular el punto de equilibrio incluyendo costos fijos, no solo el costo de una generación. Usar resultados reales o hipótesis explícitas, sin inventar número de usuarios, ingresos de anuncios ni costo del modelo. Configurar alertas y protecciones contra abuso o fallos repetitivos; una alerta no garantiza ausencia de cargos. No aumentar infraestructura ni contratar proveedores durante la preparación del plan.
+
+No introducir un saldo mensual, un corte por gasto comercial ni un presupuesto fijo que el propietario no haya elegido. Antes de pruebas facturables, verificar cobertura de créditos y describir el costo estimado de la prueba concreta; la instrucción de autosostenibilidad no autoriza sobrecostos externos. Para publicar, demostrar con evidencia una operación sostenible sin cupos a la tarifa propuesta. Si los números no cierran, presentar optimización de costos o ajuste de precio al propietario y mantener pendiente la aprobación comercial; no imponer cupos de forma unilateral ni ocultar pérdidas tras los créditos. El desfase entre facturas y cobros de tiendas también debe quedar cubierto: rentabilidad estimada no equivale a caja disponible.
+
+Anuncios fuera del registro de series y confirmación de comidas. Revisar configuración iOS: `app.json` actualmente declara App ID Android para ads. No enviar datos nutricionales, molestias, peso o historial a publicidad; verificar SDK y consentimiento aplicable. Datos de salud/fitness no se usan para segmentación publicitaria, conforme a [Apple 5.1.3](https://developer.apple.com/app-store/review/guidelines/#health-and-health-research).
+
+### Criterios de salida
+
+<Checklist id="master-release-gates" items={[
+  {id:"gate-auth",label:"Correo, recuperación, Google/Apple y errores comprobados en builds de distribución."},
+  {id:"gate-core",label:"Registrar comida/bebida y entrenar offline; cerrar/reabrir; sincronizar una sola vez conservando historial."},
+  {id:"gate-ai",label:"Plus crea dietas/entrenos sucesivos sin cupos comerciales; rename/copy/evaluación visibles; reintentos idempotentes y protecciones técnicas probados."},
+  {id:"gate-labels",label:"Etiquetas y códigos probados con productos hondureños; fuentes/unidades y dudas visibles; sin campos nutricionales manuales obligatorios para un producto resuelto."},
+  {id:"gate-widgets",label:"Widget, logros y compartir probados en iPhone y Android; no se anuncia interacción que solo abra un enlace."},
+  {id:"gate-data",label:"Restauración, vencimiento Plus, exportación, aislamiento de cuentas y revocación probados con datos de prueba."},
+  {id:"gate-retention",label:"Retención de un mes y sus disparadores validados para réplica sin finalidad, notas y copias operativas; purga y restauración respetan borrados sin afectar B ni respaldo personal autorizado."},
+  {id:"gate-cost",label:"Viabilidad sin cupos documentada: ingresos netos cubren operación completa sin créditos AWS, con escenarios de uso intenso y caja; tarifa final aprobada y ninguna cuota oculta."},
+  {id:"gate-purchase",label:"Compra, renovación, cancelación, restaurar compra y webhook repetido/fuera de orden comprobados; precio y beneficios coinciden con tienda."},
+  {id:"gate-listing",label:"Política de privacidad, términos, soporte, eliminación web, capturas reales, clasificación, declaraciones de datos/salud/ads y cuenta de revisión completas."},
+  {id:"gate-build",label:"Typecheck/lint/tests pertinentes, migraciones y builds de producción pasan; beta documentada y ningún fallo bloqueante abierto."},
+  {id:"gate-market",label:"Cuenta Play verificada; prueba cerrada Android con 12 testers inscritos durante 14 días y acceso a producción solicitados según el requisito vigente. Distribución Honduras y requisitos vigentes de Apple/Google revisados justo antes del envío."},
+  {id:"gate-ops",label:"HTTPS y entorno de producción listos; monitoreo de fallos, backups de operación y procedimiento de recuperación comprobados."}
+]} />
+
+Preparar política y formularios conforme a los flujos efectivamente habilitados. Google requiere declarar funcionalidades de salud y, cuando aplica, una vía web de solicitud de borrado; no basta con el botón dentro de la app. [Declaración de salud](https://support.google.com/googleplay/android-developer/answer/14738291?hl=en), [eliminación de cuenta](https://support.google.com/googleplay/android-developer/answer/13327111?hl=en). Comprobar también requisitos SDK/target API/identidad del desarrollador vigentes al envío. Ninguna aprobación de tienda se considera garantizada.
+
+**Edad de acceso y clasificación:** decisión confirmada: lanzamiento solo para adultos, con umbral de acceso de 18 años cumplidos; usuarios de 16–17 años quedan fuera de esta versión. Incorporar una comprobación neutral de edad en el alta y una regla de elegibilidad validada en servidor, consistente para correo y acceso social; minimizar los datos retenidos. No habilitar generación IA ni compras antes de completar la elegibilidad. Verificar casos de 17 años, el día en que se cumplen 18 y cuentas existentes sin edad confirmada. Estos controles son requisitos por implementar, no funcionalidad ya disponible.
+
+El umbral de acceso del producto, el público objetivo declarado y la clasificación de contenido de cada tienda son aspectos distintos: alinear onboarding, términos y declaraciones de tienda con este alcance y revisar los requisitos aplicables en Honduras antes de publicar. La decisión de producto no sustituye esa revisión. [Público objetivo en Google Play](https://support.google.com/googleplay/android-developer/answer/9867159?hl=en).
+
+Para operar: logs sin imágenes, contraseñas ni payloads sensibles; métricas de entrega de correo, fallos de login por código, tasa de sync, trabajos fallidos y costos. Analítica mínima de recorrido sin contenido de salud ni identificadores publicitarios unidos al historial. Reproducir fallos con IDs de correlación. Con pocos usuarios, medir sesiones útiles completadas y fallos, sin inventar objetivos estadísticos de retención.
+
+## 10. M8–M9 · Evolución posterior
+
+**Agenda:** disponibilidad local con timezone, instantes UTC, propuesta/confirmación/cambio/cancelación/no-show, conflictos de horario y recordatorios deduplicados. Resumen de consulta enlazado a nota. Calendarios externos no son dependencia inicial.
+
+**Documentos e informes:** almacenamiento privado, permisos `author | care_team | athlete`, auditoría y acceso temporal. PDF de consulta y CSV de progreso separados de la exportación personal JSON ya existente. El borrado de contenido sigue retención explícita; auditoría y archivo son objetos distintos. No adoptar la antigua regla de “nunca borrar físicamente” como política universal.
+
+**Fotos:** subida privada con consentimiento específico, control de compartición y eliminación. Evaluación IA se plantea como comparación visual acotada con límites de iluminación/pose, nunca diagnóstico ni porcentaje fiable de grasa a partir de una foto. Antes de habilitarla se valida utilidad, tratamiento del proveedor, público destinatario y ausencia de puntuación de atractivo. No se reutilizan fotos para anuncios o para entrenar modelos por defecto.
+
+## 11. Verificación y mantenimiento del plan
+
+Cada entrega se marca con commit, migración, prueba y plataforma. `implementado sin validar`, `parcial`, `pendiente`, `validado` y `diferido` son estados distintos. La presencia de un archivo no basta para cerrar un hito. El propietario valida la experiencia en iPhone y decisiones comerciales; el agente prepara cambios, pruebas automatizadas, evidencia y resolución de errores. Testers externos cubren Android y beta cuando lo exijan las tiendas.
+
+Comandos existentes que se reutilizarán al implementar: en `pulso`, `npm test`, `npx expo lint`, `npx tsc --noEmit`; en `server`, `npm test`, `npm run typecheck`, `npm run build`. `npm run test:integration` se ejecuta solo contra una base de prueba identificada. Construir/verificar no equivale a desplegar ni publicar.
+
+Smoke final: cuenta nueva → correo/social → generar dieta y entreno → renombrar/duplicar → escanear producto hondureño → ajustar porción → bebida/deshacer → entrenar offline → logro real → compartir imagen → sync → check-in/revisión → respaldo → instalación limpia/restauración → vencimiento Plus → exportación y borrado de cuenta de prueba. Cubrir errores de red, datos insuficientes, doble toque, sesión vencida, consentimiento revocado y cambio de cuenta.
+
+Los contratos detallados, migraciones numeradas y pruebas por hito se escribirán sobre la versión de código vigente al comenzar cada entrega. Esta estrategia mantiene las decisiones de propiedad/unidades/versiones estables sin inventar hoy firmas de APIs externas.
+
+La disponibilidad de EAS, la ausencia de cupos, el plazo de un mes y la ruta de Play personal ya están incorporados. Costos, cobertura de créditos, permisos EAS, verificación de Play, prueba cerrada y ejecución de purgas son verificaciones de implementación; no se requieren más decisiones del propietario para iniciar M0. No enviar secretos por chat.
