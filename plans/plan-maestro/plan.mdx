@@ -299,3 +299,9 @@ Smoke final: cuenta nueva → correo/social → generar dieta y entreno → reno
 Los contratos detallados, migraciones numeradas y pruebas por hito se escribirán sobre la versión de código vigente al comenzar cada entrega. Esta estrategia mantiene las decisiones de propiedad/unidades/versiones estables sin inventar hoy firmas de APIs externas.
 
 La disponibilidad de EAS, la ausencia de cupos, el plazo de un mes y la ruta de Play personal ya están incorporados. Costos, cobertura de créditos, permisos EAS, verificación de Play, prueba cerrada y ejecución de purgas son verificaciones de implementación; no se requieren más decisiones del propietario para iniciar M0. No enviar secretos por chat.
+
+### Registro de entregas
+
+<Table id="master-deliveries" columns={["Fecha", "Hito", "Estado", "Evidencia", "Pendiente"]} rows={[
+  ["2026-09-30", "M2 + registro diario de M3", "Implementado sin validar en dispositivo", "Consumos y bebidas independientes de los slots (`consumptions`), recipientes, Mis alimentos y meta de líquidos opcional; migración local 0013 (comidas marcadas → estimaciones del plan, vasos → volumen heredado, sin horas inventadas); sync `nutrition_consumption` versionado con tombstones y migración de servidor 0009. Dieta: HOY por fecha concreta, PLAN y MIS ALIMENTOS; deshacer en bebidas y registros. Pruebas: `npm test` (móvil), `tsc`, `test:integration` contra Postgres temporal, migración 0013 sobre datos de ejemplo.", "Escaneo (código/etiqueta), fechas con excepciones y repetición, comparar/simular; smoke iOS/Android; micronutrientes del catálogo."]
+]} />

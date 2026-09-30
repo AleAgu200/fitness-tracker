@@ -20,6 +20,7 @@ import {
   checkinReviews,
   followUpTasks,
   messages,
+  nutritionConsumptions,
   nutritionEntries,
   organizationClients,
   organizationMemberships,
@@ -224,6 +225,7 @@ async function purgeAccount(deletionId: string, now: number): Promise<boolean> {
     await tx.delete(trainingSets).where(eq(trainingSets.athleteId, userId));
     await tx.delete(trainingSessions).where(eq(trainingSessions.athleteId, userId));
     await tx.delete(nutritionEntries).where(eq(nutritionEntries.athleteId, userId));
+    await tx.delete(nutritionConsumptions).where(eq(nutritionConsumptions.athleteId, userId));
     await tx.delete(athleteDailySummaries).where(eq(athleteDailySummaries.athleteId, userId));
     await tx.delete(bodyMeasurements).where(eq(bodyMeasurements.athleteId, userId));
     await tx.delete(syncDevices).where(eq(syncDevices.athleteId, userId));
@@ -277,7 +279,7 @@ export async function exportAccountData(userId: string) {
 
   const [
     profile, measurements, sessions, sets, nutrition, summaries, consents, care, checkins, notes,
-    workouts, mealPlans, conversation, subscription, cards, planSelection, mealPlanSelection,
+    workouts, mealPlans, conversation, subscription, cards, planSelection, mealPlanSelection, consumed,
   ] = await Promise.all([
     db.select().from(athleteProfiles).where(eq(athleteProfiles.userId, userId)),
     db.select().from(bodyMeasurements).where(eq(bodyMeasurements.athleteId, userId)).orderBy(asc(bodyMeasurements.measuredAt)),
@@ -309,6 +311,7 @@ export async function exportAccountData(userId: string) {
     db.select().from(sharedSessionCards).where(eq(sharedSessionCards.athleteId, userId)),
     db.select().from(athletePlanSelections).where(eq(athletePlanSelections.athleteId, userId)),
     db.select().from(athleteMealPlanSelections).where(eq(athleteMealPlanSelections.athleteId, userId)),
+    db.select().from(nutritionConsumptions).where(eq(nutritionConsumptions.athleteId, userId)).orderBy(asc(nutritionConsumptions.localDate)),
   ]);
 
   const organizationNames = new Map(clients.map(client => [client.organizationId, client.organizationName]));
@@ -326,6 +329,7 @@ export async function exportAccountData(userId: string) {
     })),
     training: { sessions, sets },
     nutrition,
+    consumptions: consumed,
     bodyMeasurements: measurements,
     dailySummaries: summaries,
     checkins,

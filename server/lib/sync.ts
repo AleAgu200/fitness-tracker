@@ -13,6 +13,7 @@ import {
   careAssignments,
   checkinRequests,
   checkinResponses,
+  nutritionConsumptions,
   nutritionEntries,
   organizationClients,
   sharedSessionCards,
@@ -60,6 +61,41 @@ const nutritionPayload = z.object({
   occurredAt: z.number().int().positive(),
   version: z.number().int().positive(),
   supersedesId: z.string().max(128).nullable().optional(),
+});
+
+const NUTRIENT_KEYS = ["kcal", "proteinG", "carbsG", "fatG", "fiberG", "sugarsG", "saturatedFatG", "sodiumMg"] as const;
+// Unknown is null, never zero; values are totals for what was consumed.
+const nutrientsSchema = z.partialRecord(z.enum(NUTRIENT_KEYS), z.number().finite().min(0).max(1_000_000).nullable());
+const physicalUnit = z.enum(["g", "ml"]);
+const consumptionSource = z.enum(["plan", "library", "catalog", "manual", "label", "barcode", "legacy"]);
+
+const consumptionPayload = z.object({
+  localDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  timezone: z.string().max(64).nullable(),
+  occurredAt: z.number().int().positive().nullable(),
+  timePrecision: z.enum(["exact", "date_only"]),
+  version: z.number().int().positive(),
+  kind: z.enum(["meal", "food", "beverage"]),
+  mealLabel: z.string().trim().max(60).nullable(),
+  planSlotKey: z.string().max(128).nullable(),
+  name: z.string().trim().min(1).max(200),
+  amount: z.number().finite().nonnegative().max(100_000).nullable(),
+  unit: physicalUnit.nullable(),
+  source: consumptionSource,
+  completeness: z.enum(["complete", "partial", "estimated"]),
+  nutrients: nutrientsSchema,
+  components: z.array(z.object({
+    name: z.string().trim().min(1).max(200),
+    source: consumptionSource,
+    basis: z.object({ amount: z.number().finite().positive().max(100_000), unit: physicalUnit }),
+    amount: z.number().finite().nonnegative().max(100_000),
+    unit: physicalUnit,
+    nutrientsPerBasis: nutrientsSchema,
+  })).max(50),
+  volumeMl: z.number().finite().nonnegative().max(20_000).nullable(),
+  plainWater: z.boolean(),
+  legacyAggregate: z.boolean(),
+  deletedAt: z.number().int().positive().nullable(),
 });
 
 const measurementPayload = z.object({
@@ -312,6 +348,34 @@ async function applyDomainMutation(tx: any, athleteId: string, deviceId: string,
         }).where(eq(nutritionEntries.id, mutation.entityId));
       }
       await rebuildDailySummary(tx, athleteId, parsed.data.occurredAt);
+      return { status: "acked" as const };
+    }
+    case "nutrition_consumption": {
+      const parsed = consumptionPayload.safeParse(mutation.payload);
+      if (!parsed.success) return { status: "rejected" as const, error: "invalid_nutrition_consumption" };
+      const { planSlotKey, plainWater, legacyAggregate, deletedAt, ...data } = parsed.data;
+      const values = {
+        ...data,
+        planSlotKey,
+        plainWater: plainWater ? 1 : 0,
+        legacyAggregate: legacyAggregate ? 1 : 0,
+        deviceId,
+        updatedAt: now,
+      };
+      const [current] = await tx.select().from(nutritionConsumptions).where(eq(nutritionConsumptions.id, mutation.entityId));
+      if (mutation.operation === "create") {
+        if (current) return { status: "rejected" as const, error: "entity_exists" };
+        await tx.insert(nutritionConsumptions).values({ id: mutation.entityId, athleteId, ...values, deletedAt: null });
+      } else {
+        if (!current || current.athleteId !== athleteId) return { status: "rejected" as const, error: "entity_not_found" };
+        if (mutation.baseVersion == null || mutation.baseVersion !== current.version || data.version <= current.version) {
+          return { status: "rejected" as const, error: "version_conflict" };
+        }
+        await tx.update(nutritionConsumptions).set({
+          ...values,
+          deletedAt: mutation.operation === "delete" ? deletedAt ?? now : null,
+        }).where(eq(nutritionConsumptions.id, mutation.entityId));
+      }
       return { status: "acked" as const };
     }
     case "body_measurement": {

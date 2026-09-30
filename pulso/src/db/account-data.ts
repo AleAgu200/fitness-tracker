@@ -13,9 +13,11 @@ import {
   aiRecommendations,
   athleteAchievements,
   athleteProfiles,
+  beverageContainers,
   bodyMeasurements,
   coachMessages,
   coachProfiles,
+  consumptions,
   dailyCheckIns,
   dailyNutritionLogs,
   devices,
@@ -28,6 +30,7 @@ import {
   mealLogEntries,
   mealPlans,
   mealSlots,
+  nutritionSettings,
   onboardingState,
   personalRecords,
   professionalCheckinRequests,
@@ -35,6 +38,7 @@ import {
   programPhases,
   programs,
   progressPhotos,
+  savedFoods,
   sessionCards,
   syncOutbox,
   syncState,
@@ -88,6 +92,7 @@ export async function collectLocalData(userId: string) {
     profile, measurements, photos, checkIns, achievements, messages,
     plans, phases, templates, slots, sessions, logged, sets, records, cards, summaries,
     mealPlanRows, slotsMeals, dailyLogs, mealEntries, water,
+    consumed, containers, foods, nutritionPrefs,
     requests, responses, care, consents, recommendations, feedback, onboarding, generation,
   ] = await Promise.all([
     db.select().from(athleteProfiles).where(eq(athleteProfiles.userId, userId)),
@@ -111,6 +116,10 @@ export async function collectLocalData(userId: string) {
     db.select().from(dailyNutritionLogs).where(within(dailyNutritionLogs.id, ids.dailyLogIds)),
     db.select().from(mealLogEntries).where(within(mealLogEntries.dailyLogId, ids.dailyLogIds)),
     db.select().from(waterLogs).where(eq(waterLogs.athleteId, userId)),
+    db.select().from(consumptions).where(eq(consumptions.athleteId, userId)),
+    db.select().from(beverageContainers).where(eq(beverageContainers.athleteId, userId)),
+    db.select().from(savedFoods).where(eq(savedFoods.athleteId, userId)),
+    db.select().from(nutritionSettings).where(eq(nutritionSettings.athleteId, userId)),
     db.select().from(professionalCheckinRequests).where(within(professionalCheckinRequests.id, ids.requestIds)),
     db.select().from(professionalCheckinResponses).where(within(professionalCheckinResponses.requestId, ids.requestIds)),
     db.select().from(localCareAssignments).where(eq(localCareAssignments.athleteId, userId)),
@@ -138,7 +147,10 @@ export async function collectLocalData(userId: string) {
       sessionCards: cards,
       weeklySummaries: summaries,
     },
-    nutrition: { mealPlans: mealPlanRows, mealSlots: slotsMeals, dailyLogs, mealEntries, water },
+    nutrition: {
+      mealPlans: mealPlanRows, mealSlots: slotsMeals, dailyLogs, mealEntries, water,
+      consumptions: consumed, containers, savedFoods: foods, settings: nutritionPrefs[0] ?? null,
+    },
     team: { careAssignments: care, sharingConsents: consents, checkinRequests: requests, checkinResponses: responses, messages },
     ai: { recommendations, feedback },
     onboarding: { state: onboarding[0] ?? null, generationProfile: generation[0] ?? null },
@@ -165,6 +177,10 @@ export async function wipeLocalData(userId: string): Promise<void> {
     await tx.delete(mealSlots).where(within(mealSlots.mealPlanId, ids.mealPlanIds));
     await tx.delete(mealPlans).where(within(mealPlans.id, ids.mealPlanIds));
     await tx.delete(waterLogs).where(eq(waterLogs.athleteId, userId));
+    await tx.delete(consumptions).where(eq(consumptions.athleteId, userId));
+    await tx.delete(beverageContainers).where(eq(beverageContainers.athleteId, userId));
+    await tx.delete(savedFoods).where(eq(savedFoods.athleteId, userId));
+    await tx.delete(nutritionSettings).where(eq(nutritionSettings.athleteId, userId));
 
     await tx.delete(professionalCheckinResponses).where(within(professionalCheckinResponses.requestId, ids.requestIds));
     await tx.delete(professionalCheckinRequests).where(within(professionalCheckinRequests.id, ids.requestIds));

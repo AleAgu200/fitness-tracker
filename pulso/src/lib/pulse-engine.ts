@@ -381,7 +381,8 @@ export interface PulseCoreInput {
   plannedDaysPerWeek: number;
   /** Share of today's planned meals done (0..100); null without a meal plan. */
   nutritionPct: number | null;
-  hydrationPct: number;
+  /** Today's drinks against the athlete's own goal (0..100+); null without a goal. */
+  hydrationPct: number | null;
 }
 
 export interface PulseCoreComponent {
@@ -440,9 +441,9 @@ export function computePulseCore(input: PulseCoreInput): PulseCore {
   const components: PulseCoreComponent[] = [
     { key: 'sessions', value: pct(sessions7d / Math.max(1, weekTarget ?? 3)) },
     { key: 'continuity', value: pct(input.streakDays / 7) },
-    { key: 'hydration', value: pct(input.hydrationPct / 100) },
     { key: 'balance', value: highLoad ? 40 : 100 },
   ];
+  if (input.hydrationPct != null) components.splice(2, 0, { key: 'hydration', value: pct(input.hydrationPct / 100) });
   if (input.nutritionPct != null) components.splice(2, 0, { key: 'nutrition', value: pct(input.nutritionPct / 100) });
 
   // Weights from the engagement plan; missing components are left out and the

@@ -22,7 +22,7 @@ export interface PulseSnapshot {
 export function usePulse(): PulseSnapshot {
   const { state } = useApp();
   const focusedAt = useNow();
-  const { trainingSessions, meals, mealStatus, water, racha, plannedDaysPerWeek } = state;
+  const { trainingSessions, meals, mealStatus, hydration, racha, plannedDaysPerWeek } = state;
 
   return useMemo(() => {
     // A session finished since the screen got focus still counts as "now".
@@ -34,8 +34,8 @@ export function usePulse(): PulseSnapshot {
       streakDays: racha,
       plannedDaysPerWeek,
       nutritionPct: meals.length ? (done / meals.length) * 100 : null,
-      hydrationPct: Math.min(100, water * 10),
+      hydrationPct: hydration.goalMl ? (hydration.totalMl / hydration.goalMl) * 100 : null,
     });
     return { now, core, load: computeMuscleLoad(trainingSessions, now, 7), meals: { done, total: meals.length } };
-  }, [focusedAt, trainingSessions, meals, mealStatus, water, racha, plannedDaysPerWeek]);
+  }, [focusedAt, trainingSessions, meals, mealStatus, hydration, racha, plannedDaysPerWeek]);
 }

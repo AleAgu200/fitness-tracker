@@ -112,6 +112,42 @@ export const nutritionEntries = pgTable("nutrition_entries", {
   index("nutrition_entries_athlete_date").on(table.athleteId, table.occurredAt),
 ]);
 
+/**
+ * What the athlete ate or drank, replicated from the phone with the nutrition
+ * consent. Independent of plan slots: removing a plan never removes history.
+ * A drink is one row that counts toward volume and nutrients once. Deleting
+ * keeps a tombstone (`deletedAt`) so retries and undo stay idempotent.
+ */
+export const nutritionConsumptions = pgTable("nutrition_consumptions", {
+  id: text("id").primaryKey(),
+  athleteId: text("athleteId").notNull().references(() => user.id, { onDelete: "cascade" }),
+  deviceId: text("deviceId").notNull(),
+  localDate: text("localDate").notNull(),
+  timezone: text("timezone"),
+  occurredAt: milliseconds("occurredAt"),
+  timePrecision: text("timePrecision").notNull(),
+  version: integer("version").notNull(),
+  kind: text("kind").notNull(),
+  mealLabel: text("mealLabel"),
+  planSlotKey: text("planSlotKey"),
+  name: text("name").notNull(),
+  amount: doublePrecision("amount"),
+  unit: text("unit"),
+  source: text("source").notNull(),
+  completeness: text("completeness").notNull(),
+  nutrients: jsonb("nutrients").$type<Record<string, number | null>>().notNull(),
+  components: jsonb("components").$type<unknown[]>().notNull(),
+  volumeMl: doublePrecision("volumeMl"),
+  plainWater: integer("plainWater").notNull().default(0),
+  legacyAggregate: integer("legacyAggregate").notNull().default(0),
+  deletedAt: milliseconds("deletedAt"),
+  updatedAt: milliseconds("updatedAt").notNull(),
+}, (table) => [
+  check("nutrition_consumptions_kind_check", sql`${table.kind} in ('meal', 'food', 'beverage')`),
+  check("nutrition_consumptions_unit_check", sql`${table.unit} is null or ${table.unit} in ('g', 'ml')`),
+  index("nutrition_consumptions_athlete_date").on(table.athleteId, table.localDate),
+]);
+
 export const athleteDailySummaries = pgTable("athlete_daily_summaries", {
   id: text("id").primaryKey(),
   athleteId: text("athleteId").notNull().references(() => user.id, { onDelete: "restrict" }),
