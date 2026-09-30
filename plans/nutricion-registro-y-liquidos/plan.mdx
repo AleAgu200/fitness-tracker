@@ -1,0 +1,146 @@
+---
+title: "PULSO — Nutrición: escanear, planificar y registrar"
+brief: "Revisión de UI/UX: acciones rápidas, etiquetas revisables, comparación de productos y líquidos con recipientes personales."
+kind: "plan"
+status: "draft"
+localOnly: true
+---
+
+# Nutrición que acompaña lo que haces
+
+Estás en el supermercado: lees la tabla de un yogur, comparas otro y guardas el que te interesa. Más tarde, desde la misma ficha, registras cuánto comiste o lo añades a la merienda del lunes. Son tres decisiones distintas y ninguna debe registrar consumo por accidente.
+
+Este plan diseña la experiencia móvil de PULSO. La entrega es un canvas de 12 pantallas y tres prototipos de recorridos guiados: escanear y registrar (en este plan), comparar y planificar (`plans/nutricion-comparar-y-planificar`), y líquidos y ajustes (`plans/nutricion-liquidos-y-ajustes`). La app, el servidor y sus datos reales permanecen sin cambios.
+
+<Callout id="review-boundary" tone="decision">
+
+**Revisar antes de implementar.** En la pestaña de prototipo, los botones navegan entre escenarios de ejemplo; los punteados con ↗ 2 o ↗ 3 continúan en el prototipo 2 o 3. No se activa la cámara, no se envían imágenes y no se guardan alimentos. Los campos editables ilustran el formulario; las confirmaciones cargan valores predeterminados, no realizan cálculos con lo escrito. Volver a Hoy reinicia el escenario. Los objetivos, productos y cantidades son ficticios, no recomendaciones nutricionales.
+
+</Callout>
+
+## Cómo revisar el diseño
+
+**Prototipo 1 · Escanear y registrar (este plan)**
+
+1. **Hoy → Escanear → Leer etiqueta de ejemplo.** Cambia entre medio envase y un envase. Revisa las tres salidas: consumir, planificar y guardar.
+2. **Revisar producto → Lo consumí.** Registra una porción o media, y prueba sustituir un elemento ya consumido.
+3. **Escanear → Sin conexión / Permiso denegado / Código no encontrado.** Revisa las salidas alternativas.
+
+**Prototipo 2 · Comparar y planificar**
+
+4. **Revisar producto → Comparar.** Mira la comparación por 100 g y luego por las porciones elegidas.
+5. **Revisar producto → Ver cómo encaja.** Comprueba que la simulación no modifica el registro.
+6. **Añadir al plan.** Elige fecha concreta o activa repetición semanal.
+
+**Prototipo 3 · Líquidos y ajustes**
+
+7. **Hoy → Botella.** Observa el cambio de volumen y prueba Deshacer.
+8. **Hoy → Otra bebida.** Registra la leche de ejemplo: una entrada suma mililitros y nutrientes.
+9. **Hoy → Ajustar.** Explora cambios de cantidad, extras y sustituciones.
+
+El canvas comienza con una reconstrucción de la pantalla actual, basada en el código, no con una captura. Los siguientes paneles son el diseño propuesto. La barra principal conserva HOY, DIETA, ENTRENO y PERFIL; la reorganización ocurre dentro de Nutrición. La vista de administrador no es el caso mostrado.
+
+## Decisiones de experiencia
+
+### Hoy, Plan y Mis alimentos
+
+**Hoy** reúne consumo de una fecha, resumen compacto de calorías y macros, acceso a escanear y agregar alimentos, recipientes y comidas. Las acciones tienen prioridad sobre los gráficos. El historial usa fechas concretas, no el selector recurrente de días de semana.
+
+**Plan** organiza fechas y una semana habitual. Añadir usa una fecha por defecto. Repetir cada semana es opcional y explícito. Un cambio puntual prevalece sobre la plantilla solo para esa fecha; no modifica las demás. Los ajustes del atleta no sobrescriben el plan profesional original.
+
+**Mis alimentos** contiene guardados, recientes y favoritos. Sus datos quedan disponibles offline. Guardar un producto no lo incorpora a una comida ni altera objetivos.
+
+Confirmar comida registra el plan previsto. Ajustar permite modificar cantidades, reemplazar componentes o añadir extras. Reabrir una comida confirmada modifica su registro, no crea otro duplicado. Cuando falta detalle de ingredientes en un plan antiguo, permitir ajustar el total o sustituir la comida completa; nunca inventar componentes a partir del texto.
+
+### Escaneo y revisión
+
+Dos entradas de primera versión: foto/importación de tabla nutricional y código de barras. Una foto de un plato queda fuera. Se contemplan español e inglés, kcal y kJ, valores por porción o por 100 g/ml y etiquetas con varias columnas.
+
+La lectura produce un borrador. La ficha identifica producto, origen, base y cantidad seleccionada; resalta valores ausentes o dudosos y permite corregirlos. Un código encontrado tampoco garantiza que el envase actual coincida: se confirma producto y porción. Sin resultados, ofrecer tabla, búsqueda o entrada manual.
+
+Las tres salidas son **Lo consumí**, **Añadir al plan** y **Guardar para después**. Consumir pide cantidad, fecha y comida. Si ya existe consumo, distinguir añadir como extra de sustituir el elemento seleccionado. No registrar al escanear ni al guardar en biblioteca.
+
+No convertir gramos y mililitros sin equivalencia conocida. Conservar decimales y redondear para mostrar, no acumulativamente. Un dato desconocido no cuenta como cero. La suma calórica de macros sirve para señalar inconsistencias, no para sobrescribir automáticamente lo que dice la etiqueta.
+
+### Comparar y simular
+
+Comparar dos productos sobre una base equivalente (100 g con 100 g, o 100 ml con 100 ml) y ofrecer otra vista por cantidades reales, claramente identificadas. Mostrar calorías, proteína, carbohidratos y grasas; azúcar, fibra, saturadas y sodio cuando existan. No fabricar una puntuación de salud.
+
+La simulación indica fecha, añadir o reemplazar y si calcula sobre consumo real o planificación. Para hoy, parte de consumos; para un día futuro, parte de lo planificado. No suma a la vez el plan y su comida ya confirmada. Si no hay objetivo, muestra el incremento sin inventar un restante. Confirmar el destino es la única acción que guarda cambios.
+
+### Líquidos y recipientes
+
+Cada recipiente tiene nombre, capacidad y bebida habitual. Un toque desde Hoy registra esa combinación, muestra confirmación y permite deshacer. Cambiar cantidad/bebida es una acción secundaria; admite volúmenes personalizados.
+
+El indicador principal muestra volumen total de bebidas y, por separado, agua sola. La meta es configurable o proviene del plan, sin prescripción automática. El ejemplo usa 2,5 L únicamente para demostrar la interfaz. Se puede seguir registrando después de alcanzar la meta.
+
+Una bebida con datos nutricionales tiene un solo registro que contribuye a ambos resúmenes. Si faltan nutrientes, se registra volumen y se indica que la nutrición está incompleta. Café con leche se trata como bebida compuesta: no duplicar volumen ni contar ingredientes ya incluidos. Editar o deshacer revierte ambos efectos.
+
+### Accesibilidad y estilo
+
+Conservar los componentes y la identidad de PULSO. Separar mediante espacio, tipografía y divisores; reservar el acento para acciones y selección. Mantener navegación nativa, áreas seguras, objetivos táctiles cómodos, foco visible y etiquetas de accesibilidad. Los estados no dependen solo del color. La implementación debe respetar reducción de movimiento y texto ampliado.
+
+## Base existente e impacto técnico posterior
+
+La implementación posterior reutilizará el buscador, FoodPicker, MealPlanForm y las operaciones locales, ampliando sus datos. Este documento no autoriza cambios de producción.
+
+<Table id="implementation-map" columns={["Área", "Base existente", "Cambio necesario"]} rows={[
+["Pantalla móvil", "pulso/src/app/(tabs)/dieta.tsx", "Separar fecha de consumo y planificación; acciones rápidas, productos y recipientes."],
+["Datos locales", "pulso/src/db/nutrition.ts y schema/nutrition.ts", "Consumidos con snapshots, componentes, fechas y bebidas individuales; preservar historia."],
+["Selección y cálculo", "pulso/src/lib/foods.ts y components/food-picker.tsx", "Ampliar base por 100 g a unidades, porciones, ml y nutrientes opcionales."],
+["Servicios existentes", "server/app/api/library/foods/search/route.ts", "Reutilizar búsqueda; añadir adaptadores autenticados de código y lectura de etiquetas."],
+["Sincronización", "Outbox y contratos de nutrición existentes", "Mutaciones idempotentes de consumo y bebida bajo los consentimientos vigentes."]
+]} />
+
+### Contratos a preparar, no código implementado
+
+<AnnotatedCode id="planned-contracts" filename="Contrato de dominio propuesto · no implementado" language="ts" code={"type NutritionDestination = 'consumed' | 'planned' | 'saved';\n\ntype NutrientBasis = { amount: number; unit: 'g' | 'ml' };\n\ntype NutritionSnapshot = {\n  productName: string;\n  basis: NutrientBasis;\n  consumedAmount: number;\n  nutrients: Record<string, number | null>;\n  source: 'manual' | 'label' | 'barcode' | 'library';\n};"} annotations={[
+{lines:"1",label:"Intención explícita",note:"Consumir, planificar y guardar son operaciones diferentes."},
+{lines:"3",label:"Base física",note:"Las porciones se resuelven a gramos o mililitros usando la etiqueta; no se convierten entre sí sin equivalencia."},
+{lines:"5-11",label:"Historia estable",note:"El registro conserva los valores usados; editar el producto después no recalcula lo consumido. Las unidades de cada nutriente se fijarán en el contrato de implementación."}
+]} />
+
+Actualmente, los estados cumplido y sustituido suman los valores planificados. Las sustituciones guardan una nota, y los alimentos elegidos en el formulario se reducen a descripción y totales. Cambiar esto requiere almacenar consumos reales y componentes, no solo añadir un botón de cámara.
+
+Los registros de comidas actuales dependen de un slot y algunas operaciones de eliminación de planes borran entradas asociadas. La migración debe separar el historial del plan antes de habilitar nuevas operaciones. Los valores antiguos se preservan como estimaciones basadas en el plan, no como cantidades reales conocidas.
+
+El agua actual es un agregado diario de vasos de 350 ml. Migrar el volumen existente como agregado heredado sin inventar horarios ni recipientes; usar eventos individuales para entradas nuevas. Actualizar todos sus consumidores, incluidos Hoy y resúmenes, para que interpreten mililitros en vez de vasos.
+
+### Orden de implementación tras aprobar el diseño
+
+1. Introducir datos versionados y migraciones que preserven el historial; comprobar cálculos e idempotencia.
+2. Implementar Hoy, ajustes, recipientes, registro manual y biblioteca local; comprobar uso sin conexión.
+3. Incorporar fechas y repetición sin modificar asignaciones profesionales ni consumos pasados.
+4. Integrar búsqueda por código y extracción de etiquetas como borradores; validar precisión con etiquetas de ejemplo.
+5. Activar comparación y simulación sobre el mismo motor de cantidades; probar ambos sistemas móviles.
+
+<Callout id="cloud-boundary" tone="risk">
+
+**La integración cloud es una etapa posterior.** El usuario acepta procesamiento online de etiquetas nuevas, revisión antes de guardar y que PULSO no conserve fotos. Antes de activar el servicio se debe aprobar proveedor, costo, límites y retención real del proveedor; no se promete retención cero de un tercero. Recortar a la etiqueta, eliminar metadatos innecesarios, no registrar imágenes en logs y evitar reenvíos automáticos. Procesar etiquetas no concede permiso para compartir nutrición con profesionales.
+
+</Callout>
+
+## Criterios de aceptación
+
+<Checklist id="acceptance" items={[
+{id:"scan-intent",label:"Guardar después de escanear no altera calorías, líquidos ni plan."},
+{id:"portion-math",label:"Media porción, varias porciones, 100 g y 100 ml se calculan correctamente; kJ y kcal no se confunden."},
+{id:"partial-label",label:"Los campos ausentes o dudosos se identifican; no se rellenan con ceros inventados."},
+{id:"no-duplicate",label:"Confirmar, sustituir, editar y reintentar no duplican comidas ni bebidas."},
+{id:"dates",label:"Una excepción de fecha no cambia la semana recurrente ni el plan profesional original."},
+{id:"history",label:"Editar un producto o quitar un slot no cambia ni borra consumos anteriores."},
+{id:"liquid",label:"Una leche de 250 ml actualiza volumen y nutrientes una sola vez; deshacer revierte ambos."},
+{id:"offline",label:"Sin conexión se puede registrar desde biblioteca o manualmente; cámara denegada ofrece alternativa."},
+{id:"compare",label:"Comparaciones usan bases compatibles y simulaciones no escriben antes de confirmar."},
+{id:"accessibility",label:"Recorridos legibles con texto ampliado, lector de pantalla y movimiento reducido."},
+{id:"e2e",label:"Smoke en iOS y Android: escanear, revisar, planificar, consumir, registrar bebida y deshacer; verificar SQLite y sincronización consentida."}
+]} />
+
+## Revisión y límites de esta entrega
+
+La revisión busca confirmar ubicación de acciones, claridad de los destinos, comodidad de recipientes y separación entre plan y consumo. Los valores simulados no prueban OCR, cálculos de producción, persistencia ni sincronización.
+
+Los comentarios se reciben por chat indicando pantalla y cambio deseado. El plan permanece en archivos locales; no se publica a una base hospedada ni se habilita colaboración externa.
+
+La integración técnica del proveedor, su tratamiento de fotos y la migración se especificarán antes de implementar sus respectivas etapas. No se añaden recomendaciones médicas, fotos de platos, recordatorios automáticos ni un rediseño del portal en esta entrega.
+

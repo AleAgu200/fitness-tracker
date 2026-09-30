@@ -10,7 +10,6 @@ import {
   mealLogEntries,
   mealPlans,
   mealSlots,
-  waterLogs,
 } from './schema';
 
 export type MealStatusDb = 'completed' | 'substituted' | 'pending';
@@ -468,8 +467,8 @@ export async function replaceWeekMealSlots(
 
 export async function getTodayMealEntries(
   athleteId: string,
+  date: string = todayStr(),
 ): Promise<{ status: Record<string, MealStatusDb>; notes: Record<string, string> }> {
-  const date = todayStr();
   const logs = await db
     .select({ id: dailyNutritionLogs.id })
     .from(dailyNutritionLogs)
@@ -496,9 +495,9 @@ export async function setMealEntry(
   mealPlanId: string,
   slotId: string,
   data: { status?: MealStatusDb; note?: string },
+  date: string = todayStr(),
 ): Promise<void> {
   await db.transaction(async tx => {
-    const date = todayStr();
     let [dailyLog] = await tx.select().from(dailyNutritionLogs)
       .where(and(eq(dailyNutritionLogs.athleteId, athleteId), eq(dailyNutritionLogs.date, date))).limit(1);
     if (!dailyLog) {
@@ -528,31 +527,9 @@ export async function setMealEntry(
       operation: existing && existing.syncVersion > 0 ? 'update' : 'create',
       baseVersion: existing && existing.syncVersion > 0 ? existing.syncVersion : null,
       occurredAt: now,
-      payload: { mealKey: slotId, status, note, occurredAt: now.getTime(), version },
+      // A meal logged for an earlier date counts for that day (noon local),
+      // so the professional's daily summary buckets it correctly.
+      payload: { mealKey: slotId, status, note, occurredAt: date === todayStr() ? now.getTime() : new Date(`${date}T12:00:00`).getTime(), version },
     });
   });
-}
-
-export async function getTodayWater(athleteId: string): Promise<number> {
-  const rows = await db
-    .select({ glasses: waterLogs.glasses })
-    .from(waterLogs)
-    .where(and(eq(waterLogs.athleteId, athleteId), eq(waterLogs.date, todayStr())))
-    .limit(1);
-  return rows[0]?.glasses ?? 0;
-}
-
-export async function setTodayWater(athleteId: string, glasses: number): Promise<void> {
-  const date = todayStr();
-  const mlTotal = glasses * 350;
-  const rows = await db
-    .select({ id: waterLogs.id })
-    .from(waterLogs)
-    .where(and(eq(waterLogs.athleteId, athleteId), eq(waterLogs.date, date)))
-    .limit(1);
-  if (rows[0]) {
-    await db.update(waterLogs).set({ glasses, mlTotal }).where(eq(waterLogs.id, rows[0].id));
-  } else {
-    await db.insert(waterLogs).values({ id: nanoid(), athleteId, date, glasses, mlTotal });
-  }
 }

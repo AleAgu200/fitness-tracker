@@ -29,13 +29,18 @@ import {
   getMealPlan,
   MealPlanOrigin,
   getTodayMealEntries,
-  getTodayWater,
   MealStatusDb,
   setMealEntry,
-  setTodayWater,
   updateMealSlot,
 } from '@/db/nutrition';
 import { ExercisePlanValues } from '@/components/exercise-plan-form';
+import {
+  clearPlannedMeal,
+  getHydration,
+  PlannedMeal,
+  recordPlannedMeal,
+  updatePlannedMealNote,
+} from '@/db/consumption';
 import {
   ActiveProgram,
   activateProgram,
@@ -49,7 +54,7 @@ import {
 } from '@/db/plan';
 import { createSessionCard, getTrainingSessions } from '@/db/pulse';
 import { getAthleteProfile, getLatestWeightMeasurement, saveAthleteProfile } from '@/db/profile';
-import { addDays, weekdayOf } from '@/lib/dates';
+import { addDays, todayStr, weekdayOf } from '@/lib/dates';
 import { getInitials } from '@/lib/names';
 import { comparePulse, TrainingSession } from '@/lib/pulse-engine';
 import {
@@ -165,6 +170,11 @@ export interface ProfileData {
 
 const REST_DEFAULT = 90;
 
+/** A plan meal as the consumption record snapshots it. */
+function plannedMealOf(meal: Meal): PlannedMeal {
+  return { slotId: meal.id, label: meal.label, description: meal.n, kcal: meal.kcal, p: meal.p, c: meal.c, g: meal.g };
+}
+
 const EMPTY_MEAL_DRAFT: MealDraftUI = { label: '', time: '', n: '', kcal: '', p: '', c: '', g: '' };
 
 export interface AppState {
@@ -202,7 +212,8 @@ export interface AppState {
   meals: Meal[];
   mealStatus: Record<string, MealStatus>;
   mealNotes: Record<string, string>;
-  water: number;
+  /** Today's drinks in ml; the goal is the athlete's own, null when unset. */
+  hydration: { totalMl: number; plainWaterMl: number; goalMl: number | null };
   addingMeal: boolean;
   editingMealId: string | null;
   mealDraft: MealDraftUI;
@@ -255,7 +266,7 @@ const initialState: AppState = {
   meals: [],
   mealStatus: {},
   mealNotes: {},
-  water: 0,
+  hydration: { totalMl: 0, plainWaterMl: 0, goalMl: null },
   addingMeal: false,
   editingMealId: null,
   mealDraft: EMPTY_MEAL_DRAFT,
@@ -289,7 +300,8 @@ interface AppContextValue {
   // nutrition
   setMeal: (id: string, st: MealStatus) => void;
   setMealNote: (id: string, txt: string) => void;
-  setWater: (n: number) => void;
+  /** Re-reads today's drinks and meal statuses after Dieta logs something. */
+  reloadNutritionToday: () => Promise<void>;
   startAddMeal: () => void;
   startEditMeal: (id: string) => void;
   cancelMealForm: () => void;
@@ -455,7 +467,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           await Promise.all([
             getAthleteProfile(userId),
             getTodayMealEntries(userId),
-            getTodayWater(userId),
+            getHydration(userId, todayStr()),
             getMetricHistories(userId),
             getPhotos(userId),
           ]);
@@ -535,7 +547,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           meals: mealPlan.meals,
           mealStatus,
           mealNotes: entries.notes,
-          water,
+          hydration: water,
           exercises,
           exIndex: 0,
           log: session?.log ?? {},
@@ -604,7 +616,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       await upsertTodayCheckIn(uid, {
         workoutCompleted: overrides?.workoutCompleted ?? s.sessionDone,
         nutritionCompleted,
-        hydrationCompleted: s.water >= 10,
+        // Only against a goal the athlete chose; without one there is nothing to complete.
+        hydrationCompleted: s.hydration.goalMl != null && s.hydration.totalMl >= s.hydration.goalMl,
       });
       await refreshDerived();
     } catch (e) {
@@ -744,8 +757,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, mealStatus: { ...s.mealStatus, [id]: st } }));
     const uid = userRef.current;
     const planId = mealPlanIdRef.current;
-    if (!uid || !planId) return;
+    const meal = stateRef.current.meals.find(m => m.id === id);
+    if (!uid || !planId || !meal) return;
+    const date = todayStr();
+    // Adherence (the status the professional sees) and what was eaten (the
+    // consumption record) are written together but kept apart.
     setMealEntry(uid, planId, id, { status: STATUS_TO_DB[st] })
+      .then(async () => {
+        if (st === 'pendiente') await clearPlannedMeal(uid, id, date);
+        else await recordPlannedMeal(uid, date, plannedMealOf(meal), st === 'cumplido'
+          ? { type: 'confirmed' }
+          : { type: 'substituted', note: stateRef.current.mealNotes[id] ?? null });
+      })
       .then(() => syncCheckIn())
       .catch(e => console.error('[meal]', e));
   }, [syncCheckIn]);
@@ -758,19 +781,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // Debounce — persists after the user stops typing
     if (noteTimers.current[id]) clearTimeout(noteTimers.current[id]);
     noteTimers.current[id] = setTimeout(() => {
-      setMealEntry(uid, planId, id, { note: txt }).catch(e => console.error('[meal-note]', e));
+      setMealEntry(uid, planId, id, { note: txt })
+        .then(() => {
+          const meal = stateRef.current.meals.find(m => m.id === id);
+          if (meal && stateRef.current.mealStatus[id] === 'sustituido') {
+            return updatePlannedMealNote(uid, id, todayStr(), txt, meal.label);
+          }
+        })
+        .catch(e => console.error('[meal-note]', e));
     }, 400);
   }, []);
 
-  const setWater = useCallback((n: number) => {
-    // Tapping the top filled glass lowers the level by one
-    const next = stateRef.current.water === n ? n - 1 : n;
-    setState(s => ({ ...s, water: next }));
+  const reloadNutritionToday = useCallback(async () => {
     const uid = userRef.current;
     if (!uid) return;
-    setTodayWater(uid, next)
-      .then(() => syncCheckIn())
-      .catch(e => console.error('[water]', e));
+    const [hydration, entries] = await Promise.all([getHydration(uid, todayStr()), getTodayMealEntries(uid)]);
+    const mealStatus: Record<string, MealStatus> = {};
+    for (const [slotId, st] of Object.entries(entries.status)) mealStatus[slotId] = STATUS_FROM_DB[st];
+    setState(s => ({ ...s, hydration, mealStatus, mealNotes: entries.notes }));
+    stateRef.current = { ...stateRef.current, hydration, mealStatus, mealNotes: entries.notes };
+    await syncCheckIn();
   }, [syncCheckIn]);
 
   const startAddMeal = useCallback(() =>
@@ -1295,7 +1325,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     <AppContext.Provider value={{
       state,
       saveProfile, reloadAll,
-      setMeal, setMealNote, setWater,
+      setMeal, setMealNote, reloadNutritionToday,
       startAddMeal, startEditMeal, cancelMealForm, setMealDraft, saveMealForm, deleteMeal,
       selectEx, incPeso, decPeso, incReps, decReps, setRpe, guardarSet,
       finishWorkout, startFreeSession, discardFreeSession, activatePlan,

@@ -1,4 +1,4 @@
-import { bigint, doublePrecision, pgTable, text } from "drizzle-orm/pg-core";
+import { bigint, boolean, doublePrecision, jsonb, pgTable, text } from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
 
@@ -29,4 +29,16 @@ export const libraryExercises = pgTable("library_exercises", {
   mediaUrl: text("mediaUrl"),
   createdBy: text("createdBy").references(() => user.id, { onDelete: "set null" }),
   createdAt: milliseconds("createdAt").notNull(),
+});
+
+/**
+ * Products looked up by barcode in Open Food Facts, cached so repeated scans
+ * don't hit the public API. Only the catalog's own public data lives here —
+ * never anything about who scanned it. Misses are cached briefly too.
+ */
+export const foodBarcodeCache = pgTable("food_barcode_cache", {
+  barcode: text("barcode").primaryKey(),
+  found: boolean("found").notNull(),
+  product: jsonb("product").$type<unknown>(),
+  fetchedAt: milliseconds("fetchedAt").notNull(),
 });

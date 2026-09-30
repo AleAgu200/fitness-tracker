@@ -21,7 +21,8 @@ export type SyncEntityType =
   | 'checkin_response'
   | 'session_card'
   | 'plan_selection'
-  | 'meal_plan_selection';
+  | 'meal_plan_selection'
+  | 'nutrition_consumption';
 export type SyncOperation = 'create' | 'update' | 'delete';
 export type SharingCategory = 'training' | 'nutrition' | 'metrics' | 'checkins' | 'photos';
 

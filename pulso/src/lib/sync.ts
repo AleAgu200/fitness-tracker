@@ -5,6 +5,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { and, eq, inArray } from 'drizzle-orm';
 
+import { backfillConsumptionOutbox } from '@/db/consumption';
 import { applyNutritionistMealPlan, DAYS_PER_WEEK, hasNutritionistMealPlan } from '@/db/nutrition';
 import { applyCoachWorkout, AssignedExercise, hasCoachProgram } from '@/db/plan';
 import { db } from '@/db';
@@ -283,6 +284,7 @@ const CATEGORY_BY_ENTITY: Record<string, SharingCategory> = {
   plan_selection: 'training',
   // Whether the nutritionist's plan is the active one: nutrition data.
   meal_plan_selection: 'nutrition',
+  nutrition_consumption: 'nutrition',
 };
 
 async function pushAllowedOutbox(athleteId: string, deviceId: string) {
@@ -322,6 +324,9 @@ async function pushAllowedOutbox(athleteId: string, deviceId: string) {
 }
 
 async function performMobileSync(athleteId: string): Promise<MobileSyncResult> {
+  // History migrated from the old meal/water model was written without the
+  // outbox; queue it once before pushing.
+  await backfillConsumptionOutbox(athleteId);
   const state = await ensureSyncState(athleteId);
   const startedAt = new Date();
   await db.update(syncState).set({ lastSyncAt: startedAt, lastError: null, updatedAt: startedAt })

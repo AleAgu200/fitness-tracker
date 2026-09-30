@@ -5,7 +5,7 @@ export const syncOutbox = sqliteTable('sync_outbox', {
   athleteId:     text('athlete_id').notNull(),
   schemaVersion: integer('schema_version').notNull().default(2),
   entityType:    text('entity_type', {
-                   enum: ['training_session', 'training_set', 'nutrition_entry', 'body_measurement', 'checkin_response', 'session_card', 'plan_selection', 'meal_plan_selection'],
+                   enum: ['training_session', 'training_set', 'nutrition_entry', 'body_measurement', 'checkin_response', 'session_card', 'plan_selection', 'meal_plan_selection', 'nutrition_consumption'],
                  }).notNull(),
   entityId:      text('entity_id').notNull(),
   operation:     text('operation', { enum: ['create', 'update', 'delete'] }).notNull(),

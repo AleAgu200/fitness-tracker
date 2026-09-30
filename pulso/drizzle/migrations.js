@@ -14,6 +14,7 @@ import m0009 from './0009_previous_sebastian_shaw.sql';
 import m0010 from './0010_adorable_post.sql';
 import m0011 from './0011_pulse_experience.sql';
 import m0012 from './0012_plan_library.sql';
+import m0013 from './0013_nutrition_consumption.sql';
 
   export default {
     journal,
@@ -30,7 +31,8 @@ m0008,
 m0009,
 m0010,
 m0011,
-m0012
+m0012,
+m0013
     }
   }
   
