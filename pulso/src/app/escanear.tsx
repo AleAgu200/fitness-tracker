@@ -6,8 +6,11 @@ import { ActivityIndicator, Linking, ScrollView, Text, TextInput, View } from 'r
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CompareSheet } from '@/components/nutrition/compare-sheet';
+import { DayFitPreview } from '@/components/nutrition/day-fit';
 import { MEAL_LABELS, mealLabelForNow } from '@/components/nutrition/food-logger';
 import { draftFromNutrients, NutrientDraft, NutrientsEditor, nutrientsFromDraft } from '@/components/nutrition/nutrients-editor';
+import { describePlanTarget, PlanDatePicker, PlanTarget } from '@/components/nutrition/plan-date-picker';
 import { ChipRow, SheetButton } from '@/components/nutrition/sheet';
 import { Paywall } from '@/components/paywall';
 import { Label, PressableScale, Segmented } from '@/components/ui/kit';
@@ -16,8 +19,8 @@ import { useApp } from '@/context/app-state';
 import { usePreferences } from '@/context/preferences';
 import { useSession } from '@/context/session';
 import { listSavedFoods, logConsumption, saveFood } from '@/db/consumption';
-import { addMealSlot, getMealPlan } from '@/db/nutrition';
-import { todayStr, WEEKDAY_DISPLAY_ORDER, WEEKDAY_SHORT_LABELS, weekdayOf } from '@/lib/dates';
+import { planFood } from '@/db/nutrition';
+import { todayStr, weekdayOf } from '@/lib/dates';
 import { combineNutrients, formatNutrient, NUTRIENT_LABEL, parseAmount, PhysicalUnit } from '@/lib/nutrition-math';
 import { draftFromSavedFood, labelReadingStatus, lookupBarcode, NutritionDraft, readLabel, ScanOutcome } from '@/lib/scan';
 
@@ -314,7 +317,8 @@ function DraftReview({ draft, onScanAnother }: { draft: NutritionDraft; onScanAn
   const [destination, setDestination] = useState<Destination>('consumed');
   const [amountText, setAmountText] = useState(String(draft.serving?.amount ?? draft.basis.amount));
   const [mealLabel, setMealLabel] = useState<string>(mealLabelForNow());
-  const [weekday, setWeekday] = useState(weekdayOf(new Date()));
+  const [target, setTarget] = useState<PlanTarget>({ date: todayStr(), repeatWeekly: false });
+  const [comparing, setComparing] = useState(false);
   const [alsoSave, setAlsoSave] = useState(draft.source === 'barcode');
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
@@ -379,20 +383,18 @@ function DraftReview({ draft, onScanAnother }: { draft: NutritionDraft; onScanAn
         setDone(`Registrado en ${mealLabel.toLowerCase()} de hoy.`);
         return;
       }
-      // Planning never logs consumption.
-      const totals = combineNutrients([component]);
-      const { mealPlanId } = await getMealPlan(userId, weekday);
-      await addMealSlot(mealPlanId, weekday, {
-        label: mealLabel,
-        time: '',
-        n: `${component.name} (${Math.round(amount)} ${unit})`,
-        kcal: Math.round(totals.kcal ?? 0),
-        p: Math.round(totals.proteinG ?? 0),
-        c: Math.round(totals.carbsG ?? 0),
-        g: Math.round(totals.fatG ?? 0),
+      // Planning never logs consumption, and a date never changes the usual
+      // week unless repeating was asked for.
+      await planFood(userId, {
+        date: target.date,
+        repeatWeekly: target.repeatWeekly,
+        mealLabel,
+        description: `${component.name} (${Math.round(amount)} ${unit})`,
+        nutrients: combineNutrients([component]),
       });
-      if (weekday === weekdayOf(new Date())) await reloadAll();
-      setDone('Agregado a tu plan. No se registró como consumido.');
+      const today = todayStr();
+      if (target.date === today || (target.repeatWeekly && weekdayOf(new Date(`${target.date}T12:00:00`)) === weekdayOf(new Date()))) await reloadAll();
+      setDone(`Planificado para ${describePlanTarget(target)}. No se registró como consumido.`);
     } catch (e) {
       console.error('[scan-confirm]', e);
       setError('No se pudo guardar. Intentá de nuevo.');
@@ -468,6 +470,21 @@ function DraftReview({ draft, onScanAnother }: { draft: NutritionDraft; onScanAn
 
       <NutrientsEditor draft={nutrients} onChange={setNutrients} basisLabel={`por ${basisText || '?'} ${unit}`} />
 
+      <View style={{ flexDirection: 'row' }}>
+        <SheetButton label="COMPARAR CON OTRO PRODUCTO" onPress={() => setComparing(true)} disabled={!valid} hint="Compara sin guardar nada" />
+      </View>
+      {comparing && valid && (
+        <CompareSheet
+          subject={{
+            name: brand.trim() ? `${name.trim()} · ${brand.trim()}` : name.trim(),
+            basis: { amount: basisAmount!, unit },
+            nutrients: perBasis,
+            portion: amount ? { amount, label: `${Math.round(amount)} ${unit}` } : null,
+          }}
+          onClose={() => setComparing(false)}
+        />
+      )}
+
       <Label>¿QUÉ HACEMOS CON ÉL?</Label>
       <Segmented
         options={[{ key: 'consumed', label: 'LO CONSUMÍ' }, { key: 'plan', label: 'AL PLAN' }, { key: 'saved', label: 'GUARDAR' }]}
@@ -509,14 +526,8 @@ function DraftReview({ draft, onScanAnother }: { draft: NutritionDraft; onScanAn
           </View>
           {destination === 'plan' && (
             <>
-              <Label>DÍA DEL PLAN</Label>
-              <ChipRow
-                options={WEEKDAY_DISPLAY_ORDER.map(day => ({ key: String(day), label: WEEKDAY_SHORT_LABELS[day] }))}
-                value={String(weekday)}
-                onChange={value => setWeekday(Number(value))}
-                accent={accent}
-                label="Día"
-              />
+              <Label>¿CUÁNDO?</Label>
+              <PlanDatePicker value={target} onChange={setTarget} accent={accent} />
             </>
           )}
           <Label>COMIDA</Label>
@@ -526,6 +537,12 @@ function DraftReview({ draft, onScanAnother }: { draft: NutritionDraft; onScanAn
               {`${formatNutrient('kcal', preview.kcal)} · P ${formatNutrient('proteinG', preview.proteinG)} · C ${formatNutrient('carbsG', preview.carbsG)} · G ${formatNutrient('fatG', preview.fatG)}`}
             </Text>
           )}
+          <DayFitPreview
+            date={destination === 'plan' ? target.date : todayStr()}
+            basis={destination === 'plan' ? 'planned' : 'consumed'}
+            addition={preview}
+            repeatWeekly={destination === 'plan' && target.repeatWeekly}
+          />
           {destination === 'consumed' && (
             <PressableScale
               onPress={() => setAlsoSave(!alsoSave)}
