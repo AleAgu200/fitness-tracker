@@ -30,15 +30,22 @@ import {
   updateConsumption,
   updatePlannedMealNote,
 } from '@/db/consumption';
+import { CompareSheet } from '@/components/nutrition/compare-sheet';
+import { PlanFoodSheet } from '@/components/nutrition/plan-food-sheet';
 import {
   addMealSlot,
   deleteMealSlot,
   getMealPlan,
+  getMealPlanForDate,
   getMealWeekSummary,
   getTodayMealEntries,
+  listPlanExceptionDates,
   MealSlotUI,
   MealStatusDb,
+  repeatMealSlotWeekly,
+  restoreMealSlotOnDate,
   setMealEntry,
+  skipMealSlotOnDate,
   updateMealSlot,
 } from '@/db/nutrition';
 import { addDays, dateStr, todayStr, WEEKDAY_DISPLAY_ORDER, WEEKDAY_LABELS, WEEKDAY_SHORT_LABELS, weekdayOf } from '@/lib/dates';
@@ -155,7 +162,7 @@ function DayView({ offerUndo }: { offerUndo: (message: string, action: () => voi
   const load = useCallback(async () => {
     if (!userId) return;
     const [plan, entries, items] = await Promise.all([
-      getMealPlan(userId, weekdayOf(parseDate(date))),
+      getMealPlanForDate(userId, date),
       getTodayMealEntries(userId, date),
       listConsumptions(userId, date),
     ]);
@@ -469,7 +476,10 @@ function PlannedMealCard({ meal, index, status, note, recorded, onConfirm, onAdj
       style={{ backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderLeftWidth: 3, borderLeftColor: color, marginBottom: 10 }}
     >
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 11, paddingBottom: 4 }}>
-        <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 1.2, color: C.textPrimary }}>{`${meal.label}${meal.time ? ` · ${meal.time}` : ''}`}</Text>
+        <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 1.2, color: C.textPrimary }}>
+          {`${meal.label}${meal.time ? ` · ${meal.time}` : ''}`}
+          {meal.planDate ? <Text style={{ color: C.textTertiary }}> · SOLO ESTE DÍA</Text> : null}
+        </Text>
         <Text style={{ fontFamily: F.mono, fontSize: 9, letterSpacing: 0.8, color }}>
           {status === 'completed' ? 'CONFIRMADA' : status === 'substituted' ? 'AJUSTADA' : 'PENDIENTE'}
         </Text>
@@ -567,14 +577,33 @@ function LoggedRow({ item, onRemove, onAmount }: { item: ConsumptionItem; onRemo
   );
 }
 
-// ── PLAN: the recurring week ────────────────────────────────────────────────
+// ── PLAN: the usual week and concrete dates ─────────────────────────────────
 
 /**
- * Planning, not logging: editing the week never records consumption and
+ * Planning, not logging: editing the plan never records consumption and
  * never touches the professional's original plan (edits apply to the active
  * plan, which is the athlete's own copy when it came from a professional).
+ * The usual week repeats; a date can differ from it without changing it.
  */
 function PlanView() {
+  const { accent } = usePreferences();
+  const [mode, setMode] = useState<'week' | 'dates'>('week');
+  return (
+    <>
+      <Segmented
+        options={[{ key: 'week', label: 'SEMANA HABITUAL' }, { key: 'dates', label: 'POR FECHA' }]}
+        value={mode}
+        onChange={setMode}
+        accent={accent}
+        compact
+        style={{ marginBottom: 14 }}
+      />
+      {mode === 'week' ? <WeekPlanView /> : <DatePlanView />}
+    </>
+  );
+}
+
+function WeekPlanView() {
   const { state, reloadAll } = useApp();
   const { userId } = useSession();
   const { accent } = usePreferences();
@@ -736,17 +765,219 @@ function DayMealEditor({ weekday, onChanged }: { weekday: number; onChanged: () 
   );
 }
 
+/** How far ahead Plan lists the dates that differ from the usual week. */
+const EXCEPTION_LOOKAHEAD_DAYS = 28;
+
+type DateForm = { kind: 'add' } | { kind: 'edit'; meal: MealSlotUI } | { kind: 'swap'; meal: MealSlotUI };
+
+/**
+ * One concrete date: its usual-week meals plus the date's exceptions. Changes
+ * here apply to that date only; repeating a meal every week is its own,
+ * explicit action.
+ */
+function DatePlanView() {
+  const { reloadAll } = useApp();
+  const { userId } = useSession();
+  const { accent } = usePreferences();
+  const C = useColors();
+  const today = todayStr();
+  const [date, setDate] = useState(today);
+  const [data, setData] = useState<{ mealPlanId: string; meals: MealSlotUI[]; skipped: MealSlotUI[] } | null>(null);
+  const [changedDates, setChangedDates] = useState<string[]>([]);
+  const [form, setForm] = useState<DateForm | null>(null);
+  const weekday = weekdayOf(parseDate(date));
+  const weekdayName = WEEKDAY_LABELS[weekday].toLowerCase();
+
+  const load = useCallback(async () => {
+    if (!userId) return;
+    const [plan, exceptions] = await Promise.all([
+      getMealPlanForDate(userId, date),
+      listPlanExceptionDates(userId, today, dateStr(addDays(new Date(), EXCEPTION_LOOKAHEAD_DAYS))),
+    ]);
+    setData({ mealPlanId: plan.mealPlanId, meals: plan.meals, skipped: plan.skipped });
+    setChangedDates([...exceptions].sort());
+  }, [userId, date, today]);
+  // Reload on focus too: a plan switch in "Mis planes" changes the date's meals.
+  useFocusEffect(useCallback(() => { load().catch(e => console.error('[plan-date]', e)); }, [load]));
+
+  async function run(action: (mealPlanId: string) => Promise<unknown>) {
+    if (!data) return;
+    try {
+      await action(data.mealPlanId);
+      setForm(null);
+      await load();
+      // Today's meals feed Hoy, the Núcleo and the check-in; repeating a meal
+      // on today's weekday changes them too.
+      if (weekday === weekdayOf(new Date())) await reloadAll();
+    } catch (e) {
+      console.error('[plan-date-change]', e);
+    }
+  }
+
+  function save(values: MealPlanFormValues) {
+    if (!form) return;
+    void run(async mealPlanId => {
+      if (form.kind === 'edit') return updateMealSlot(mealPlanId, form.meal.id, values);
+      // Changing a usual meal for one date = leave it out that day and plan
+      // the new one for that day only.
+      if (form.kind === 'swap') await skipMealSlotOnDate(form.meal.id, date);
+      return addMealSlot(mealPlanId, weekday, values, date);
+    });
+  }
+
+  const actionStyle = { minHeight: 40, justifyContent: 'center' as const, alignItems: 'center' as const, paddingHorizontal: 8 };
+  const actionText = { fontFamily: F.monoBold, fontSize: 9, letterSpacing: 0.5, color: C.textSecondary, textAlign: 'center' as const };
+
+  return (
+    <>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <PressableScale
+          onPress={() => { setForm(null); setDate(dateStr(addDays(parseDate(date), -1))); }}
+          disabled={date <= today}
+          accessibilityLabel="Fecha anterior"
+          style={{ width: 44, height: 44, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center', opacity: date <= today ? 0.3 : 1 }}
+        >
+          <Text style={{ fontFamily: F.mono, fontSize: 15, color: C.textPrimary }}>‹</Text>
+        </PressableScale>
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <Text accessibilityLiveRegion="polite" style={{ fontFamily: F.monoBold, fontSize: 13, letterSpacing: 1, color: C.textPrimary }}>{dayTitle(date)}</Text>
+          <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textTertiary }}>{parseDate(date).toLocaleDateString('es-HN', { weekday: 'long', day: 'numeric', month: 'long' })}</Text>
+        </View>
+        <PressableScale
+          onPress={() => { setForm(null); setDate(dateStr(addDays(parseDate(date), 1))); }}
+          accessibilityLabel="Fecha siguiente"
+          style={{ width: 44, height: 44, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Text style={{ fontFamily: F.mono, fontSize: 15, color: C.textPrimary }}>›</Text>
+        </PressableScale>
+      </View>
+
+      {changedDates.length > 0 && (
+        <View style={{ marginBottom: 12, gap: 6 }}>
+          <Label>FECHAS CON CAMBIOS</Label>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            {changedDates.map(changed => (
+              <PressableScale
+                key={changed}
+                onPress={() => { setForm(null); setDate(changed); }}
+                selected={changed === date}
+                style={{ minHeight: 34, justifyContent: 'center', paddingHorizontal: 10, borderWidth: 1, borderColor: changed === date ? accent : C.border }}
+              >
+                <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textSecondary }}>{dayTitle(changed)}</Text>
+              </PressableScale>
+            ))}
+          </View>
+        </View>
+      )}
+
+      <Text style={{ fontFamily: F.inter, fontSize: 12, lineHeight: 18, color: C.textSecondary, marginBottom: 12 }}>
+        {`Lo que cambies acá vale solo para esta fecha; tu semana habitual de los ${weekdayName} no cambia.`}
+      </Text>
+
+      {!data && <ActivityIndicator color={C.textTertiary} style={{ marginVertical: 30 }} />}
+
+      {data && form && (
+        <MealPlanForm
+          key={form.kind === 'add' ? 'add' : `${form.kind}-${form.meal.id}`}
+          editing={form.kind === 'edit'}
+          initial={form.kind === 'add'
+            ? { label: '', time: '', n: '', kcal: 0, p: 0, c: 0, g: 0 }
+            : { label: form.meal.label, time: form.meal.time, n: form.meal.n, kcal: form.meal.kcal, p: form.meal.p, c: form.meal.c, g: form.meal.g }}
+          onCancel={() => setForm(null)}
+          onSave={save}
+          onDelete={form.kind === 'edit' ? () => void run(mealPlanId => deleteMealSlot(mealPlanId, form.meal.id)) : undefined}
+        />
+      )}
+
+      {data && !data.meals.length && !form && (
+        <Card style={{ padding: 18, marginBottom: 12 }}>
+          <Text style={{ fontFamily: F.inter, fontSize: 13, lineHeight: 19, color: C.textSecondary, textAlign: 'center' }}>
+            No hay comidas planificadas para esta fecha.
+          </Text>
+        </Card>
+      )}
+
+      {data?.meals.map(meal => {
+        const once = meal.planDate != null;
+        return (
+          <View key={meal.id} style={{ backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderLeftWidth: 3, borderLeftColor: once ? accent : C.border, marginBottom: 8 }}>
+            <View style={{ padding: 12, gap: 3 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
+                <Text style={{ fontFamily: F.interSemi, fontSize: 14, color: C.textPrimary }}>{`${meal.label}${meal.time ? ` · ${meal.time}` : ''}`}</Text>
+                <Text style={{ fontFamily: F.mono, fontSize: 9, letterSpacing: 0.6, color: once ? accent : C.textTertiary }}>{once ? 'SOLO ESTE DÍA' : 'SEMANA HABITUAL'}</Text>
+              </View>
+              <Text style={{ fontFamily: F.mono, fontSize: 10, color: C.textTertiary }} numberOfLines={2}>{`${meal.n} · ${meal.kcal} kcal`}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', borderTopWidth: 1, borderTopColor: C.border }}>
+              {once ? (
+                <>
+                  <PressableScale onPress={() => setForm({ kind: 'edit', meal })} containerStyle={{ flex: 1 }} style={{ ...actionStyle, borderRightWidth: 1, borderRightColor: C.border }}>
+                    <Text style={actionText}>EDITAR</Text>
+                  </PressableScale>
+                  <PressableScale
+                    onPress={() => void run(mealPlanId => repeatMealSlotWeekly(mealPlanId, meal.id))}
+                    accessibilityHint={`Pasa a tu semana habitual: todos los ${weekdayName}`}
+                    containerStyle={{ flex: 1 }}
+                    style={actionStyle}
+                  >
+                    <Text style={actionText}>{`REPETIR TODOS LOS ${WEEKDAY_LABELS[weekday]}`}</Text>
+                  </PressableScale>
+                </>
+              ) : (
+                <>
+                  <PressableScale onPress={() => setForm({ kind: 'swap', meal })} containerStyle={{ flex: 1 }} style={{ ...actionStyle, borderRightWidth: 1, borderRightColor: C.border }}>
+                    <Text style={actionText}>CAMBIAR ESTE DÍA</Text>
+                  </PressableScale>
+                  <PressableScale onPress={() => void run(() => skipMealSlotOnDate(meal.id, date))} containerStyle={{ flex: 1 }} style={actionStyle}>
+                    <Text style={actionText}>QUITAR ESTE DÍA</Text>
+                  </PressableScale>
+                </>
+              )}
+            </View>
+          </View>
+        );
+      })}
+
+      {data && data.skipped.length > 0 && (
+        <>
+          <Label style={{ marginTop: 8, marginBottom: 6 }}>NO VAN ESTA FECHA</Label>
+          {data.skipped.map(meal => (
+            <View key={meal.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, borderTopWidth: 1, borderTopColor: C.border, paddingVertical: 8 }}>
+              <Text style={{ flex: 1, fontFamily: F.inter, fontSize: 13, color: C.textTertiary, textDecorationLine: 'line-through' }} numberOfLines={1}>{`${meal.label} · ${meal.n}`}</Text>
+              <PressableScale onPress={() => void run(() => restoreMealSlotOnDate(meal.id, date))} style={{ minHeight: 40, justifyContent: 'center', paddingHorizontal: 10, borderWidth: 1, borderColor: C.border }}>
+                <Text style={{ fontFamily: F.monoBold, fontSize: 9, color: C.textSecondary }}>VOLVER A INCLUIR</Text>
+              </PressableScale>
+            </View>
+          ))}
+        </>
+      )}
+
+      {data && !form && (
+        <PressableScale
+          onPress={() => setForm({ kind: 'add' })}
+          style={{ alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.border, borderStyle: 'dashed', backgroundColor: C.bgEl, padding: 14, marginTop: 8 }}
+        >
+          <Text style={{ fontFamily: F.monoBold, fontSize: 11, letterSpacing: 0.6, color: C.textSecondary }}>+ AGREGAR SOLO PARA ESTA FECHA</Text>
+        </PressableScale>
+      )}
+    </>
+  );
+}
+
 // ── MIS ALIMENTOS: saved products, usable offline ───────────────────────────
 
 function FoodsView() {
   const { userId } = useSession();
-  const { reloadNutritionToday } = useApp();
+  const { reloadNutritionToday, reloadAll } = useApp();
   const C = useColors();
   const { accent } = usePreferences();
   const [foods, setFoods] = useState<SavedFoodItem[] | null>(null);
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<{ food: SavedFoodItem | null } | null>(null);
   const [logging, setLogging] = useState<SavedFoodItem | null>(null);
+  const [planning, setPlanning] = useState<SavedFoodItem | null>(null);
+  const [comparing, setComparing] = useState<SavedFoodItem | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -765,6 +996,14 @@ function FoodsView() {
       <Text style={{ fontFamily: F.inter, fontSize: 12, lineHeight: 18, color: C.textSecondary, marginBottom: 10 }}>
         Guardar un alimento no lo registra ni cambia tu plan. Todo esto funciona sin conexión.
       </Text>
+      {notice && (
+        <Animated.View entering={FadeIn.duration(180)} accessibilityLiveRegion="polite" style={{ flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: accent, padding: 12, marginBottom: 12 }}>
+          <Text style={{ flex: 1, fontFamily: F.interSemi, fontSize: 13, color: C.textPrimary }}>{notice}</Text>
+          <PressableScale onPress={() => setNotice(null)} accessibilityLabel="Cerrar aviso" style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ fontFamily: F.mono, fontSize: 12, color: C.textSecondary }}>✕</Text>
+          </PressableScale>
+        </Animated.View>
+      )}
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
         <TextInput
           value={query}
@@ -814,7 +1053,13 @@ function FoodsView() {
               <Text style={{ fontFamily: F.monoBold, fontSize: 9, color: C.textPrimary }}>REGISTRAR</Text>
             </PressableScale>
           </View>
-          <View style={{ flexDirection: 'row', gap: 18, paddingLeft: 50 }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: 18, paddingLeft: 50 }}>
+            <PressableScale onPress={() => setPlanning(food)} accessibilityHint="Planificar sin registrarlo" style={{ minHeight: 32, justifyContent: 'center' }}>
+              <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textSecondary }}>PLANIFICAR</Text>
+            </PressableScale>
+            <PressableScale onPress={() => setComparing(food)} style={{ minHeight: 32, justifyContent: 'center' }}>
+              <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textSecondary }}>COMPARAR</Text>
+            </PressableScale>
             <PressableScale onPress={() => setEditing({ food })} style={{ minHeight: 32, justifyContent: 'center' }}>
               <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textTertiary }}>EDITAR</Text>
             </PressableScale>
@@ -835,6 +1080,30 @@ function FoodsView() {
       ))}
 
       {editing && <SavedFoodSheet food={editing.food} onClose={() => setEditing(null)} onSaved={load} />}
+      {planning && (
+        <PlanFoodSheet
+          food={planning}
+          onClose={() => setPlanning(null)}
+          onPlanned={(message, date, repeatWeekly) => {
+            setNotice(message);
+            load();
+            const touchesToday = date === todayStr() || (repeatWeekly && weekdayOf(parseDate(date)) === weekdayOf(new Date()));
+            if (touchesToday) reloadAll().catch(e => console.error('[plan-reload]', e));
+          }}
+        />
+      )}
+      {comparing && (
+        <CompareSheet
+          subject={{
+            id: comparing.id,
+            name: comparing.brand ? `${comparing.name} · ${comparing.brand}` : comparing.name,
+            basis: comparing.basis,
+            nutrients: comparing.nutrients,
+            portion: comparing.servingAmount ? { amount: comparing.servingAmount, label: `1 ${comparing.servingLabel || 'porción'}` } : null,
+          }}
+          onClose={() => setComparing(null)}
+        />
+      )}
       {logging && (
         <FoodLogger
           visible
