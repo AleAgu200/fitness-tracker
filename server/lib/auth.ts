@@ -3,6 +3,12 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 
 import { db } from "@/db";
 import * as schema from "@/db/schema";
+import { socialProvidersFromEnv } from "@/lib/auth-providers";
+import { emailEnabled, passwordResetEmail, sendEmail, verificationEmail } from "@/lib/email";
+
+// Recovery and verification only exist when email can really be delivered;
+// without it Better Auth answers "not enabled" and the app says so honestly.
+const canEmail = emailEnabled();
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -15,6 +21,46 @@ export const auth = betterAuth({
     enabled: true,
     minPasswordLength: 6,
     autoSignIn: true,
+    // Off until every existing account had a chance to verify; turning it on
+    // would lock out athletes who signed up before verification existed.
+    requireEmailVerification: process.env.REQUIRE_EMAIL_VERIFICATION === "true",
+    // One-time link, one hour. A new password ends every other session.
+    resetPasswordTokenExpiresIn: 60 * 60,
+    revokeSessionsOnPasswordReset: true,
+    ...(canEmail ? {
+      sendResetPassword: async ({ user, url }) => {
+        await sendEmail(passwordResetEmail(user.email, url));
+      },
+    } : {}),
+  },
+
+  ...(canEmail ? {
+    emailVerification: {
+      sendOnSignUp: true,
+      autoSignInAfterVerification: false,
+      expiresIn: 60 * 60 * 24,
+      sendVerificationEmail: async ({ user, url }) => {
+        await sendEmail(verificationEmail(user.email, url));
+      },
+    },
+  } : {}),
+
+  socialProviders: socialProvidersFromEnv(process.env),
+
+  account: {
+    accountLinking: {
+      // A Google or Apple sign-in never joins an existing PULSO account just
+      // because the address matches; linking needs the athlete signed in.
+      disableImplicitLinking: true,
+    },
+  },
+
+  rateLimit: {
+    customRules: {
+      // Each of these sends an email: keep them scarce per client.
+      "/request-password-reset": { window: 15 * 60, max: 3 },
+      "/send-verification-email": { window: 15 * 60, max: 3 },
+    },
   },
 
   trustedOrigins: (process.env.TRUSTED_ORIGINS ?? "").split(",").filter(Boolean),

@@ -2,45 +2,99 @@
 // All network calls go to the Next.js server at EXPO_PUBLIC_SERVER_URL.
 
 import { authClient, clearStoredCookie, restoreCookieFromStorage } from "./auth-client";
+import { AUTH_ERROR_MESSAGES, AuthErrorKind, classifyAuthError } from "./auth-errors";
 
 /** Error with the HTTP status and Better Auth error code attached */
 export class AuthError extends Error {
   status: number;
   code: string | null;
+  kind: AuthErrorKind;
+  /** Spanish, ready to show; empty when nothing should be shown (a cancel). */
+  userMessage: string;
 
-  constructor(message: string, status: number, code?: string | null) {
+  constructor(message: string, status: number, code?: string | null, kind?: AuthErrorKind) {
     super(message);
     this.name = "AuthError";
     this.status = status;
     this.code = code ?? null;
+    this.kind = kind ?? classifyAuthError({ status, code, message });
+    this.userMessage = AUTH_ERROR_MESSAGES[this.kind];
   }
 }
 
 export function isUserExistsError(e: unknown): boolean {
-  return e instanceof AuthError && (e.status === 422 || e.code === "USER_ALREADY_EXISTS");
+  return e instanceof AuthError && e.kind === "user_exists";
 }
 
+type BetterAuthError = { status: number; message?: string; code?: string } | null;
+
+/**
+ * Runs a Better Auth call and turns both kinds of failure into an AuthError:
+ * an error response (with its code) and a request that never got an answer.
+ */
+async function call<T>(fallback: string, request: () => Promise<{ data: T; error: BetterAuthError }>): Promise<T> {
+  let result: { data: T; error: BetterAuthError };
+  try {
+    result = await request();
+  } catch (e) {
+    throw new AuthError(e instanceof Error ? e.message : "network_error", 0, null);
+  }
+  const { data, error } = result;
+  if (error) throw new AuthError(error.message ?? fallback, error.status ?? 0, error.code);
+  return data;
+}
+
+/** Where the server sends links from verification emails (see server/app/cuenta). */
+const VERIFIED_PATH = "/cuenta/verificado";
+const RESET_PATH = "/cuenta/restablecer";
+
 export async function signUp(email: string, password: string, name?: string) {
-  const { data, error } = await authClient.signUp.email({
+  return call("signup_failed", () => authClient.signUp.email({
     email: email.trim().toLowerCase(),
     password,
     name: name ?? email.split("@")[0],
-  });
-  if (error) {
-    throw new AuthError(error.message ?? "signup_failed", error.status, (error as { code?: string }).code);
-  }
-  return data;
+    callbackURL: VERIFIED_PATH,
+  }));
 }
 
 export async function signIn(email: string, password: string) {
-  const { data, error } = await authClient.signIn.email({
+  return call("invalid_credentials", () => authClient.signIn.email({
     email: email.trim().toLowerCase(),
     password,
-  });
-  if (error) {
-    throw new AuthError(error.message ?? "invalid_credentials", error.status, (error as { code?: string }).code);
-  }
-  return data;
+  }));
+}
+
+/**
+ * Signs in (or signs up) with an ID token obtained natively from Google or
+ * Apple. The server verifies the token; an existing PULSO account with the
+ * same address is never joined implicitly.
+ */
+export async function signInWithIdToken(
+  provider: "google" | "apple",
+  token: { idToken: string; nonce?: string; user?: { name?: { firstName?: string; lastName?: string }; email?: string } },
+) {
+  return call("social_failed", () => authClient.signIn.social({
+    provider,
+    idToken: { token: token.idToken, nonce: token.nonce, user: token.user },
+  }));
+}
+
+/**
+ * Asks for a recovery link. The answer is the same whether or not the address
+ * has an account, so it can't be used to find out who uses PULSO.
+ */
+export async function requestPasswordReset(email: string) {
+  return call("reset_failed", () => authClient.requestPasswordReset({
+    email: email.trim().toLowerCase(),
+    redirectTo: RESET_PATH,
+  }));
+}
+
+export async function resendVerificationEmail(email: string) {
+  return call("verification_failed", () => authClient.sendVerificationEmail({
+    email: email.trim().toLowerCase(),
+    callbackURL: VERIFIED_PATH,
+  }));
 }
 
 export async function getActiveSession() {
