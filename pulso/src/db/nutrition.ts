@@ -1,7 +1,8 @@
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
 
 import { nanoid } from '@/lib/id';
-import { todayStr } from '@/lib/dates';
+import { todayStr, weekdayOf } from '@/lib/dates';
+import { resolveDayMeals } from '@/lib/nutrition-planning';
 import { canCreateOwnPlan, copyPlanName, nextPlanName, normalizePlanName, OWN_PLAN_LIMIT_ERROR } from '@/lib/plan-limits';
 import { db } from './index';
 import { enqueueSyncMutation } from './sync';
@@ -10,7 +11,11 @@ import {
   mealLogEntries,
   mealPlans,
   mealSlots,
+  mealSlotSkips,
 } from './schema';
+
+/** Slots of the usual week; meals planned for one date only are left out. */
+const usualWeek = isNull(mealSlots.planDate);
 
 export type MealStatusDb = 'completed' | 'substituted' | 'pending';
 
@@ -26,6 +31,8 @@ export interface MealSlotUI {
   p: number;
   c: number;
   g: number;
+  /** Set when the meal is planned for that date only (not the usual week). */
+  planDate?: string | null;
 }
 
 export interface MealDraft {
@@ -145,7 +152,7 @@ export async function listMealPlans(athleteId: string): Promise<MealPlanSummary[
     .where(and(eq(mealPlans.athleteId, athleteId), isNull(mealPlans.archivedAt)));
   const slots = rows.length
     ? await db.select({ mealPlanId: mealSlots.mealPlanId, weekday: mealSlots.weekday }).from(mealSlots)
-        .where(inArray(mealSlots.mealPlanId, rows.map(row => row.id)))
+        .where(and(inArray(mealSlots.mealPlanId, rows.map(row => row.id)), usualWeek))
     : [];
   return rows.map(row => {
     const dayCounts: Record<number, number> = {};
@@ -201,7 +208,8 @@ export async function createOwnMealPlan(
         .where(and(eq(mealPlans.id, options.sourceMealPlanId), eq(mealPlans.athleteId, athleteId))).limit(1);
       if (!source) throw new Error('meal_plan_not_found');
       name ??= copyPlanName(source.name, taken);
-      sourceSlots = await tx.select().from(mealSlots).where(eq(mealSlots.mealPlanId, options.sourceMealPlanId));
+      // A copy takes the usual week; one-off dates stay with the original.
+      sourceSlots = await tx.select().from(mealSlots).where(and(eq(mealSlots.mealPlanId, options.sourceMealPlanId), usualWeek));
     }
     await insertMealPlan(tx, athleteId, id, 'own', {
       active: true,
@@ -242,7 +250,7 @@ export async function getMealPlanOutline(athleteId: string, mealPlanId: string):
   const [owner] = await db.select({ id: mealPlans.id }).from(mealPlans)
     .where(and(eq(mealPlans.id, mealPlanId), eq(mealPlans.athleteId, athleteId))).limit(1);
   if (!owner) return [];
-  const slots = await db.select().from(mealSlots).where(eq(mealSlots.mealPlanId, mealPlanId)).orderBy(asc(mealSlots.slotOrder));
+  const slots = await db.select().from(mealSlots).where(and(eq(mealSlots.mealPlanId, mealPlanId), usualWeek)).orderBy(asc(mealSlots.slotOrder));
   return Array.from({ length: DAYS_PER_WEEK }, (_, i) => ({
     weekday: i + 1,
     meals: slots.filter(slot => slot.weekday === i + 1)
@@ -299,7 +307,8 @@ export async function applyGeneratedMealPlan(
  *  are averaged over the days that actually have meals. Summing every slot
  *  outright would report seven times the daily calorie goal. */
 async function syncPlanTargets(mealPlanId: string): Promise<void> {
-  const slots = await db.select().from(mealSlots).where(eq(mealSlots.mealPlanId, mealPlanId));
+  // The targets describe the usual week; a one-off date doesn't move them.
+  const slots = await db.select().from(mealSlots).where(and(eq(mealSlots.mealPlanId, mealPlanId), usualWeek));
   const dayCount = new Set(slots.map(s => s.weekday)).size || 1;
   const perDay = (pick: (s: typeof slots[number]) => number | null) =>
     Math.round(slots.reduce((a, s) => a + (pick(s) ?? 0), 0) / dayCount);
@@ -328,22 +337,118 @@ export async function getMealPlan(
   const slots = await db
     .select()
     .from(mealSlots)
-    .where(and(eq(mealSlots.mealPlanId, mealPlanId), eq(mealSlots.weekday, weekday)))
+    .where(and(eq(mealSlots.mealPlanId, mealPlanId), eq(mealSlots.weekday, weekday), usualWeek))
     .orderBy(asc(mealSlots.slotOrder));
+  return { mealPlanId, plan, meals: slots.map(toMealSlotUI) };
+}
+
+function toMealSlotUI(s: typeof mealSlots.$inferSelect): MealSlotUI {
   return {
-    mealPlanId,
-    plan,
-    meals: slots.map(s => ({
-      id: s.id,
-      label: s.name,
-      time: s.scheduledTime ?? '',
-      n: s.defaultName,
-      kcal: s.targetKcal ?? 0,
-      p: s.targetProteinG ?? 0,
-      c: s.targetCarbsG ?? 0,
-      g: s.targetFatG ?? 0,
-    })),
+    id: s.id,
+    label: s.name,
+    time: s.scheduledTime ?? '',
+    n: s.defaultName,
+    kcal: s.targetKcal ?? 0,
+    p: s.targetProteinG ?? 0,
+    c: s.targetCarbsG ?? 0,
+    g: s.targetFatG ?? 0,
+    planDate: s.planDate,
   };
+}
+
+function weekdayOfDate(date: string): number {
+  return weekdayOf(new Date(`${date}T12:00:00`));
+}
+
+/**
+ * What the active plan holds for a concrete date: the usual week for that
+ * weekday with the date's exceptions applied (skipped meals, meals planned for
+ * that day only). This is what Hoy, the Núcleo and simulations read.
+ */
+export async function getMealPlanForDate(
+  athleteId: string,
+  date: string,
+): Promise<{ mealPlanId: string; plan: { id: string; name: string; origin: MealPlanOrigin }; meals: MealSlotUI[]; skipped: MealSlotUI[] }> {
+  const mealPlanId = await getOrCreateMealPlan(athleteId);
+  const [plan] = await db.select({ id: mealPlans.id, name: mealPlans.name, origin: mealPlans.origin }).from(mealPlans)
+    .where(eq(mealPlans.id, mealPlanId)).limit(1);
+  if (!plan) throw new Error('meal_plan_not_found');
+  const weekday = weekdayOfDate(date);
+  const slots = await db.select().from(mealSlots).where(and(
+    eq(mealSlots.mealPlanId, mealPlanId),
+    or(and(usualWeek, eq(mealSlots.weekday, weekday)), eq(mealSlots.planDate, date)),
+  ));
+  const skips = slots.length
+    ? await db.select({ slotId: mealSlotSkips.slotId }).from(mealSlotSkips)
+        .where(and(eq(mealSlotSkips.date, date), inArray(mealSlotSkips.slotId, slots.map(slot => slot.id))))
+    : [];
+  const resolved = resolveDayMeals(slots, new Set(skips.map(skip => skip.slotId)), date, weekday);
+  return { mealPlanId, plan, meals: resolved.meals.map(toMealSlotUI), skipped: resolved.skipped.map(toMealSlotUI) };
+}
+
+/**
+ * Dates of the active plan in [from, to] that differ from the usual week —
+ * meals for that day only or skipped meals — for marking them in Plan.
+ */
+export async function listPlanExceptionDates(athleteId: string, from: string, to: string): Promise<Set<string>> {
+  const mealPlanId = await getOrCreateMealPlan(athleteId);
+  const inRange = (date: string | null) => date != null && date >= from && date <= to;
+  const [dated, skips] = await Promise.all([
+    db.select({ date: mealSlots.planDate }).from(mealSlots).where(eq(mealSlots.mealPlanId, mealPlanId)),
+    db.select({ date: mealSlotSkips.date }).from(mealSlotSkips)
+      .innerJoin(mealSlots, eq(mealSlots.id, mealSlotSkips.slotId))
+      .where(eq(mealSlots.mealPlanId, mealPlanId)),
+  ]);
+  return new Set([...dated, ...skips].map(row => row.date).filter(inRange) as string[]);
+}
+
+/** Leaves a usual-week meal out of one date. The usual week keeps it. */
+export async function skipMealSlotOnDate(slotId: string, date: string): Promise<void> {
+  await db.insert(mealSlotSkips).values({ id: nanoid(), slotId, date, createdAt: new Date() }).onConflictDoNothing();
+}
+
+/** Undoes a skip: the usual-week meal is planned again on that date. */
+export async function restoreMealSlotOnDate(slotId: string, date: string): Promise<void> {
+  await db.delete(mealSlotSkips).where(and(eq(mealSlotSkips.slotId, slotId), eq(mealSlotSkips.date, date)));
+}
+
+/**
+ * Makes a meal planned for one date part of the usual week, on that date's
+ * weekday. Repeating is always this explicit step; planning a date never
+ * changes the usual week by itself.
+ */
+export async function repeatMealSlotWeekly(mealPlanId: string, slotId: string): Promise<void> {
+  const [slot] = await db.select().from(mealSlots).where(and(eq(mealSlots.id, slotId), eq(mealSlots.mealPlanId, mealPlanId))).limit(1);
+  if (!slot?.planDate) return;
+  const existing = await db.select({ id: mealSlots.id }).from(mealSlots)
+    .where(and(eq(mealSlots.mealPlanId, mealPlanId), eq(mealSlots.weekday, slot.weekday), usualWeek));
+  await db.update(mealSlots).set({ planDate: null, slotOrder: existing.length }).where(eq(mealSlots.id, slotId));
+  await syncPlanTargets(mealPlanId);
+}
+
+/**
+ * Plans a food in the active plan: on `date` only, or — when the athlete asks
+ * for it explicitly — every week on that date's weekday. Planning never logs
+ * consumption. Unknown values count as 0 in the plan's per-meal targets.
+ */
+export async function planFood(athleteId: string, input: {
+  date: string;
+  repeatWeekly: boolean;
+  mealLabel: string;
+  description: string;
+  nutrients: Partial<Record<'kcal' | 'proteinG' | 'carbsG' | 'fatG', number | null>>;
+}): Promise<string> {
+  const mealPlanId = await getOrCreateMealPlan(athleteId);
+  const round = (value: number | null | undefined) => Math.round(value ?? 0);
+  return addMealSlot(mealPlanId, weekdayOfDate(input.date), {
+    label: input.mealLabel,
+    time: '',
+    n: input.description,
+    kcal: round(input.nutrients.kcal),
+    p: round(input.nutrients.proteinG),
+    c: round(input.nutrients.carbsG),
+    g: round(input.nutrients.fatG),
+  }, input.repeatWeekly ? null : input.date);
 }
 
 export interface MealWeekdaySummary {
@@ -357,7 +462,7 @@ export async function getMealWeekSummary(athleteId: string): Promise<MealWeekday
   const slots = await db
     .select({ weekday: mealSlots.weekday })
     .from(mealSlots)
-    .where(eq(mealSlots.mealPlanId, mealPlanId));
+    .where(and(eq(mealSlots.mealPlanId, mealPlanId), usualWeek));
 
   const countByWeekday = new Map<number, number>();
   for (const s of slots) countByWeekday.set(s.weekday, (countByWeekday.get(s.weekday) ?? 0) + 1);
@@ -369,20 +474,27 @@ export async function getMealWeekSummary(athleteId: string): Promise<MealWeekday
   return result;
 }
 
+/**
+ * Adds a meal to the usual week on `weekday`, or — with `planDate` — to that
+ * date only (its weekday is taken from the date).
+ */
 export async function addMealSlot(
   mealPlanId: string,
   weekday: number,
   draft: MealDraft,
+  planDate: string | null = null,
 ): Promise<string> {
+  const day = planDate ? weekdayOfDate(planDate) : weekday;
   const existing = await db
     .select({ id: mealSlots.id })
     .from(mealSlots)
-    .where(and(eq(mealSlots.mealPlanId, mealPlanId), eq(mealSlots.weekday, weekday)));
+    .where(and(eq(mealSlots.mealPlanId, mealPlanId), planDate ? eq(mealSlots.planDate, planDate) : and(eq(mealSlots.weekday, day), usualWeek)));
   const id = nanoid();
   await db.insert(mealSlots).values({
     id,
     mealPlanId,
-    weekday,
+    weekday: day,
+    planDate,
     name: draft.label,
     scheduledTime: draft.time || null,
     slotOrder: existing.length,
@@ -418,13 +530,13 @@ export async function deleteMealSlot(mealPlanId: string, slotId: string): Promis
 
 /** Replace one weekday's meals. Only that day's logged statuses reset — the
  *  other six keep theirs, which matters now that a replacement touches seven
- *  days instead of one. */
+ *  days instead of one. Meals planned for a single date are not touched. */
 export async function replaceMealSlots(
   mealPlanId: string,
   weekday: number,
   meals: MealDraft[],
 ): Promise<void> {
-  const where = and(eq(mealSlots.mealPlanId, mealPlanId), eq(mealSlots.weekday, weekday));
+  const where = and(eq(mealSlots.mealPlanId, mealPlanId), eq(mealSlots.weekday, weekday), usualWeek);
   const slots = await db.select({ id: mealSlots.id }).from(mealSlots).where(where);
   for (const s of slots) {
     // Entries reference slots with onDelete: restrict — clear them first.

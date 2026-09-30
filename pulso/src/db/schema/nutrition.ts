@@ -36,6 +36,12 @@ export const mealSlots = sqliteTable('meal_slots', {
   // land on the default and are expanded across the week on first read, so a
   // device upgrading mid-week keeps showing its meals.
   weekday:        integer('weekday').notNull().default(1),
+  /**
+   * Null = part of the usual week (repeats every `weekday`). A date
+   * (YYYY-MM-DD) = planned for that day only; the usual week ignores it, and
+   * `weekday` still holds that date's weekday.
+   */
+  planDate:       text('plan_date'),
   name:           text('name').notNull(),
   scheduledTime:  text('scheduled_time'),
   slotOrder:      integer('slot_order').notNull(),
@@ -45,6 +51,21 @@ export const mealSlots = sqliteTable('meal_slots', {
   targetCarbsG:   integer('target_carbs_g'),
   targetFatG:     integer('target_fat_g'),
 });
+
+/**
+ * A date exception to the usual week: that weekly meal is not planned on
+ * `date`. The usual week and every other date keep it.
+ */
+export const mealSlotSkips = sqliteTable('meal_slot_skips', {
+  id:        text('id').primaryKey(),
+  slotId:    text('slot_id')
+               .notNull()
+               .references(() => mealSlots.id, { onDelete: 'cascade' }),
+  date:      text('date').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+}, t => [
+  uniqueIndex('meal_slot_skip_slot_date').on(t.slotId, t.date),
+]);
 
 export const dailyNutritionLogs = sqliteTable('daily_nutrition_logs', {
   id:         text('id').primaryKey(),

@@ -26,7 +26,7 @@ import {
   addMealSlot,
   createOwnMealPlan,
   deleteMealSlot,
-  getMealPlan,
+  getMealPlanForDate,
   MealPlanOrigin,
   getTodayMealEntries,
   MealStatusDb,
@@ -434,7 +434,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         if (cancelled) return;
 
-        const todayWeekday = weekdayOf(new Date());
         // Assignments land in their own plans (applyCoachWorkout,
         // applyNutritionistMealPlan); the first of each becomes the active one.
         let assignedWorkoutBy: string | null = null;
@@ -454,7 +453,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           assignedMealsBy = meta.mealsBy;
         }
         await syncMobileData(userId);
-        const mealPlan = await getMealPlan(userId, todayWeekday);
+        const mealPlan = await getMealPlanForDate(userId, todayStr());
 
         // Sequential on purpose: each may create the default program, and two
         // concurrent creations would leave two active plans.
@@ -666,9 +665,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const reloadMeals = useCallback(async () => {
     const uid = userRef.current;
     if (!uid) return;
-    // Meal plans now cover the whole week; the diet tab shows the day the
-    // athlete is actually logging.
-    const mealPlan = await getMealPlan(uid, weekdayOf(new Date()));
+    // Today's meals: the usual week plus today's exceptions.
+    const mealPlan = await getMealPlanForDate(uid, todayStr());
     mealPlanIdRef.current = mealPlan.mealPlanId;
     setState(s => ({ ...s, meals: mealPlan.meals, activeMealPlan: mealPlan.plan }));
   }, []);
