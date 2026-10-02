@@ -1,11 +1,14 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { APIError } from "better-auth/api";
+import { magicLink } from "better-auth/plugins";
 
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { passwordMustGoOnLink } from "@/lib/auth-linking";
 import { socialProvidersFromEnv } from "@/lib/auth-providers";
-import { emailEnabled, passwordResetEmail, sendEmail, verificationEmail } from "@/lib/email";
+import { emailEnabled, magicLinkEmail, magicLinkNoAccountEmail, passwordResetEmail, sendEmail, verificationEmail, welcomeEmail } from "@/lib/email";
+import { appMagicLinkUrl, isAppClient } from "@/lib/magic-link";
 
 // Recovery and verification only exist when email can really be delivered;
 // without it Better Auth answers "not enabled" and the app says so honestly.
@@ -30,7 +33,7 @@ export const auth = betterAuth({
     revokeSessionsOnPasswordReset: true,
     ...(canEmail ? {
       sendResetPassword: async ({ user, url }) => {
-        await sendEmail(passwordResetEmail(user.email, url));
+        await sendEmail(passwordResetEmail(user.email, url, user.name));
       },
     } : {}),
   },
@@ -41,7 +44,7 @@ export const auth = betterAuth({
       autoSignInAfterVerification: false,
       expiresIn: 60 * 60 * 24,
       sendVerificationEmail: async ({ user, url }) => {
-        await sendEmail(verificationEmail(user.email, url));
+        await sendEmail(verificationEmail(user.email, url, user.name));
       },
     },
   } : {}),
@@ -57,7 +60,56 @@ export const auth = betterAuth({
     },
   },
 
+  plugins: canEmail ? [
+    // Passwordless sign-in for the portal and the app. The app asks with
+    // metadata { client: "app", scheme }, and its email points to a web page
+    // that hands the one-time token to the app (lib/magic-link.ts): mail
+    // clients drop custom-scheme links.
+    magicLink({
+      expiresIn: 10 * 60,
+      storeToken: "hashed",
+      rateLimit: { window: 15 * 60, max: 3 },
+      // Sign-in only: creating an account needs a name and the onboarding
+      // consent, so magic links never sign anyone up.
+      disableSignUp: true,
+      sendMagicLink: async ({ email, url, token, metadata }, ctx) => {
+        const forApp = isAppClient(metadata);
+        const existing = await ctx?.context.internalAdapter.findUserByEmail(email);
+        if (!existing) {
+          await sendEmail(magicLinkNoAccountEmail(email, forApp));
+          return;
+        }
+        // Suspended accounts get nothing: the session would be refused anyway.
+        if ((existing.user as { suspendedAt?: Date | null }).suspendedAt) return;
+        const appUrl = forApp ? appMagicLinkUrl(token, metadata) : null;
+        await sendEmail(magicLinkEmail(email, appUrl ?? url, forApp));
+      },
+    }),
+  ] : [],
+
   databaseHooks: {
+    session: {
+      create: {
+        // A suspended account can't sign in by any method (password, Google,
+        // Apple, magic link): no session is ever created for it.
+        before: async (session, ctx) => {
+          const owner = await ctx?.context.internalAdapter.findUserById(session.userId);
+          if ((owner as { suspendedAt?: Date | null } | null)?.suspendedAt) {
+            throw new APIError("FORBIDDEN", { message: "Account suspended", code: "ACCOUNT_SUSPENDED" });
+          }
+        },
+      },
+    },
+    user: {
+      create: {
+        // The welcome email speaks to athletes, so it goes only to accounts the
+        // app creates; professionals get their own email from the portal flow.
+        after: async (created, ctx) => {
+          if (!canEmail || !isAppClient({ client: ctx?.request?.headers.get("x-pulso-client") ?? undefined })) return;
+          await sendEmail(welcomeEmail(created.email, created.name));
+        },
+      },
+    },
     account: {
       create: {
         // "before" runs ahead of Better Auth marking the address verified, so
@@ -88,6 +140,7 @@ export const auth = betterAuth({
       // Each of these sends an email: keep them scarce per client.
       "/request-password-reset": { window: 15 * 60, max: 3 },
       "/send-verification-email": { window: 15 * 60, max: 3 },
+      "/sign-in/magic-link": { window: 15 * 60, max: 3 },
     },
   },
 
@@ -128,6 +181,19 @@ export const auth = betterAuth({
       isSuperAdmin: {
         type: "boolean",
         defaultValue: false,
+        input: false,
+      },
+      // Review state of a professional account (lib/admin-policy.ts). Only the
+      // portal's sign-up flow and the admin panel set it.
+      professionalStatus: {
+        type: "string",
+        required: false,
+        input: false,
+      },
+      // Set by the admin panel; the session hook above refuses sign-in.
+      suspendedAt: {
+        type: "date",
+        required: false,
         input: false,
       },
     },

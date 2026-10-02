@@ -1,4 +1,5 @@
 import { unauthorized, getSessionUser } from "@/lib/api-auth";
+import { ensureCatalogOverlay } from "@/lib/catalog-overlay";
 import { listByTarget } from "@/lib/exercise-catalog";
 
 export async function GET(request: Request) {
@@ -13,5 +14,6 @@ export async function GET(request: Request) {
   const limit = Math.min(10, Math.max(1, Number(url.searchParams.get("limit")) || 5));
 
   if (!targets.length) return Response.json({ exercises: [] });
+  await ensureCatalogOverlay();
   return Response.json({ exercises: listByTarget(targets, limit) });
 }

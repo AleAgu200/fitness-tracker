@@ -25,6 +25,11 @@ describe('classifyAuthError', () => {
     assert.equal(classifyAuthError({ status: 503 }), 'temporary');
   });
 
+  it('tells a suspended account apart from wrong credentials', () => {
+    assert.equal(classifyAuthError({ status: 403, code: 'ACCOUNT_SUSPENDED' }), 'account_suspended');
+    assert.equal(classifyAuthError({ status: 0, code: 'MAGIC_LINK_INVALID' }), 'link_expired');
+  });
+
   it('explains an unlinked social account without merging it', () => {
     assert.equal(classifyAuthError({ status: 401, code: 'OAUTH_LINK_ERROR', message: 'account not linked' }), 'account_not_linked');
     assert.equal(classifyAuthError({ status: 401, code: 'OAUTH_LINK_ERROR', message: 'unable to create user' }), 'temporary');

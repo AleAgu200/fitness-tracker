@@ -5,9 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { startGoogleSignIn, takeGoogleError } from "./google";
-import { api, SessionUser } from "./lib";
+import { api, ApiError, SessionUser } from "./lib";
 import { PortalContext } from "./portal-context";
-import { canAccessPortalPath, canFinishProfessionalSignup, ProfessionalRole } from "@/lib/portal-access";
+import { PortalTour } from "./portal-tour";
+import { ProfessionalSignupWizard } from "./signup-wizard";
+import { canAccessPortalPath, canFinishProfessionalSignup, canOpenInMode, homeForMode, portalMode, ProfessionalRole } from "@/lib/portal-access";
 
 function useReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
@@ -285,15 +287,70 @@ function FinishSignup({ user, onDone, onCancel }: { user: SessionUser; onDone: (
   );
 }
 
+/** Sign in without a password: the email carries a one-time link back to /portal. */
+function MagicLinkForm({ onBack }: { onBack: () => void }) {
+  const [email, setEmail] = useState("");
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function send(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api("/api/auth/sign-in/magic-link", {
+        method: "POST",
+        body: JSON.stringify({ email, callbackURL: "/portal", errorCallbackURL: "/portal" }),
+      });
+      setSentTo(email);
+    } catch (cause) {
+      setError(cause instanceof ApiError && cause.status === 429
+        ? "Pediste varios enlaces seguidos. Esperá unos minutos y revisá tu correo."
+        : "No se pudo enviar el enlace. Probá de nuevo.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (sentTo) {
+    return (
+      <div className="relative z-10 mx-auto max-w-105 px-5 py-[8vh]">
+        <div className="mb-2.5 font-mono-app text-[11px] tracking-[2.4px] text-volt">PULSO · PORTAL PROFESIONAL</div>
+        <h1 className="mb-2 text-[28px] font-semibold text-fg">Revisá tu correo</h1>
+        <p className="mb-6 text-sm leading-6 text-fg-sec">
+          Si {sentTo} tiene una cuenta, le llega un enlace para entrar. Vence en 10 minutos y sirve una sola vez.
+          Abrilo en este mismo navegador.
+        </p>
+        <button type="button" onClick={() => setSentTo(null)} className="w-full cursor-pointer border border-line p-3 font-mono-app text-xs text-fg-sec hover:border-fg-ter hover:text-fg">
+          USAR OTRO CORREO
+        </button>
+        <button type="button" onClick={onBack} className="mt-4 w-full cursor-pointer py-2 text-sm text-fg-sec hover:text-volt">Volver a ingresar con contraseña</button>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={send} className="relative z-10 mx-auto max-w-105 px-5 py-[8vh]">
+      <div className="mb-2.5 font-mono-app text-[11px] tracking-[2.4px] text-volt">PULSO · PORTAL PROFESIONAL</div>
+      <h1 className="mb-2 text-[28px] font-semibold text-fg">Entrar con un enlace</h1>
+      <p className="mb-6 text-sm leading-6 text-fg-sec">Te enviamos un enlace de acceso. Sin contraseña.</p>
+      <input required type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="tu@email.com" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />
+      {error && <div role="alert" className="mb-3 font-mono-app text-xs text-danger">{error}</div>}
+      <button type="submit" disabled={busy} className="w-full cursor-pointer bg-volt p-3.5 font-mono-app text-xs font-extrabold tracking-[1px] text-ink transition hover:brightness-110 disabled:opacity-60">
+        {busy ? "ENVIANDO…" : "ENVIARME EL ENLACE"}
+      </button>
+      <button type="button" onClick={onBack} className="mt-4 w-full cursor-pointer py-2 text-sm text-fg-sec hover:text-volt">Volver a ingresar con contraseña</button>
+    </form>
+  );
+}
+
 function Login({ onDone }: { onDone: () => void }) {
-  const [mode, setMode] = useState<"login" | "signup">("login");
-  const [name, setName] = useState("");
+  const [mode, setMode] = useState<"login" | "signup" | "magic">("login");
+  const [magicEnabled, setMagicEnabled] = useState(false);
+  const [requiresApproval, setRequiresApproval] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [discipline, setDiscipline] = useState<Discipline>("coach");
-  const [organizationName, setOrganizationName] = useState("");
-  const [signupCode, setSignupCode] = useState("");
   const [requiresCode, setRequiresCode] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -302,15 +359,17 @@ function Login({ onDone }: { onDone: () => void }) {
   const reducedMotion = useReducedMotion();
 
   useEffect(() => {
-    api<{ requiresCode: boolean; google?: boolean }>("/api/portal/signup")
+    api<{ requiresCode: boolean; google?: boolean; magicLink?: boolean; requiresApproval?: boolean }>("/api/portal/signup")
       .then(result => {
         setRequiresCode(result.requiresCode);
+        setRequiresApproval(result.requiresApproval !== false);
         setGoogleEnabled(Boolean(result.google));
+        setMagicEnabled(Boolean(result.magicLink));
       })
       .catch(() => undefined);
-    // Coming back from Google with an error (unlinked account, cancelled…).
-    const googleError = takeGoogleError();
-    if (googleError) setError(googleError);
+    // Coming back from Google or a magic link with an error (expired, unlinked…).
+    const returnError = takeGoogleError();
+    if (returnError) setError(returnError);
   }, []);
 
   async function signInWithGoogle() {
@@ -329,19 +388,7 @@ function Login({ onDone }: { onDone: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      if (mode === "signup") {
-        if (password !== confirmPassword) {
-          setError("Las contraseñas no coinciden");
-          setBusy(false);
-          return;
-        }
-        await api("/api/portal/signup", {
-          method: "POST",
-          body: JSON.stringify({ name, email, password, discipline, organizationName, signupCode }),
-        });
-      } else {
-        await api("/api/auth/sign-in/email", { method: "POST", body: JSON.stringify({ email, password }) });
-      }
+      await api("/api/auth/sign-in/email", { method: "POST", body: JSON.stringify({ email, password }) });
       if (reducedMotion) {
         onDone();
       } else {
@@ -349,78 +396,58 @@ function Login({ onDone }: { onDone: () => void }) {
         window.setTimeout(onDone, 320);
       }
     } catch (cause) {
-      const status = cause instanceof Error ? cause.message : "";
-      setError(mode === "login"
-        ? "Email o contraseña incorrectos"
-        : status === "422"
-          ? "Ya existe una cuenta con ese email"
-          : status === "403"
-            ? "El código de registro no es válido"
-            : "No se pudo crear la cuenta. Revisá los datos e intentá de nuevo");
+      const suspended = cause instanceof ApiError && cause.body?.code === "ACCOUNT_SUSPENDED";
+      setError(suspended
+        ? "Tu cuenta está suspendida. Respondé el correo que te enviamos para más información."
+        : cause instanceof ApiError && cause.status === 429
+          ? "Demasiados intentos. Esperá unos minutos."
+          : "Email o contraseña incorrectos");
       setBusy(false);
     }
   }
 
+  const backToLogin = () => { setMode("login"); setError(null); };
+
   return (
     <div className="relative min-h-screen overflow-x-hidden">
       {reducedMotion ? <LightningBg /> : <LightningStrikes />}
-      <form onSubmit={submit} className="relative z-10 mx-auto max-w-105 px-5 py-[8vh]">
-        <div className="mb-2.5 font-mono-app text-[11px] tracking-[2.4px] text-volt">
-          PULSO · PORTAL PROFESIONAL
-        </div>
-        <h1 className="mb-2 text-[28px] font-semibold text-fg">
-          {mode === "login" ? "Ingresar" : "Crear cuenta profesional"}
-        </h1>
-        <p className="mb-6 text-sm leading-6 text-fg-sec">
-          {mode === "login" ? "Accedé a tu espacio de trabajo clínico." : "Configurá tu espacio profesional y empezá con una biblioteca lista para usar."}
-        </p>
-        {mode === "signup" && (
-          <input required minLength={2} maxLength={80} value={name} onChange={e => setName(e.target.value)} placeholder="Nombre completo" autoComplete="name" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />
-        )}
-        <input
-          required
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          type="email"
-          autoComplete="email"
-          placeholder="tu@email.com"
-          className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none"
+      {mode === "signup" ? (
+        <ProfessionalSignupWizard
+          requiresCode={requiresCode}
+          requiresApproval={requiresApproval}
+          googleEnabled={googleEnabled}
+          onDone={onDone}
+          onGoogle={() => void signInWithGoogle()}
+          onBack={backToLogin}
         />
-        <input
-          required
-          minLength={6}
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          type="password"
-          autoComplete={mode === "login" ? "current-password" : "new-password"}
-          placeholder="Contraseña"
-          className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none"
-        />
-        {mode === "signup" && (
-          <>
-            <input required minLength={6} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} type="password" autoComplete="new-password" placeholder="Confirmar contraseña" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />
-            <DisciplinePicker value={discipline} onChange={setDiscipline} />
-            <input value={organizationName} onChange={e => setOrganizationName(e.target.value)} maxLength={100} placeholder="Nombre de tu consultorio o equipo (opcional)" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />
-            {requiresCode && <input required value={signupCode} onChange={e => setSignupCode(e.target.value)} placeholder="Código de registro profesional" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />}
-          </>
-        )}
-        {error && <div className="mb-3 font-mono-app text-xs text-danger">{error}</div>}
-        <button
-          type="submit"
-          disabled={busy}
-          className={`w-full cursor-pointer bg-volt p-3.5 font-mono-app text-xs font-extrabold tracking-[1px] text-ink transition hover:brightness-110 disabled:opacity-60 ${
-            charging ? "animate-[chargeUp_320ms_ease-out_forwards]" : ""
-          }`}
-        >
-          {busy ? "PROCESANDO…" : mode === "login" ? "INGRESAR" : "CREAR MI ESPACIO"}
-        </button>
-        {googleEnabled && (
-          <>
+      ) : mode === "magic" ? (
+        <MagicLinkForm onBack={backToLogin} />
+      ) : (
+        <form onSubmit={submit} className="relative z-10 mx-auto max-w-105 px-5 py-[8vh]">
+          <div className="mb-2.5 font-mono-app text-[11px] tracking-[2.4px] text-volt">PULSO · PORTAL PROFESIONAL</div>
+          <h1 className="mb-2 text-[28px] font-semibold text-fg">Ingresar</h1>
+          <p className="mb-6 text-sm leading-6 text-fg-sec">Accedé a tu espacio de trabajo clínico.</p>
+          <input required value={email} onChange={e => setEmail(e.target.value)} type="email" autoComplete="email" placeholder="tu@email.com" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />
+          <input required minLength={6} value={password} onChange={e => setPassword(e.target.value)} type="password" autoComplete="current-password" placeholder="Contraseña" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />
+          {error && <div role="alert" className="mb-3 font-mono-app text-xs text-danger">{error}</div>}
+          <button
+            type="submit"
+            disabled={busy}
+            className={`w-full cursor-pointer bg-volt p-3.5 font-mono-app text-xs font-extrabold tracking-[1px] text-ink transition hover:brightness-110 disabled:opacity-60 ${
+              charging ? "animate-[chargeUp_320ms_ease-out_forwards]" : ""
+            }`}
+          >
+            {busy ? "PROCESANDO…" : "INGRESAR"}
+          </button>
+          <a href="/cuenta/recuperar" className="mt-2 block py-1 text-center text-xs text-fg-ter hover:text-fg-sec">¿Olvidaste tu contraseña?</a>
+          {(googleEnabled || magicEnabled) && (
             <div className="my-4 flex items-center gap-3" aria-hidden>
               <span className="h-px flex-1 bg-line" />
               <span className="font-mono-app text-[9px] tracking-[1.4px] text-fg-ter">O</span>
               <span className="h-px flex-1 bg-line" />
             </div>
+          )}
+          {googleEnabled && (
             <button
               type="button"
               onClick={() => void signInWithGoogle()}
@@ -428,16 +455,19 @@ function Login({ onDone }: { onDone: () => void }) {
               className="flex w-full cursor-pointer items-center justify-center gap-2.5 border border-[#747775] bg-white p-3 text-sm font-semibold text-[#1F1F1F] transition hover:bg-[#f2f2f2] disabled:opacity-60"
             >
               <span aria-hidden className="text-base font-bold">G</span>
-              {mode === "login" ? "Continuar con Google" : "Crear cuenta con Google"}
+              Continuar con Google
             </button>
-            {mode === "signup" && <p className="mt-2 text-center text-[11px] leading-4 text-fg-ter">Después de Google elegís tu disciplina.</p>}
-          </>
-        )}
-        <button type="button" onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(null); }} className="mt-4 w-full cursor-pointer py-2 text-sm text-fg-sec hover:text-volt">
-          {mode === "login" ? "¿Primera vez? Crear cuenta profesional" : "Ya tengo una cuenta · Ingresar"}
-        </button>
-        {mode === "signup" && <p className="mt-3 text-center font-mono-app text-[9px] leading-4 text-fg-ter">EL ALTA CREA UN ESPACIO PRIVADO. NO OTORGA PERMISOS ADMINISTRATIVOS GLOBALES.</p>}
-      </form>
+          )}
+          {magicEnabled && (
+            <button type="button" onClick={() => { setMode("magic"); setError(null); }} className="mt-3 w-full cursor-pointer border border-line p-3 font-mono-app text-[11px] tracking-[1px] text-fg-sec transition hover:border-fg-ter hover:text-fg">
+              ENTRAR CON UN ENLACE POR CORREO
+            </button>
+          )}
+          <button type="button" onClick={() => { setMode("signup"); setError(null); }} className="mt-4 w-full cursor-pointer py-2 text-sm text-fg-sec hover:text-volt">
+            ¿Primera vez? Crear cuenta profesional
+          </button>
+        </form>
+      )}
     </div>
   );
 }
@@ -452,10 +482,49 @@ const NAV = [
   { href: "/portal/ejercicios", label: "EJERCICIOS", icon: "▲" },
 ];
 
+const ADMIN_NAV = [
+  { href: "/portal/admin", label: "RESUMEN", icon: "◎" },
+  { href: "/portal/admin/usuarios", label: "USUARIOS", icon: "◇" },
+  { href: "/portal/admin/profesionales", label: "PROFESIONALES", icon: "✓" },
+  { href: "/portal/admin/suscripciones", label: "SUSCRIPCIONES", icon: "$" },
+  { href: "/portal/admin/ejercicios", label: "CATÁLOGO EJERCICIOS", icon: "▲" },
+  { href: "/portal/admin/alimentos", label: "CATÁLOGO ALIMENTOS", icon: "✚" },
+  { href: "/portal/admin/actividad", label: "ACTIVIDAD", icon: "≡" },
+];
+
+const PENDING_NAV = [
+  { href: "/portal/revision", label: "TU SOLICITUD", icon: "◷" },
+];
+
 const ACCOUNT_NAV = [
   { href: "/portal/perfil", label: "PERFIL" },
   { href: "/portal/configuracion", label: "CONFIGURACIÓN" },
 ];
+
+interface PortalMe {
+  role: string;
+  storedRole: string;
+  professionalStatus: string | null;
+  isSuperAdmin: boolean;
+}
+
+function isActive(pathname: string, href: string): boolean {
+  // The admin home is a prefix of every admin route; match it exactly.
+  return href === "/portal/admin" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/** A professional sign-up the PULSO team declined. The account itself keeps working in the app. */
+function RejectedNotice({ email, onLogout }: { email: string; onLogout: () => void }) {
+  return (
+    <div className="mx-auto mt-[14vh] max-w-115 px-5">
+      <div className="mb-2.5 font-mono-app text-[11px] tracking-[2.4px] text-danger">SOLICITUD NO APROBADA</div>
+      <h1 className="mb-3 text-[26px] font-semibold text-fg">No pudimos aprobar tu cuenta profesional</h1>
+      <p className="mb-2 text-sm leading-6 text-fg-sec">Te enviamos el motivo a {email}. Si podés aportar más información (título, certificaciones, experiencia), respondé ese correo y volvemos a revisarla.</p>
+      <p className="mb-6 text-sm leading-6 text-fg-sec">Tu cuenta sigue activa en la app de PULSO como atleta.</p>
+      <button type="button" onClick={onLogout} className="cursor-pointer border border-line px-5 py-2.5 font-mono-app text-xs text-fg-sec hover:border-danger hover:text-danger">CERRAR SESIÓN</button>
+    </div>
+  );
+}
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SessionUser | null | undefined>(undefined);
@@ -467,18 +536,28 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   const loadSession = useCallback(async () => {
     try {
       const data = await api<{ user?: SessionUser } | null>("/api/auth/get-session");
-      setUser(data?.user ?? null);
+      if (!data?.user) { setUser(null); return; }
+      // The session carries the stored role; access follows the effective one.
+      const me = await api<PortalMe>("/api/portal/me");
+      setUser({ ...data.user, ...me });
     } catch {
       setUser(null);
     }
   }, []);
 
   useEffect(() => { loadSession(); }, [loadSession]);
+  const mode = user ? portalMode({
+    role: user.role ?? "athlete",
+    storedRole: user.storedRole ?? user.role ?? "athlete",
+    professionalStatus: user.professionalStatus ?? null,
+    isSuperAdmin: Boolean(user.isSuperAdmin),
+  }) : null;
+  const routeAllowed = Boolean(user && mode && canOpenInMode(mode, user.role ?? "athlete", pathname, Boolean(user.isSuperAdmin)));
+
   useEffect(() => {
-    if (user && (user.role === "coach" || user.role === "nutritionist") && !canAccessPortalPath(user.role, pathname)) {
-      router.replace("/portal/alimentos");
-    }
-  }, [pathname, router, user]);
+    if (!user || !mode || mode === "none" || mode === "rejected" || routeAllowed) return;
+    router.replace(mode === "professional" && pathname.startsWith("/portal/ejercicios") ? "/portal/alimentos" : homeForMode(mode));
+  }, [mode, pathname, routeAllowed, router, user]);
 
   /** Bridges Login unmounting into the authenticated shell mounting: the flash
       (rendered here, outside either branch) survives the swap and masks the cut. */
@@ -511,42 +590,48 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     content = null;
   } else if (!user) {
     content = <Login onDone={completeLogin} />;
-  } else if (user.role !== "coach" && user.role !== "nutritionist" && user.createdAt
-    && canFinishProfessionalSignup(user.role ?? "athlete", new Date(user.createdAt))) {
+  } else if (mode === "none" && user.createdAt
+    && canFinishProfessionalSignup(user.storedRole ?? user.role ?? "athlete", new Date(user.createdAt))) {
     content = <FinishSignup user={user} onDone={loadSession} onCancel={logout} />;
-  } else if (user.role !== "coach" && user.role !== "nutritionist") {
+  } else if (mode === "rejected") {
+    content = <RejectedNotice email={user.email} onLogout={logout} />;
+  } else if (mode === "none") {
     content = (
-      <div className="mx-auto mt-[16vh] max-w-115 px-5 text-center font-mono-app text-[13px] leading-7 text-fg-sec">
-        <p>Tu cuenta ({user.email}) no es de profesional.</p>
-        <p>
-          Pedile al admin que ejecute:{" "}
-          <code className="text-volt">node scripts/set-role.mjs {user.email} coach</code>
-        </p>
-        <button type="button" onClick={logout} className="mt-6 cursor-pointer border border-line px-5 py-2.5 text-xs text-fg-sec hover:border-danger hover:text-danger">
+      <div className="mx-auto mt-[16vh] max-w-115 px-5 text-center">
+        <div className="mb-2.5 font-mono-app text-[11px] tracking-[2.4px] text-volt">PULSO · PORTAL PROFESIONAL</div>
+        <p className="mb-2 text-lg font-semibold text-fg">{user.email} es una cuenta de atleta</p>
+        <p className="text-sm leading-6 text-fg-sec">El portal es para entrenadores y nutricionistas. Tu progreso, planes y mensajes están en la app de PULSO. Si sos profesional, creá una cuenta profesional con otro correo o escribinos para convertir esta.</p>
+        <button type="button" onClick={logout} className="mt-6 cursor-pointer border border-line px-5 py-2.5 font-mono-app text-xs text-fg-sec hover:border-danger hover:text-danger">
           CERRAR SESIÓN
         </button>
       </div>
     );
   } else {
-    const role = user.role as ProfessionalRole;
-    const visibleNav = NAV.filter(item => canAccessPortalPath(role, item.href));
-    const routeAllowed = canAccessPortalPath(role, pathname);
+    const role = (mode === "professional" ? user.role : "coach") as ProfessionalRole;
+    const visibleNav = mode === "professional" ? NAV.filter(item => canAccessPortalPath(role, item.href))
+      : mode === "pending" ? PENDING_NAV : [];
+    const adminNav = user.isSuperAdmin ? ADMIN_NAV : [];
+    const accountNav = mode === "professional" ? ACCOUNT_NAV : mode === "pending" ? ACCOUNT_NAV.slice(0, 1) : [];
+    const roleLabel = mode === "admin" ? "SUPER ADMIN"
+      : mode === "pending" ? "EN REVISIÓN"
+        : user.role === "coach" ? "ENTRENADOR" : "NUTRICIONISTA";
+    const mobileNav = [...visibleNav, ...adminNav];
     content = (
       <PortalContext.Provider value={{ user, logout, refreshUser: loadSession }}>
         <div className="min-h-screen md:flex md:h-screen">
           {/* sidebar */}
           <aside className="hidden w-60 shrink-0 flex-col border-r border-line md:flex">
             <div className="border-b border-line p-4.5">
-              <div className="mb-1.5 font-mono-app text-[10px] tracking-[2px] text-volt">
-                PULSO · {user.role === "coach" ? "ENTRENADOR" : "NUTRICIONISTA"}
+              <div className={`mb-1.5 font-mono-app text-[10px] tracking-[2px] ${mode === "pending" ? "text-warn" : "text-volt"}`}>
+                PULSO · {roleLabel}{mode === "professional" && user.isSuperAdmin ? " · ADMIN" : ""}
               </div>
               <div className="font-semibold text-fg">{user.name}</div>
               <div className="font-mono-app text-[10px] text-fg-ter">{user.email}</div>
             </div>
 
-            <nav className="flex-1 py-2">
+            <nav className="flex-1 overflow-y-auto py-2">
               {visibleNav.map(item => {
-                const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                const active = isActive(pathname, item.href);
                 return (
                   <Link
                     key={item.href}
@@ -557,15 +642,35 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                         : "border-transparent text-fg-sec hover:bg-card hover:text-fg"
                     }`}
                   >
-                    <span>{item.icon}</span>
+                    <span aria-hidden>{item.icon}</span>
                     {item.label}
                   </Link>
                 );
               })}
+              {adminNav.length > 0 && (
+                <>
+                  <div className={`px-4.5 pb-1.5 font-mono-app text-[9px] tracking-[1.8px] text-fg-ter ${visibleNav.length ? "mt-4 border-t border-line-soft pt-4" : "pt-2"}`}>ADMINISTRACIÓN</div>
+                  {adminNav.map(item => {
+                    const active = isActive(pathname, item.href);
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={`flex items-center gap-3 border-l-3 px-4.5 py-2.5 font-mono-app text-[10.5px] tracking-[1.2px] transition ${
+                          active ? "border-neon bg-card text-neon" : "border-transparent text-fg-sec hover:bg-card hover:text-fg"
+                        }`}
+                      >
+                        <span aria-hidden className="w-3 text-center">{item.icon}</span>
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </>
+              )}
             </nav>
 
             <nav className="border-t border-line py-2">
-              {ACCOUNT_NAV.map(item => {
+              {accountNav.map(item => {
                 const active = pathname === item.href;
                 return (
                   <Link key={item.href} href={item.href} className={`block px-4.5 py-2.5 font-mono-app text-[10px] tracking-[1.2px] transition ${active ? "text-volt" : "text-fg-sec hover:text-fg"}`}>
@@ -588,19 +693,22 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             <header className="sticky top-0 z-40 border-b border-line bg-ink/95 md:hidden">
               <div className="flex items-center justify-between px-4 py-3">
                 <div>
-                  <div className="font-mono-app text-[9px] tracking-[1.8px] text-volt">PULSO · PROFESIONAL</div>
+                  <div className="font-mono-app text-[9px] tracking-[1.8px] text-volt">PULSO · {roleLabel}</div>
                   <div className="text-sm font-semibold text-fg">{user.name}</div>
                 </div>
-                <Link href="/portal/perfil" className="border border-line px-3 py-2 font-mono-app text-[10px] text-fg-sec">PERFIL</Link>
+                {accountNav.length > 0
+                  ? <Link href="/portal/perfil" className="border border-line px-3 py-2 font-mono-app text-[10px] text-fg-sec">PERFIL</Link>
+                  : <button type="button" onClick={logout} className="cursor-pointer border border-line px-3 py-2 font-mono-app text-[10px] text-fg-sec">SALIR</button>}
               </div>
               <nav className="flex overflow-x-auto border-t border-line-soft px-2">
-                {visibleNav.map(item => {
-                  const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                {mobileNav.map(item => {
+                  const active = isActive(pathname, item.href);
                   return <Link key={item.href} href={item.href} className={`shrink-0 border-b-2 px-3 py-2.5 font-mono-app text-[9px] tracking-[1px] ${active ? "border-volt text-volt" : "border-transparent text-fg-ter"}`}>{item.label}</Link>;
                 })}
               </nav>
             </header>
-            <main className="min-w-0">{routeAllowed ? children : <div className="p-8 font-mono-app text-xs text-fg-ter">ABRIENDO TU BIBLIOTECA DE ALIMENTOS…</div>}</main>
+            <main className="min-w-0">{routeAllowed ? children : <div className="p-8 font-mono-app text-xs text-fg-ter">ABRIENDO…</div>}</main>
+            {mode === "professional" && <PortalTour userId={user.id} role={user.role ?? "coach"} />}
           </div>
         </div>
       </PortalContext.Provider>

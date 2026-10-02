@@ -28,6 +28,10 @@ const MESSAGES: Record<string, string> = {
   account_not_linked: "No se pudo unir ese Google a tu cuenta PULSO. Ingresá con tu correo y contraseña y vinculalo desde Perfil.",
   "email_doesn't_match": "Esa cuenta de Google usa otro correo. Vinculá la que tenga el mismo correo que tu cuenta PULSO.",
   account_already_linked_to_different_user: "Esa cuenta de Google ya está vinculada a otro usuario de PULSO.",
+  // Magic link round trips land here too.
+  INVALID_TOKEN: "El enlace venció o ya se usó. Pedí uno nuevo.",
+  new_user_signup_disabled: "No hay una cuenta con ese correo. Creá tu cuenta profesional primero.",
+  ACCOUNT_SUSPENDED: "Tu cuenta está suspendida. Respondé el correo que te enviamos para más información.",
 };
 
 /**
@@ -43,5 +47,5 @@ export function takeGoogleError(): string | null {
   url.searchParams.delete("error_description");
   window.history.replaceState(null, "", url.pathname + url.search + url.hash);
   if (error === "access_denied") return null;
-  return MESSAGES[error] ?? "No se pudo completar el acceso con Google. Probá de nuevo.";
+  return MESSAGES[error] ?? "No se pudo completar el acceso. Probá de nuevo.";
 }

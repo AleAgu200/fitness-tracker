@@ -243,6 +243,16 @@ export default function LoginScreen() {
         </TouchableOpacity>
 
         <SocialButtons disabled={loading} onSignedIn={handleSocialSignedIn} onError={setError} />
+
+        <TouchableOpacity
+          onPress={() => router.push({ pathname: '/(auth)/enlace', params: { email: email.trim() } } as any)}
+          disabled={loading}
+          accessibilityRole="button"
+          activeOpacity={0.7}
+          style={{ minHeight: 48, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: C.border }}
+        >
+          <Text style={{ fontFamily: F.mono, fontSize: 11, letterSpacing: 0.8, color: C.textSecondary }}>ENTRAR CON UN ENLACE POR CORREO</Text>
+        </TouchableOpacity>
       </Animated.View>
 
       {/* Switch to sign up */}

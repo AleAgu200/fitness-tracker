@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AssignMeals } from "../assign-meals";
@@ -12,6 +13,7 @@ import { usePortalUser } from "../portal-context";
 function Chat({ meId, athlete }: { meId: string; athlete: Athlete }) {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [draft, setDraft] = useState("");
+  const [sendError, setSendError] = useState(false);
   const lastRef = useRef(0);
   const boxRef = useRef<HTMLDivElement>(null);
 
@@ -45,11 +47,12 @@ function Chat({ meId, athlete }: { meId: string; athlete: Athlete }) {
     boxRef.current?.scrollTo({ top: boxRef.current.scrollHeight });
   }, [messages]);
 
-  async function send(e: React.FormEvent) {
-    e.preventDefault();
+  async function send(e?: React.FormEvent) {
+    e?.preventDefault();
     const content = draft.trim();
     if (!content) return;
     setDraft("");
+    setSendError(false);
     try {
       const { message } = await api<{ message: Msg }>("/api/messages", {
         method: "POST",
@@ -59,6 +62,7 @@ function Chat({ meId, athlete }: { meId: string; athlete: Athlete }) {
       lastRef.current = Math.max(lastRef.current, message.sentAt);
     } catch {
       setDraft(content);
+      setSendError(true);
     }
   }
 
@@ -67,7 +71,7 @@ function Chat({ meId, athlete }: { meId: string; athlete: Athlete }) {
       <div className="border-b border-line px-4 py-2.5 font-mono-app text-[10px] tracking-[1.4px] text-fg-ter">
         MENSAJES
       </div>
-      <div ref={boxRef} className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
+      <div ref={boxRef} role="log" aria-live="polite" aria-label={`Conversación con ${athlete.name}`} className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
         {messages.length === 0 && (
           <div className="mt-10 text-center font-mono-app text-xs text-fg-ter">
             Sin mensajes todavía — escribí el primero
@@ -90,12 +94,27 @@ function Chat({ meId, athlete }: { meId: string; athlete: Athlete }) {
           );
         })}
       </div>
+      {sendError && (
+        <div id="chat-send-error" role="alert" className="border-t border-danger/40 bg-danger/10 px-4 py-2 font-mono-app text-[11px] text-danger">
+          No se envió. Revisá tu conexión y volvé a enviar.
+        </div>
+      )}
       <form onSubmit={send} className="flex gap-2 border-t border-line p-3">
-        <input
+        <textarea
           value={draft}
-          onChange={e => setDraft(e.target.value)}
-          placeholder="Escribí un mensaje…"
-          className="flex-1 border border-line bg-elev px-3 py-2.5 text-sm text-fg placeholder:text-fg-ter focus:border-neon focus:outline-none"
+          onChange={e => { setDraft(e.target.value); setSendError(false); }}
+          onKeyDown={e => {
+            // Enter sends; Shift+Enter starts a new line for longer notes.
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              void send();
+            }
+          }}
+          rows={2}
+          aria-label={`Mensaje para ${athlete.name}`}
+          aria-describedby={sendError ? "chat-send-error" : undefined}
+          placeholder="Escribí un mensaje… (Shift+Enter para otra línea)"
+          className="flex-1 resize-none border border-line bg-elev px-3 py-2 text-sm text-fg placeholder:text-fg-ter focus:border-neon focus:outline-none"
         />
         <button type="submit" className="cursor-pointer bg-neon px-5 font-mono-app text-xs font-extrabold text-ink transition hover:brightness-110">
           ENVIAR
@@ -202,9 +221,7 @@ export default function AthletesPage() {
   return (
     <div className="p-6">
       <h1 className="mb-1 text-2xl font-semibold text-fg">Mis atletas</h1>
-      <p className="mb-8 font-mono-app text-[11px] tracking-[1.4px] text-fg-ter">
-        DASHBOARD · {user.role === "coach" ? "ENTRENADOR" : "NUTRICIONISTA"}
-      </p>
+      <p className="mb-8 text-sm text-fg-sec">Quienes llevan más tiempo sin conversar aparecen primero.</p>
 
       {listError && (
         <div className="mb-4 flex items-center justify-between border border-warn/40 bg-warn/10 px-4 py-2.5 font-mono-app text-[11px] text-warn">
@@ -219,7 +236,7 @@ export default function AthletesPage() {
       <div className="mb-8">
         <div className="mb-3 grid grid-cols-3 gap-3">
           {[
-            { label: "ATLETAS ACTIVOS", value: athletes.length, accent: "text-volt" },
+            { label: "ATLETAS VINCULADOS", value: athletes.length, accent: "text-volt" },
             { label: "MENSAJES SIN LEER", value: totalUnread, accent: "text-danger" },
             {
               label: "ÚLTIMO VÍNCULO",
@@ -315,7 +332,7 @@ export default function AthletesPage() {
                   </div>
                 </div>
                 {unread[a.userId] > 0 && (
-                  <span className="rounded-full bg-danger px-2 py-0.5 font-mono-app text-[10px] font-bold text-fg">
+                  <span aria-label={`${unread[a.userId]} ${unread[a.userId] === 1 ? "mensaje sin leer" : "mensajes sin leer"}`} className="rounded-full bg-danger px-2 py-0.5 font-mono-app text-[10px] font-bold text-fg">
                     {unread[a.userId]}
                   </span>
                 )}
@@ -350,17 +367,24 @@ export default function AthletesPage() {
                   </div>
                 </div>
 
-                {user.role === "coach" && <AssignWorkout athlete={selected} onDirtyChange={setAssignDirty} />}
-                {user.role === "nutritionist" && <AssignMeals athlete={selected} onDirtyChange={setAssignDirty} />}
+                {user.role === "coach" && <AssignWorkout key={selected.userId} athlete={selected} onDirtyChange={setAssignDirty} />}
+                {user.role === "nutritionist" && <AssignMeals key={selected.userId} athlete={selected} onDirtyChange={setAssignDirty} />}
               </div>
 
               {/* seguimiento: checking in on them, a separate mode from editing their plan */}
               <div className="flex flex-col gap-3">
                 <Chat meId={user.id} athlete={selected} />
 
-                <div className="border border-dashed border-line p-4 text-center font-mono-app text-[11px] text-fg-ter">
-                  Progreso del atleta (adherencia, peso, PRs) — disponible cuando la app suba snapshots (fase 5)
-                </div>
+                <Link
+                  href={`/portal/atletas/${encodeURIComponent(selected.userId)}`}
+                  className="flex items-center justify-between border border-line bg-card p-4 transition hover:border-fg-ter"
+                >
+                  <span>
+                    <span className="block font-mono-app text-[10px] tracking-[1.4px] text-fg-ter">FICHA COMPLETA</span>
+                    <span className="text-sm text-fg">Progreso, adherencia, check-ins e historial del plan</span>
+                  </span>
+                  <span className="font-mono-app text-[11px] text-volt">ABRIR →</span>
+                </Link>
               </div>
             </div>
           ) : (

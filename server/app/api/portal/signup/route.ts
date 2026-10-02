@@ -3,9 +3,11 @@ import { z } from "zod";
 
 import { db } from "@/db";
 import { user } from "@/db/schema";
+import { initialProfessionalStatus } from "@/lib/admin-policy";
 import { forbidden, getSessionUser, unauthorized } from "@/lib/api-auth";
 import { auth } from "@/lib/auth";
 import { googleWebSignInEnabled } from "@/lib/auth-providers";
+import { emailEnabled, professionalRequestEmail, sendEmail } from "@/lib/email";
 import { canFinishProfessionalSignup } from "@/lib/portal-access";
 import { initializeProfessionalAccount } from "@/lib/professional-profile";
 
@@ -20,10 +22,20 @@ const signupSchema = z.object({
 
 const finishSchema = signupSchema.pick({ discipline: true, organizationName: true, signupCode: true });
 
+/** Tells the new professional their account is waiting for review. */
+async function notifyRequest(to: string, name: string, discipline: "coach" | "nutritionist") {
+  if (initialProfessionalStatus() === "pending" && emailEnabled()) {
+    await sendEmail(professionalRequestEmail(to, name, discipline));
+  }
+}
+
 /** What the portal's login/signup screen should offer. */
 export function GET() {
   return Response.json({
     requiresCode: Boolean(process.env.PROFESSIONAL_SIGNUP_CODE),
+    // New professionals wait for a super admin's review (PROFESSIONAL_APPROVAL=off disables it).
+    requiresApproval: initialProfessionalStatus() === "pending",
+    magicLink: emailEnabled(),
     // Sign-in and sign-up: a new Google account finishes its setup with PUT.
     google: googleWebSignInEnabled(process.env),
   });
@@ -56,8 +68,10 @@ export async function PUT(request: Request) {
     name: sessionUser.name,
     discipline: input.discipline,
     organizationName: input.organizationName,
+    reviewStatus: initialProfessionalStatus(),
   });
-  return Response.json({ ok: true });
+  await notifyRequest(sessionUser.email, sessionUser.name, input.discipline);
+  return Response.json({ ok: true, status: initialProfessionalStatus() });
 }
 
 export async function POST(request: Request) {
@@ -98,6 +112,7 @@ export async function POST(request: Request) {
       name: input.name,
       discipline: input.discipline,
       organizationName: input.organizationName,
+      reviewStatus: initialProfessionalStatus(),
     });
   } catch (error) {
     console.error("[professional signup setup error]", error);
@@ -105,9 +120,10 @@ export async function POST(request: Request) {
     return Response.json({ error: "professional_setup_failed" }, { status: 500 });
   }
 
+  await notifyRequest(input.email, input.name, input.discipline);
   const responseHeaders = new Headers(authResponse.headers);
   responseHeaders.set("content-type", "application/json");
-  return new Response(JSON.stringify({ ok: true }), {
+  return new Response(JSON.stringify({ ok: true, status: initialProfessionalStatus() }), {
     status: 201,
     headers: responseHeaders,
   });

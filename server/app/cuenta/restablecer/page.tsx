@@ -27,7 +27,7 @@ export default async function ResetPasswordPage({
       <AccountShell title="El enlace ya no sirve">
         <p className="text-fg-mid leading-relaxed">
           Los enlaces para restablecer la contraseña se usan una sola vez y vencen en una hora.
-          Pedí uno nuevo desde la app con «¿Olvidaste tu contraseña?».
+          Pedí uno nuevo desde la app con «¿Olvidaste tu contraseña?» o en <a href="/cuenta/recuperar" className="text-volt underline">pulsofitness.tech/cuenta/recuperar</a>.
         </p>
       </AccountShell>
     );

@@ -42,3 +42,38 @@ export const foodBarcodeCache = pgTable("food_barcode_cache", {
   product: jsonb("product").$type<unknown>(),
   fetchedAt: milliseconds("fetchedAt").notNull(),
 });
+
+/**
+ * Admin-curated layer over the static exercise catalog (lib/exercise-catalog.json).
+ * A row whose id matches a catalog exercise overrides it (or hides it); any
+ * other id is a new exercise. Search in the app and the portal merges both.
+ */
+export const catalogExercises = pgTable("catalog_exercises", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  muscleGroup: text("muscleGroup").notNull(),
+  equipment: text("equipment").notNull(),
+  target: text("target").notNull(),
+  secondaryMuscles: jsonb("secondaryMuscles").$type<string[]>().notNull(),
+  instructions: text("instructions").notNull(),
+  /** Public path of the animation (GIF, WebP or MP4) served by the backend. */
+  mediaPath: text("mediaPath"),
+  hidden: boolean("hidden").notNull().default(false),
+  createdBy: text("createdBy").references(() => user.id, { onDelete: "set null" }),
+  createdAt: milliseconds("createdAt").notNull(),
+  updatedAt: milliseconds("updatedAt").notNull(),
+});
+
+/**
+ * What super admins did, for accountability. Kept apart from the
+ * organization-scoped audit_events: admin actions have no organization.
+ */
+export const adminAuditEvents = pgTable("admin_audit_events", {
+  id: text("id").primaryKey(),
+  actorUserId: text("actorUserId").references(() => user.id, { onDelete: "set null" }),
+  action: text("action").notNull(),
+  subjectType: text("subjectType").notNull(),
+  subjectId: text("subjectId").notNull(),
+  metadata: jsonb("metadata").$type<unknown>(),
+  occurredAt: milliseconds("occurredAt").notNull(),
+});

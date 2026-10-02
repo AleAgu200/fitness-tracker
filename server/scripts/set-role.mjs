@@ -20,7 +20,10 @@ if (!connectionString) {
 const sql = postgres(connectionString, { max: 1 });
 
 const result = await sql`
-  UPDATE "user" SET "role" = ${role}, "updatedAt" = now()
+  UPDATE "user" SET "role" = ${role},
+    -- Granted by hand, so no review is pending. Athletes carry no status.
+    "professionalStatus" = ${role === "coach" || role === "nutritionist" ? "approved" : null},
+    "updatedAt" = now()
   WHERE "email" = ${email.trim().toLowerCase()}
 `;
 

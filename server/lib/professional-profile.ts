@@ -10,6 +10,7 @@ import {
   user,
 } from "@/db/schema";
 import { legacyMembershipId, legacyOrganizationId } from "@/lib/organizations";
+import type { ProfessionalStatus } from "@/lib/admin-policy";
 import type { LinkKind } from "@/lib/supervision";
 
 export interface ProfessionalProfileInput {
@@ -28,12 +29,19 @@ export async function initializeProfessionalAccount(input: {
   name: string;
   discipline: LinkKind;
   organizationName?: string;
+  /** Only the sign-up flow sets it. "pending" keeps the workspace inactive until approved. */
+  reviewStatus?: ProfessionalStatus;
 }) {
   const now = Date.now();
+  const pending = input.reviewStatus === "pending";
   const organizationId = legacyOrganizationId(input.userId);
   const membershipId = legacyMembershipId(input.userId);
   await db.transaction(async (tx) => {
-    await tx.update(user).set({ role: input.discipline, updatedAt: new Date() }).where(eq(user.id, input.userId));
+    await tx.update(user).set({
+      role: input.discipline,
+      ...(input.reviewStatus ? { professionalStatus: input.reviewStatus } : {}),
+      updatedAt: new Date(),
+    }).where(eq(user.id, input.userId));
     await tx.insert(organizations).values({
       id: organizationId,
       name: input.organizationName?.trim() || `${input.name} · PULSO`,
@@ -45,9 +53,11 @@ export async function initializeProfessionalAccount(input: {
       organizationId,
       userId: input.userId,
       orgRole: "owner",
-      status: "active",
+      // An account under review gets no active membership, so no organization
+      // path (athletes, plans, team) opens until an admin approves it.
+      status: pending ? "invited" : "active",
       invitedAt: now,
-      activatedAt: now,
+      activatedAt: pending ? null : now,
     }).onConflictDoNothing();
     await tx.insert(professionalCapabilities).values({
       membershipId,

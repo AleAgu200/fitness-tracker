@@ -1,6 +1,8 @@
 // Auth actions — thin wrappers around the Better Auth client.
 // All network calls go to the Next.js server at EXPO_PUBLIC_SERVER_URL.
 
+import Constants from 'expo-constants';
+
 import { authClient, clearStoredCookie, restoreCookieFromStorage } from "./auth-client";
 import { AUTH_ERROR_MESSAGES, AuthErrorKind, classifyAuthError } from "./auth-errors";
 
@@ -88,6 +90,37 @@ export async function requestPasswordReset(email: string) {
     email: email.trim().toLowerCase(),
     redirectTo: RESET_PATH,
   }));
+}
+
+/** The scheme this build registers (pulso / pulso-dev), so the email opens this app. */
+function appScheme(): string {
+  const scheme = Constants.expoConfig?.scheme;
+  return (Array.isArray(scheme) ? scheme[0] : scheme) ?? 'pulso';
+}
+
+/**
+ * Emails a one-time sign-in link. Like recovery, the answer never says whether
+ * the address has an account. The link opens a server page that hands the
+ * token to this app (pulso://auth/magic), see src/app/auth/magic.tsx.
+ */
+export async function requestMagicLink(email: string) {
+  return call("magic_link_failed", () => authClient.signIn.magicLink({
+    email: email.trim().toLowerCase(),
+    metadata: { client: 'app', scheme: appScheme() },
+  }));
+}
+
+/**
+ * Redeems the token from the email. The server answers with the session and
+ * sets the cookie (captured by auth-client). An expired or used token makes
+ * the server redirect instead of answering JSON, so no token means failure.
+ */
+export async function redeemMagicLink(token: string) {
+  const data: unknown = await call("magic_link_invalid", () => authClient.magicLink.verify({ query: { token } }));
+  if (!data || typeof data !== "object" || !("token" in data) || !data.token) {
+    throw new AuthError('magic_link_invalid', 0, 'MAGIC_LINK_INVALID');
+  }
+  return data;
 }
 
 export async function resendVerificationEmail(email: string) {

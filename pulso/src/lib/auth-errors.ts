@@ -18,6 +18,8 @@ export type AuthErrorKind =
   | 'social_cancelled'
   | 'social_invalid'
   | 'account_not_linked'
+  | 'account_suspended'
+  | 'link_expired'
   | 'unknown';
 
 export interface AuthFailure {
@@ -44,6 +46,8 @@ const BY_CODE: Record<string, AuthErrorKind> = {
   INVALID_TOKEN: 'social_invalid',
   USER_EMAIL_NOT_FOUND: 'social_invalid',
   FAILED_TO_GET_USER_INFO: 'social_invalid',
+  ACCOUNT_SUSPENDED: 'account_suspended',
+  MAGIC_LINK_INVALID: 'link_expired',
 };
 
 export function classifyAuthError(failure: AuthFailure): AuthErrorKind {
@@ -72,6 +76,8 @@ export const AUTH_ERROR_MESSAGES: Record<AuthErrorKind, string> = {
   social_cancelled: '',
   social_invalid: 'No pudimos confirmar tu cuenta con ese proveedor. Probá de nuevo.',
   account_not_linked: 'Ya existe una cuenta PULSO con ese correo. Entrá con tu correo y contraseña.',
+  account_suspended: 'Tu cuenta está suspendida. Respondé el correo que te enviamos para saber más.',
+  link_expired: 'El enlace venció o ya se usó. Pedí uno nuevo.',
   unknown: 'No pudimos completar la acción. Probá de nuevo.',
 };
 

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { forbidden, getSessionUser, unauthorized } from "@/lib/api-auth";
+import { forbidden, getSessionUser, profileDiscipline, unauthorized } from "@/lib/api-auth";
 import { appendAuditEvent, legacyMembershipId, legacyOrganizationId } from "@/lib/organizations";
 import {
   getProfessionalSettings,
@@ -16,18 +16,16 @@ const settingsSchema = z.object({
   defaultPortalSection: z.enum(["attention", "athletes", "foods", "exercises"]),
 });
 
-function isProfessional(role: string): role is "coach" | "nutritionist" {
-  return role === "coach" || role === "nutritionist";
-}
 
 export async function GET(request: Request) {
   const sessionUser = await getSessionUser(request);
   if (!sessionUser) return unauthorized();
-  if (!isProfessional(sessionUser.role)) return forbidden();
+  const discipline = profileDiscipline(sessionUser);
+  if (!discipline) return forbidden();
   await initializeProfessionalAccount({
     userId: sessionUser.id,
     name: sessionUser.name,
-    discipline: sessionUser.role,
+    discipline,
   });
   return Response.json({ settings: await getProfessionalSettings(sessionUser.id) });
 }
@@ -35,18 +33,19 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   const sessionUser = await getSessionUser(request);
   if (!sessionUser) return unauthorized();
-  if (!isProfessional(sessionUser.role)) return forbidden();
+  const discipline = profileDiscipline(sessionUser);
+  if (!discipline) return forbidden();
   let input: z.infer<typeof settingsSchema>;
   try {
     input = settingsSchema.parse(await request.json());
   } catch {
     return Response.json({ error: "invalid_body" }, { status: 400 });
   }
-  if (!availablePortalSections(sessionUser.role).includes(input.defaultPortalSection)) return forbidden();
+  if (!availablePortalSections(discipline).includes(input.defaultPortalSection)) return forbidden();
   await initializeProfessionalAccount({
     userId: sessionUser.id,
     name: sessionUser.name,
-    discipline: sessionUser.role,
+    discipline,
   });
   await updateProfessionalSettings(sessionUser.id, input);
   await appendAuditEvent({
