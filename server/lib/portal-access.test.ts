@@ -44,3 +44,19 @@ test("foods can be selected as a default portal section", () => {
   assert.equal(resolveDefaultPortalPath("nutritionist", "foods"), "/portal/alimentos");
   assert.equal(resolveDefaultPortalPath("coach", "foods"), "/portal/alimentos");
 });
+
+test("the portal shell follows review status and super admin access", async () => {
+  const { canOpenInMode, portalMode } = await import("./portal-access");
+  const base = { role: "athlete", storedRole: "athlete", professionalStatus: null, isSuperAdmin: false };
+  assert.equal(portalMode({ ...base, role: "coach", storedRole: "coach" }), "professional");
+  assert.equal(portalMode({ ...base, storedRole: "coach", professionalStatus: "pending" }), "pending");
+  assert.equal(portalMode({ ...base, storedRole: "nutritionist", professionalStatus: "rejected" }), "rejected");
+  assert.equal(portalMode({ ...base, isSuperAdmin: true }), "admin");
+  assert.equal(portalMode(base), "none");
+
+  assert.equal(canOpenInMode("pending", "athlete", "/portal/perfil", false), true);
+  assert.equal(canOpenInMode("pending", "athlete", "/portal/atletas", false), false);
+  assert.equal(canOpenInMode("professional", "coach", "/portal/admin", false), false);
+  assert.equal(canOpenInMode("professional", "coach", "/portal/admin/usuarios", true), true);
+  assert.equal(canOpenInMode("admin", "athlete", "/portal/atletas", true), false);
+});

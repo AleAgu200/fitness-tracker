@@ -17,7 +17,74 @@ export interface CatalogExercise {
   gifPath: string;
 }
 
-const CATALOG = catalogData as CatalogExercise[];
+const BASE_CATALOG = catalogData as CatalogExercise[];
+
+/** A super-admin change on top of the static catalog (catalog_exercises). */
+export interface CatalogOverride {
+  id: string;
+  name: string;
+  muscleGroup: string;
+  equipment: string;
+  target: string;
+  secondaryMuscles: string[];
+  instructions: string;
+  mediaPath: string | null;
+  hidden: boolean;
+}
+
+/**
+ * Merge admin overrides into the static catalog: a row with a base id edits
+ * or hides that exercise, any other id is a new exercise appended at the end.
+ * Pure so it is tested without a database.
+ */
+export function mergeCatalog(base: CatalogExercise[], overrides: CatalogOverride[]): CatalogExercise[] {
+  const byId = new Map(overrides.map(o => [o.id, o]));
+  const merged: CatalogExercise[] = [];
+  for (const exercise of base) {
+    const o = byId.get(exercise.id);
+    if (!o) { merged.push(exercise); continue; }
+    byId.delete(exercise.id);
+    if (o.hidden) continue;
+    merged.push({
+      ...exercise,
+      name: o.name,
+      muscleGroup: o.muscleGroup,
+      equipment: o.equipment,
+      target: o.target,
+      secondaryMuscles: o.secondaryMuscles,
+      instructions: o.instructions,
+      gifPath: o.mediaPath ?? exercise.gifPath,
+      imagePath: o.mediaPath && /\.(png|jpe?g|webp)$/i.test(o.mediaPath) ? o.mediaPath : exercise.imagePath,
+    });
+  }
+  for (const o of byId.values()) {
+    if (o.hidden) continue;
+    merged.push({
+      id: o.id,
+      name: o.name,
+      muscleGroup: o.muscleGroup,
+      equipment: o.equipment,
+      target: o.target,
+      secondaryMuscles: o.secondaryMuscles,
+      instructions: o.instructions,
+      imagePath: o.mediaPath ?? "",
+      gifPath: o.mediaPath ?? "",
+    });
+  }
+  return merged;
+}
+
+let CATALOG: CatalogExercise[] = BASE_CATALOG;
+
+/** Swap in the merged catalog. Called by lib/catalog-overlay.ts after a DB read. */
+export function setCatalogOverrides(overrides: CatalogOverride[]): void {
+  CATALOG = overrides.length ? mergeCatalog(BASE_CATALOG, overrides) : BASE_CATALOG;
+}
+
+/** The untouched static entry, so the admin panel can show what an override changed. */
+export function getBaseCatalogExercise(id: string): CatalogExercise | undefined {
+  return BASE_CATALOG.find(ex => ex.id === id);
+}
 
 function normalize(s: string): string {
   return s.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");

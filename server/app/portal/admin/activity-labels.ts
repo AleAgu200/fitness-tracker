@@ -1,0 +1,16 @@
+export const ACTION_LABEL: Record<string, string> = {
+  "user.suspended": "Cuenta suspendida",
+  "user.reactivated": "Cuenta reactivada",
+  "user.role_changed": "Rol cambiado",
+  "professional.approved": "Profesional aprobado",
+  "professional.rejected": "Profesional rechazado",
+  "exercise.create": "Ejercicio creado",
+  "exercise.update": "Ejercicio editado",
+  "exercise.hide": "Ejercicio ocultado",
+  "exercise.show": "Ejercicio visible de nuevo",
+  "exercise.revert": "Ejercicio restaurado al original",
+  "food.create": "Alimento creado",
+  "food.update": "Alimento editado",
+  "food.delete": "Alimento eliminado",
+  "media.upload": "Animación subida",
+};

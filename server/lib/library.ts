@@ -3,7 +3,7 @@ import { randomBytes } from "crypto";
 import { and, asc, eq, ilike } from "drizzle-orm";
 
 import { db } from "@/db";
-import { libraryExercises, libraryFoods } from "@/db/schema";
+import { adminAuditEvents, libraryExercises, libraryFoods } from "@/db/schema";
 
 export interface Food {
   id: string;
@@ -32,9 +32,7 @@ export interface LibraryExercise {
   createdAt: number;
 }
 
-export const FOOD_CATEGORIES = ["proteína", "carbohidrato", "grasa", "fruta", "verdura", "lácteo", "otro"] as const;
-export const MUSCLE_GROUPS = ["pecho", "espalda", "piernas", "hombros", "brazos", "core", "full body"] as const;
-export const EQUIPMENT = ["barra", "mancuernas", "polea", "máquina", "peso corporal", "otro"] as const;
+export { EQUIPMENT, FOOD_CATEGORIES, MUSCLE_GROUPS } from "@/lib/library-constants";
 
 function newId(): string {
   return randomBytes(12).toString("hex");
@@ -161,7 +159,13 @@ let seedPromise: Promise<void> | null = null;
 
 async function seed(): Promise<void> {
   const existingFoods = await db.select({ name: libraryFoods.name }).from(libraryFoods);
-  const existingFoodNames = new Set(existingFoods.map(f => f.name));
+  // A seed food a super admin deleted stays deleted (lib/admin-catalog.ts).
+  const deletedByAdmin = await db.select({ metadata: adminAuditEvents.metadata }).from(adminAuditEvents)
+    .where(eq(adminAuditEvents.action, "food.delete"));
+  const existingFoodNames = new Set([
+    ...existingFoods.map(f => f.name),
+    ...deletedByAdmin.map(e => (e.metadata as { name?: string } | null)?.name).filter((n): n is string => !!n),
+  ]);
   const newFoods = SEED_FOODS.filter(f => !existingFoodNames.has(f.name));
   if (newFoods.length) {
     const now = Date.now();

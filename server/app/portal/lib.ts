@@ -4,7 +4,12 @@ export interface SessionUser {
   id: string;
   name: string;
   email: string;
+  /** Effective role from /api/portal/me: a professional under review is "athlete". */
   role?: string;
+  /** Role stored on the account, before review status is applied. */
+  storedRole?: string;
+  professionalStatus?: string | null;
+  isSuperAdmin?: boolean;
   /** ISO date; decides whether a Google sign-up can still become professional. */
   createdAt?: string;
 }

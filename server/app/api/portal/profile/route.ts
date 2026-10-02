@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { forbidden, getSessionUser, unauthorized } from "@/lib/api-auth";
+import { forbidden, getSessionUser, profileDiscipline, unauthorized } from "@/lib/api-auth";
 import { appendAuditEvent, legacyMembershipId, legacyOrganizationId } from "@/lib/organizations";
 import {
   getProfessionalProfile,
@@ -19,18 +19,16 @@ const profileSchema = z.object({
   credentials: z.string().trim().max(500),
 });
 
-function isProfessional(role: string): role is "coach" | "nutritionist" {
-  return role === "coach" || role === "nutritionist";
-}
 
 export async function GET(request: Request) {
   const sessionUser = await getSessionUser(request);
   if (!sessionUser) return unauthorized();
-  if (!isProfessional(sessionUser.role)) return forbidden();
+  const discipline = profileDiscipline(sessionUser);
+  if (!discipline) return forbidden();
   await initializeProfessionalAccount({
     userId: sessionUser.id,
     name: sessionUser.name,
-    discipline: sessionUser.role,
+    discipline,
   });
   return Response.json({ profile: await getProfessionalProfile(sessionUser.id) });
 }
@@ -38,7 +36,8 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   const sessionUser = await getSessionUser(request);
   if (!sessionUser) return unauthorized();
-  if (!isProfessional(sessionUser.role)) return forbidden();
+  const discipline = profileDiscipline(sessionUser);
+  if (!discipline) return forbidden();
   let input: z.infer<typeof profileSchema>;
   try {
     input = profileSchema.parse(await request.json());
@@ -48,7 +47,7 @@ export async function PUT(request: Request) {
   await initializeProfessionalAccount({
     userId: sessionUser.id,
     name: sessionUser.name,
-    discipline: sessionUser.role,
+    discipline,
   });
   await updateProfessionalProfile(sessionUser.id, input);
   await appendAuditEvent({

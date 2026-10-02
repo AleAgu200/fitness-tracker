@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { startGoogleSignIn, takeGoogleError } from "./google";
 import { api, SessionUser } from "./lib";
 import { PortalContext } from "./portal-context";
-import { canAccessPortalPath, canFinishProfessionalSignup, ProfessionalRole } from "@/lib/portal-access";
+import { canAccessPortalPath, canFinishProfessionalSignup, canOpenInMode, homeForMode, portalMode, ProfessionalRole } from "@/lib/portal-access";
 
 function useReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
@@ -452,10 +452,49 @@ const NAV = [
   { href: "/portal/ejercicios", label: "EJERCICIOS", icon: "▲" },
 ];
 
+const ADMIN_NAV = [
+  { href: "/portal/admin", label: "RESUMEN", icon: "◎" },
+  { href: "/portal/admin/usuarios", label: "USUARIOS", icon: "◇" },
+  { href: "/portal/admin/profesionales", label: "PROFESIONALES", icon: "✓" },
+  { href: "/portal/admin/suscripciones", label: "SUSCRIPCIONES", icon: "$" },
+  { href: "/portal/admin/ejercicios", label: "CATÁLOGO EJERCICIOS", icon: "▲" },
+  { href: "/portal/admin/alimentos", label: "CATÁLOGO ALIMENTOS", icon: "✚" },
+  { href: "/portal/admin/actividad", label: "ACTIVIDAD", icon: "≡" },
+];
+
+const PENDING_NAV = [
+  { href: "/portal/revision", label: "TU SOLICITUD", icon: "◷" },
+];
+
 const ACCOUNT_NAV = [
   { href: "/portal/perfil", label: "PERFIL" },
   { href: "/portal/configuracion", label: "CONFIGURACIÓN" },
 ];
+
+interface PortalMe {
+  role: string;
+  storedRole: string;
+  professionalStatus: string | null;
+  isSuperAdmin: boolean;
+}
+
+function isActive(pathname: string, href: string): boolean {
+  // The admin home is a prefix of every admin route; match it exactly.
+  return href === "/portal/admin" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/** A professional sign-up the PULSO team declined. The account itself keeps working in the app. */
+function RejectedNotice({ email, onLogout }: { email: string; onLogout: () => void }) {
+  return (
+    <div className="mx-auto mt-[14vh] max-w-115 px-5">
+      <div className="mb-2.5 font-mono-app text-[11px] tracking-[2.4px] text-danger">SOLICITUD NO APROBADA</div>
+      <h1 className="mb-3 text-[26px] font-semibold text-fg">No pudimos aprobar tu cuenta profesional</h1>
+      <p className="mb-2 text-sm leading-6 text-fg-sec">Te enviamos el motivo a {email}. Si podés aportar más información (título, certificaciones, experiencia), respondé ese correo y volvemos a revisarla.</p>
+      <p className="mb-6 text-sm leading-6 text-fg-sec">Tu cuenta sigue activa en la app de PULSO como atleta.</p>
+      <button type="button" onClick={onLogout} className="cursor-pointer border border-line px-5 py-2.5 font-mono-app text-xs text-fg-sec hover:border-danger hover:text-danger">CERRAR SESIÓN</button>
+    </div>
+  );
+}
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SessionUser | null | undefined>(undefined);
@@ -467,18 +506,28 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   const loadSession = useCallback(async () => {
     try {
       const data = await api<{ user?: SessionUser } | null>("/api/auth/get-session");
-      setUser(data?.user ?? null);
+      if (!data?.user) { setUser(null); return; }
+      // The session carries the stored role; access follows the effective one.
+      const me = await api<PortalMe>("/api/portal/me");
+      setUser({ ...data.user, ...me });
     } catch {
       setUser(null);
     }
   }, []);
 
   useEffect(() => { loadSession(); }, [loadSession]);
+  const mode = user ? portalMode({
+    role: user.role ?? "athlete",
+    storedRole: user.storedRole ?? user.role ?? "athlete",
+    professionalStatus: user.professionalStatus ?? null,
+    isSuperAdmin: Boolean(user.isSuperAdmin),
+  }) : null;
+  const routeAllowed = Boolean(user && mode && canOpenInMode(mode, user.role ?? "athlete", pathname, Boolean(user.isSuperAdmin)));
+
   useEffect(() => {
-    if (user && (user.role === "coach" || user.role === "nutritionist") && !canAccessPortalPath(user.role, pathname)) {
-      router.replace("/portal/alimentos");
-    }
-  }, [pathname, router, user]);
+    if (!user || !mode || mode === "none" || mode === "rejected" || routeAllowed) return;
+    router.replace(mode === "professional" && pathname.startsWith("/portal/ejercicios") ? "/portal/alimentos" : homeForMode(mode));
+  }, [mode, pathname, routeAllowed, router, user]);
 
   /** Bridges Login unmounting into the authenticated shell mounting: the flash
       (rendered here, outside either branch) survives the swap and masks the cut. */
@@ -511,42 +560,48 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     content = null;
   } else if (!user) {
     content = <Login onDone={completeLogin} />;
-  } else if (user.role !== "coach" && user.role !== "nutritionist" && user.createdAt
-    && canFinishProfessionalSignup(user.role ?? "athlete", new Date(user.createdAt))) {
+  } else if (mode === "none" && user.createdAt
+    && canFinishProfessionalSignup(user.storedRole ?? user.role ?? "athlete", new Date(user.createdAt))) {
     content = <FinishSignup user={user} onDone={loadSession} onCancel={logout} />;
-  } else if (user.role !== "coach" && user.role !== "nutritionist") {
+  } else if (mode === "rejected") {
+    content = <RejectedNotice email={user.email} onLogout={logout} />;
+  } else if (mode === "none") {
     content = (
-      <div className="mx-auto mt-[16vh] max-w-115 px-5 text-center font-mono-app text-[13px] leading-7 text-fg-sec">
-        <p>Tu cuenta ({user.email}) no es de profesional.</p>
-        <p>
-          Pedile al admin que ejecute:{" "}
-          <code className="text-volt">node scripts/set-role.mjs {user.email} coach</code>
-        </p>
-        <button type="button" onClick={logout} className="mt-6 cursor-pointer border border-line px-5 py-2.5 text-xs text-fg-sec hover:border-danger hover:text-danger">
+      <div className="mx-auto mt-[16vh] max-w-115 px-5 text-center">
+        <div className="mb-2.5 font-mono-app text-[11px] tracking-[2.4px] text-volt">PULSO · PORTAL PROFESIONAL</div>
+        <p className="mb-2 text-lg font-semibold text-fg">{user.email} es una cuenta de atleta</p>
+        <p className="text-sm leading-6 text-fg-sec">El portal es para entrenadores y nutricionistas. Tu progreso, planes y mensajes están en la app de PULSO. Si sos profesional, creá una cuenta profesional con otro correo o escribinos para convertir esta.</p>
+        <button type="button" onClick={logout} className="mt-6 cursor-pointer border border-line px-5 py-2.5 font-mono-app text-xs text-fg-sec hover:border-danger hover:text-danger">
           CERRAR SESIÓN
         </button>
       </div>
     );
   } else {
-    const role = user.role as ProfessionalRole;
-    const visibleNav = NAV.filter(item => canAccessPortalPath(role, item.href));
-    const routeAllowed = canAccessPortalPath(role, pathname);
+    const role = (mode === "professional" ? user.role : "coach") as ProfessionalRole;
+    const visibleNav = mode === "professional" ? NAV.filter(item => canAccessPortalPath(role, item.href))
+      : mode === "pending" ? PENDING_NAV : [];
+    const adminNav = user.isSuperAdmin ? ADMIN_NAV : [];
+    const accountNav = mode === "professional" ? ACCOUNT_NAV : mode === "pending" ? ACCOUNT_NAV.slice(0, 1) : [];
+    const roleLabel = mode === "admin" ? "SUPER ADMIN"
+      : mode === "pending" ? "EN REVISIÓN"
+        : user.role === "coach" ? "ENTRENADOR" : "NUTRICIONISTA";
+    const mobileNav = [...visibleNav, ...adminNav];
     content = (
       <PortalContext.Provider value={{ user, logout, refreshUser: loadSession }}>
         <div className="min-h-screen md:flex md:h-screen">
           {/* sidebar */}
           <aside className="hidden w-60 shrink-0 flex-col border-r border-line md:flex">
             <div className="border-b border-line p-4.5">
-              <div className="mb-1.5 font-mono-app text-[10px] tracking-[2px] text-volt">
-                PULSO · {user.role === "coach" ? "ENTRENADOR" : "NUTRICIONISTA"}
+              <div className={`mb-1.5 font-mono-app text-[10px] tracking-[2px] ${mode === "pending" ? "text-warn" : "text-volt"}`}>
+                PULSO · {roleLabel}{mode === "professional" && user.isSuperAdmin ? " · ADMIN" : ""}
               </div>
               <div className="font-semibold text-fg">{user.name}</div>
               <div className="font-mono-app text-[10px] text-fg-ter">{user.email}</div>
             </div>
 
-            <nav className="flex-1 py-2">
+            <nav className="flex-1 overflow-y-auto py-2">
               {visibleNav.map(item => {
-                const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                const active = isActive(pathname, item.href);
                 return (
                   <Link
                     key={item.href}
@@ -562,10 +617,30 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                   </Link>
                 );
               })}
+              {adminNav.length > 0 && (
+                <>
+                  <div className={`px-4.5 pb-1.5 font-mono-app text-[9px] tracking-[1.8px] text-fg-ter ${visibleNav.length ? "mt-4 border-t border-line-soft pt-4" : "pt-2"}`}>ADMINISTRACIÓN</div>
+                  {adminNav.map(item => {
+                    const active = isActive(pathname, item.href);
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={`flex items-center gap-3 border-l-3 px-4.5 py-2.5 font-mono-app text-[10.5px] tracking-[1.2px] transition ${
+                          active ? "border-neon bg-card text-neon" : "border-transparent text-fg-sec hover:bg-card hover:text-fg"
+                        }`}
+                      >
+                        <span aria-hidden className="w-3 text-center">{item.icon}</span>
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </>
+              )}
             </nav>
 
             <nav className="border-t border-line py-2">
-              {ACCOUNT_NAV.map(item => {
+              {accountNav.map(item => {
                 const active = pathname === item.href;
                 return (
                   <Link key={item.href} href={item.href} className={`block px-4.5 py-2.5 font-mono-app text-[10px] tracking-[1.2px] transition ${active ? "text-volt" : "text-fg-sec hover:text-fg"}`}>
@@ -588,19 +663,21 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             <header className="sticky top-0 z-40 border-b border-line bg-ink/95 md:hidden">
               <div className="flex items-center justify-between px-4 py-3">
                 <div>
-                  <div className="font-mono-app text-[9px] tracking-[1.8px] text-volt">PULSO · PROFESIONAL</div>
+                  <div className="font-mono-app text-[9px] tracking-[1.8px] text-volt">PULSO · {roleLabel}</div>
                   <div className="text-sm font-semibold text-fg">{user.name}</div>
                 </div>
-                <Link href="/portal/perfil" className="border border-line px-3 py-2 font-mono-app text-[10px] text-fg-sec">PERFIL</Link>
+                {accountNav.length > 0
+                  ? <Link href="/portal/perfil" className="border border-line px-3 py-2 font-mono-app text-[10px] text-fg-sec">PERFIL</Link>
+                  : <button type="button" onClick={logout} className="cursor-pointer border border-line px-3 py-2 font-mono-app text-[10px] text-fg-sec">SALIR</button>}
               </div>
               <nav className="flex overflow-x-auto border-t border-line-soft px-2">
-                {visibleNav.map(item => {
-                  const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                {mobileNav.map(item => {
+                  const active = isActive(pathname, item.href);
                   return <Link key={item.href} href={item.href} className={`shrink-0 border-b-2 px-3 py-2.5 font-mono-app text-[9px] tracking-[1px] ${active ? "border-volt text-volt" : "border-transparent text-fg-ter"}`}>{item.label}</Link>;
                 })}
               </nav>
             </header>
-            <main className="min-w-0">{routeAllowed ? children : <div className="p-8 font-mono-app text-xs text-fg-ter">ABRIENDO TU BIBLIOTECA DE ALIMENTOS…</div>}</main>
+            <main className="min-w-0">{routeAllowed ? children : <div className="p-8 font-mono-app text-xs text-fg-ter">ABRIENDO…</div>}</main>
           </div>
         </div>
       </PortalContext.Provider>

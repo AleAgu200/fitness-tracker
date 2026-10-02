@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { ensureCatalogOverlay } from "@/lib/catalog-overlay";
 import { listGenerationCatalog } from "@/lib/exercise-catalog";
 import { listFoods } from "@/lib/library";
 
@@ -130,6 +131,7 @@ export async function assembleAndGenerate(
   });
 
   const pulsoFoods = await listFoods();
+  await ensureCatalogOverlay();
   const animatedExercises = listGenerationCatalog();
 
   const eligibleFoods: EligibleFood[] = filterEligibleFoods(pulsoFoods, {

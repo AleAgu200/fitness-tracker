@@ -41,3 +41,41 @@ export function resolveDefaultPortalPath(role: ProfessionalRole, requested?: str
     : role === "nutritionist" ? "foods" : "attention";
   return SECTION_PATHS[section];
 }
+
+export interface PortalIdentity {
+  /** Effective role (a professional under review counts as athlete). */
+  role: string;
+  storedRole: string;
+  professionalStatus: string | null;
+  isSuperAdmin: boolean;
+}
+
+/**
+ * Which shell the portal renders:
+ * - professional: the clinical workspace (plus ADMIN when also super admin)
+ * - admin: super admin without a professional role, only the admin panel
+ * - pending / rejected: a professional sign-up waiting on (or refused by) review
+ * - none: an athlete account, which the portal does not serve
+ */
+export type PortalMode = "professional" | "admin" | "pending" | "rejected" | "none";
+
+export function portalMode(me: PortalIdentity): PortalMode {
+  if (me.role === "coach" || me.role === "nutritionist") return "professional";
+  if (me.isSuperAdmin) return "admin";
+  if (me.storedRole === "coach" || me.storedRole === "nutritionist") {
+    return me.professionalStatus === "rejected" ? "rejected" : "pending";
+  }
+  return "none";
+}
+
+/** Routes a mode may open; everything else redirects to its home. */
+export function canOpenInMode(mode: PortalMode, role: string, pathname: string, isSuperAdmin: boolean): boolean {
+  if (pathname.startsWith("/portal/admin")) return isSuperAdmin;
+  if (mode === "professional") return canAccessPortalPath(role as ProfessionalRole, pathname);
+  if (mode === "pending") return pathname === "/portal/perfil" || pathname === "/portal/revision";
+  return false;
+}
+
+export function homeForMode(mode: PortalMode): string {
+  return mode === "admin" ? "/portal/admin" : mode === "pending" ? "/portal/revision" : "/portal";
+}

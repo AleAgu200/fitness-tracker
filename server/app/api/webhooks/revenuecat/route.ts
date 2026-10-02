@@ -2,7 +2,9 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { user } from "@/db/schema";
+import { billingIssueEmail, emailEnabled, plusActivatedEmail, sendEmail, subscriptionEndedEmail } from "@/lib/email";
 import { applyEntitlement, normalizeEvent, recordEvent, verifyWebhookAuthorization } from "@/lib/revenuecat";
+import { billingEmailFor } from "@/lib/revenuecat-events";
 
 export const runtime = "nodejs";
 
@@ -34,7 +36,7 @@ export async function POST(request: Request) {
   }
 
   const [account] = appUserId
-    ? await db.select({ id: user.id }).from(user).where(eq(user.id, appUserId)).limit(1)
+    ? await db.select({ id: user.id, email: user.email, name: user.name }).from(user).where(eq(user.id, appUserId)).limit(1)
     : [];
 
   const fresh = await recordEvent({
@@ -53,5 +55,16 @@ export async function POST(request: Request) {
   if (!entitlement) return Response.json({ ok: true, ignored: "unmapped_event_type" });
 
   await applyEntitlement({ userId: account.id, entitlement, eventId, payload: event });
+
+  // Only fresh deliveries reach this point, so a retried webhook never mails twice.
+  const kind = billingEmailFor(eventType);
+  if (kind && emailEnabled()) {
+    const ends = entitlement.currentPeriodEndsAt;
+    await sendEmail(
+      kind === "activated" ? plusActivatedEmail(account.email, account.name, ends, false)
+        : kind === "billing_issue" ? billingIssueEmail(account.email, account.name, ends)
+          : subscriptionEndedEmail(account.email, account.name, kind, ends),
+    );
+  }
   return Response.json({ ok: true });
 }

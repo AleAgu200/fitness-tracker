@@ -1,0 +1,31 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Lets the PULSO backend copy exercise media uploaded from the admin panel
+  (server/lib/media-storage.ts) to the media bucket. Kept out of the
+  pulso-backend stack on purpose: that stack resolves the latest AMI on every
+  update, so changing it would replace the instance and its PostgreSQL data.
+  This stack only attaches an inline policy to the existing instance role.
+
+Parameters:
+  InstanceRoleName:
+    Type: String
+    Description: Role of the pulso-backend instance profile (pulso-backend-InstanceRole-...).
+
+  MediaBucketName:
+    Type: String
+    Description: The MediaBucketName output of the pulso-backend stack.
+
+Resources:
+  WriteUploadedMedia:
+    Type: AWS::IAM::RolePolicy
+    Properties:
+      RoleName: !Ref InstanceRoleName
+      PolicyName: write-uploaded-media
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          # Only under uploads/: the imported catalog GIFs stay read-only.
+          - Effect: Allow
+            Action:
+              - s3:PutObject
+            Resource: !Sub 'arn:aws:s3:::${MediaBucketName}/uploads/*'

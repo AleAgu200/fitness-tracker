@@ -1,4 +1,5 @@
 import { forbidden, unauthorized, getSessionUser } from "@/lib/api-auth";
+import { ensureCatalogOverlay } from "@/lib/catalog-overlay";
 import { searchCatalogPage } from "@/lib/exercise-catalog";
 
 function positiveInteger(value: string | null, fallback: number): number {
@@ -16,5 +17,6 @@ export async function GET(request: Request) {
   const page = positiveInteger(params.get("page"), 1);
   const pageSize = positiveInteger(params.get("pageSize"), 10);
 
+  await ensureCatalogOverlay();
   return Response.json(searchCatalogPage(q, page, pageSize));
 }

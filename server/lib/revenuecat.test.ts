@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizeEvent, verifyWebhookAuthorization } from "./revenuecat-events";
+import { billingEmailFor, normalizeEvent, verifyWebhookAuthorization } from "./revenuecat-events";
 
 test("webhook authorization fails closed", () => {
   const original = process.env.REVENUECAT_WEBHOOK_SECRET;
@@ -53,4 +53,13 @@ test("unmapped event types never change entitlement", () => {
 test("sandbox purchases are flagged", () => {
   assert.equal(normalizeEvent({ type: "INITIAL_PURCHASE", environment: "SANDBOX" })?.isSandbox, true);
   assert.equal(normalizeEvent({ type: "INITIAL_PURCHASE", environment: "PRODUCTION" })?.isSandbox, false);
+});
+
+test("only purchases, billing problems and endings send a customer email", () => {
+  assert.equal(billingEmailFor("INITIAL_PURCHASE"), "activated");
+  assert.equal(billingEmailFor("BILLING_ISSUE"), "billing_issue");
+  assert.equal(billingEmailFor("CANCELLATION"), "cancelled");
+  assert.equal(billingEmailFor("EXPIRATION"), "expired");
+  assert.equal(billingEmailFor("RENEWAL"), null);
+  assert.equal(billingEmailFor("TEST"), null);
 });

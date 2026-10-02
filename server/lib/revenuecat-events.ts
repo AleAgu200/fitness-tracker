@@ -75,3 +75,25 @@ export function normalizeEvent(event: RevenueCatEvent): NormalizedEntitlement | 
     willRenew: status === "active",
   };
 }
+
+export type BillingEmailKind = "activated" | "billing_issue" | "cancelled" | "expired";
+
+/**
+ * Which customer email an event deserves. Renewals and product changes stay
+ * silent: the store already sends a receipt, and a monthly "renewed" mail is noise.
+ */
+export function billingEmailFor(eventType: string): BillingEmailKind | null {
+  switch (eventType) {
+    case "INITIAL_PURCHASE":
+    case "NON_RENEWING_PURCHASE":
+      return "activated";
+    case "BILLING_ISSUE":
+      return "billing_issue";
+    case "CANCELLATION":
+      return "cancelled";
+    case "EXPIRATION":
+      return "expired";
+    default:
+      return null;
+  }
+}

@@ -12,6 +12,14 @@ export const user = pgTable("user", {
   updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
   role: text("role").notNull().default("athlete"),
   isSuperAdmin: boolean("isSuperAdmin").notNull().default(false),
+  /**
+   * Review state of a coach/nutritionist account: "pending" until a super
+   * admin approves it, then "approved" or "rejected". Null for athletes and for
+   * professionals created before reviews existed (treated as approved).
+   */
+  professionalStatus: text("professionalStatus"),
+  /** Set while an admin has suspended the account: no sign-in, no sessions. */
+  suspendedAt: timestamp("suspendedAt", { withTimezone: true }),
 }, (table) => [uniqueIndex("user_email_unique").on(table.email)]);
 
 export const session = pgTable("session", {
