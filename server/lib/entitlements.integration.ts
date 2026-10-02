@@ -113,7 +113,20 @@ test("cancelled keeps access until the period ends; expiration revokes immediate
     },
   });
   // Auto-renew off, but they paid for this period.
-  assert.equal((await getEntitlement(userId)).entitled, false, "cancelled is not an entitled status");
+  assert.equal((await getEntitlement(userId)).entitled, true, "cancelled keeps access until the period ends");
+
+  await applyEntitlement({
+    userId,
+    entitlement: {
+      status: "cancelled",
+      productId: "pulso_plus_monthly",
+      store: "app_store",
+      isSandbox: false,
+      currentPeriodEndsAt: Date.now() - DAY,
+      willRenew: false,
+    },
+  });
+  assert.equal((await getEntitlement(userId)).entitled, false, "a cancelled period that ended grants nothing");
 
   await applyEntitlement({
     userId,

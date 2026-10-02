@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { sandboxEntitlementAllowed } from "./entitlement-policy";
+import { REVERIFY_COOLDOWN_MS, sandboxEntitlementAllowed, shouldReverifyEntitlement } from "./entitlement-policy";
 
 test("a real (non-sandbox) purchase is always honoured", () => {
   assert.equal(sandboxEntitlementAllowed(false, { NODE_ENV: "production" }), true);
@@ -34,4 +34,22 @@ test("production can opt in to sandbox purchases explicitly", () => {
       `ALLOW_SANDBOX_ENTITLEMENTS=${value} must not grant access`,
     );
   }
+});
+
+test("a renewing subscription whose period ended is re-read from RevenueCat", () => {
+  const now = Date.now();
+  const lapsed = { status: "active", willRenew: true, currentPeriodEndsAt: now - 1, updatedAt: now - REVERIFY_COOLDOWN_MS - 1 };
+  // The renewal webhook never arrived: ask before showing the paywall again.
+  assert.equal(shouldReverifyEntitlement(lapsed, now), true);
+  assert.equal(shouldReverifyEntitlement({ ...lapsed, status: "billing_issue" }, now), true);
+});
+
+test("no re-read while the period runs, after a cancellation, or right after the last check", () => {
+  const now = Date.now();
+  const lapsed = { status: "active", willRenew: true, currentPeriodEndsAt: now - 1, updatedAt: now - REVERIFY_COOLDOWN_MS - 1 };
+  assert.equal(shouldReverifyEntitlement({ ...lapsed, currentPeriodEndsAt: now + 60_000 }, now), false);
+  assert.equal(shouldReverifyEntitlement({ ...lapsed, currentPeriodEndsAt: null }, now), false);
+  assert.equal(shouldReverifyEntitlement({ ...lapsed, willRenew: false }, now), false);
+  assert.equal(shouldReverifyEntitlement({ ...lapsed, status: "expired" }, now), false);
+  assert.equal(shouldReverifyEntitlement({ ...lapsed, updatedAt: now - 1_000 }, now), false);
 });
