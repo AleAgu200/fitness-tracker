@@ -1,9 +1,9 @@
 import { api } from "./lib";
 
 /**
- * Google in the portal. Signing in only works for a professional who already
- * linked Google from Perfil: the portal never creates accounts this way, and
- * an address that merely matches is never joined on its own.
+ * Google in the portal. It signs in the account with the same address, or
+ * creates one; a new account then finishes its professional setup in the
+ * portal (PUT /api/portal/signup).
  */
 
 /** Sends the browser to Google; it comes back to `returnTo` (or with ?error=). */
@@ -25,8 +25,7 @@ export async function startGoogleLink(returnTo: string): Promise<void> {
 }
 
 const MESSAGES: Record<string, string> = {
-  account_not_linked: "Esa cuenta de Google no está vinculada a PULSO. Ingresá con tu correo y contraseña y vinculala desde Perfil.",
-  signup_disabled: "No hay una cuenta profesional con ese Google. Ingresá con tu correo y vinculala desde Perfil, o creá tu cuenta profesional.",
+  account_not_linked: "No se pudo unir ese Google a tu cuenta PULSO. Ingresá con tu correo y contraseña y vinculalo desde Perfil.",
   "email_doesn't_match": "Esa cuenta de Google usa otro correo. Vinculá la que tenga el mismo correo que tu cuenta PULSO.",
   account_already_linked_to_different_user: "Esa cuenta de Google ya está vinculada a otro usuario de PULSO.",
 };

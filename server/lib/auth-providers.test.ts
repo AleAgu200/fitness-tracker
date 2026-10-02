@@ -23,10 +23,10 @@ describe("socialProvidersFromEnv", () => {
 });
 
 describe("sign-up and the portal", () => {
-  it("never creates accounts unless the request asks for it", () => {
+  it("lets either provider create accounts", () => {
     const providers = socialProvidersFromEnv({ GOOGLE_CLIENT_IDS: "web", APPLE_BUNDLE_IDS: "com.lalomaster.pulso" });
-    assert.equal(providers.google?.disableImplicitSignUp, true);
-    assert.equal(providers.apple?.disableImplicitSignUp, true);
+    assert.equal("disableImplicitSignUp" in (providers.google ?? {}), false);
+    assert.equal("disableImplicitSignUp" in (providers.apple ?? {}), false);
   });
 
   it("offers Google in the browser only with the secret", () => {

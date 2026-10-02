@@ -5,6 +5,8 @@ export interface SessionUser {
   name: string;
   email: string;
   role?: string;
+  /** ISO date; decides whether a Google sign-up can still become professional. */
+  createdAt?: string;
 }
 
 export interface Athlete {

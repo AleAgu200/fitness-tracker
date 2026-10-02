@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { startGoogleSignIn, takeGoogleError } from "./google";
 import { api, SessionUser } from "./lib";
 import { PortalContext } from "./portal-context";
-import { canAccessPortalPath, ProfessionalRole } from "@/lib/portal-access";
+import { canAccessPortalPath, canFinishProfessionalSignup, ProfessionalRole } from "@/lib/portal-access";
 
 function useReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
@@ -217,13 +217,81 @@ function PowerSurgeFlash({ active }: { active: boolean }) {
 
 // ── login ────────────────────────────────────────────────────────────────────
 
+type Discipline = "coach" | "nutritionist";
+
+function DisciplinePicker({ value, onChange }: { value: Discipline; onChange: (value: Discipline) => void }) {
+  return (
+    <div className="mb-3 grid grid-cols-2 gap-2" role="group" aria-label="Disciplina profesional">
+      {(["coach", "nutritionist"] as const).map(option => (
+        <button key={option} type="button" onClick={() => onChange(option)} aria-pressed={value === option} className={`cursor-pointer border px-3 py-3 text-left transition ${value === option ? "border-volt bg-card text-fg" : "border-line bg-elev text-fg-sec hover:border-fg-ter"}`}>
+          <span className="block font-mono-app text-[10px] tracking-[1px] text-volt">{option === "coach" ? "ENTRENAMIENTO" : "NUTRICIÓN"}</span>
+          <span className="mt-1 block text-sm">{option === "coach" ? "Entrenador/a" : "Nutricionista"}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** The second half of a Google sign-up: the account exists, the workspace doesn't yet. */
+function FinishSignup({ user, onDone, onCancel }: { user: SessionUser; onDone: () => void; onCancel: () => void }) {
+  const [discipline, setDiscipline] = useState<Discipline>("coach");
+  const [organizationName, setOrganizationName] = useState("");
+  const [signupCode, setSignupCode] = useState("");
+  const [requiresCode, setRequiresCode] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api<{ requiresCode: boolean }>("/api/portal/signup")
+      .then(result => setRequiresCode(result.requiresCode))
+      .catch(() => undefined);
+  }, []);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api("/api/portal/signup", {
+        method: "PUT",
+        body: JSON.stringify({ discipline, organizationName, signupCode }),
+      });
+      onDone();
+    } catch (cause) {
+      const status = cause instanceof Error ? cause.message : "";
+      setError(status === "403" && requiresCode
+        ? "El código de registro no es válido"
+        : "No se pudo crear tu espacio profesional. Probá de nuevo");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="mx-auto max-w-105 px-5 py-[8vh]">
+      <div className="mb-2.5 font-mono-app text-[11px] tracking-[2.4px] text-volt">PULSO · PORTAL PROFESIONAL</div>
+      <h1 className="mb-2 text-[28px] font-semibold text-fg">Completá tu cuenta</h1>
+      <p className="mb-6 text-sm leading-6 text-fg-sec">Entraste con Google como {user.email}. Elegí tu disciplina para crear tu espacio profesional.</p>
+      <DisciplinePicker value={discipline} onChange={setDiscipline} />
+      <input value={organizationName} onChange={e => setOrganizationName(e.target.value)} maxLength={100} placeholder="Nombre de tu consultorio o equipo (opcional)" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />
+      {requiresCode && <input required value={signupCode} onChange={e => setSignupCode(e.target.value)} placeholder="Código de registro profesional" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />}
+      {error && <div className="mb-3 font-mono-app text-xs text-danger">{error}</div>}
+      <button type="submit" disabled={busy} className="w-full cursor-pointer bg-volt p-3.5 font-mono-app text-xs font-extrabold tracking-[1px] text-ink transition hover:brightness-110 disabled:opacity-60">
+        {busy ? "PROCESANDO…" : "CREAR MI ESPACIO"}
+      </button>
+      <button type="button" onClick={onCancel} className="mt-4 w-full cursor-pointer py-2 text-sm text-fg-sec hover:text-volt">
+        Usar otra cuenta
+      </button>
+    </form>
+  );
+}
+
 function Login({ onDone }: { onDone: () => void }) {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [discipline, setDiscipline] = useState<"coach" | "nutritionist">("coach");
+  const [discipline, setDiscipline] = useState<Discipline>("coach");
   const [organizationName, setOrganizationName] = useState("");
   const [signupCode, setSignupCode] = useState("");
   const [requiresCode, setRequiresCode] = useState(false);
@@ -331,14 +399,7 @@ function Login({ onDone }: { onDone: () => void }) {
         {mode === "signup" && (
           <>
             <input required minLength={6} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} type="password" autoComplete="new-password" placeholder="Confirmar contraseña" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />
-            <div className="mb-3 grid grid-cols-2 gap-2" role="group" aria-label="Disciplina profesional">
-              {(["coach", "nutritionist"] as const).map(value => (
-                <button key={value} type="button" onClick={() => setDiscipline(value)} aria-pressed={discipline === value} className={`cursor-pointer border px-3 py-3 text-left transition ${discipline === value ? "border-volt bg-card text-fg" : "border-line bg-elev text-fg-sec hover:border-fg-ter"}`}>
-                  <span className="block font-mono-app text-[10px] tracking-[1px] text-volt">{value === "coach" ? "ENTRENAMIENTO" : "NUTRICIÓN"}</span>
-                  <span className="mt-1 block text-sm">{value === "coach" ? "Entrenador/a" : "Nutricionista"}</span>
-                </button>
-              ))}
-            </div>
+            <DisciplinePicker value={discipline} onChange={setDiscipline} />
             <input value={organizationName} onChange={e => setOrganizationName(e.target.value)} maxLength={100} placeholder="Nombre de tu consultorio o equipo (opcional)" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />
             {requiresCode && <input required value={signupCode} onChange={e => setSignupCode(e.target.value)} placeholder="Código de registro profesional" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />}
           </>
@@ -353,7 +414,7 @@ function Login({ onDone }: { onDone: () => void }) {
         >
           {busy ? "PROCESANDO…" : mode === "login" ? "INGRESAR" : "CREAR MI ESPACIO"}
         </button>
-        {mode === "login" && googleEnabled && (
+        {googleEnabled && (
           <>
             <div className="my-4 flex items-center gap-3" aria-hidden>
               <span className="h-px flex-1 bg-line" />
@@ -367,9 +428,9 @@ function Login({ onDone }: { onDone: () => void }) {
               className="flex w-full cursor-pointer items-center justify-center gap-2.5 border border-[#747775] bg-white p-3 text-sm font-semibold text-[#1F1F1F] transition hover:bg-[#f2f2f2] disabled:opacity-60"
             >
               <span aria-hidden className="text-base font-bold">G</span>
-              Continuar con Google
+              {mode === "login" ? "Continuar con Google" : "Crear cuenta con Google"}
             </button>
-            <p className="mt-2 text-center text-[11px] leading-4 text-fg-ter">Primero vinculá Google desde tu Perfil.</p>
+            {mode === "signup" && <p className="mt-2 text-center text-[11px] leading-4 text-fg-ter">Después de Google elegís tu disciplina.</p>}
           </>
         )}
         <button type="button" onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(null); }} className="mt-4 w-full cursor-pointer py-2 text-sm text-fg-sec hover:text-volt">
@@ -450,6 +511,9 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     content = null;
   } else if (!user) {
     content = <Login onDone={completeLogin} />;
+  } else if (user.role !== "coach" && user.role !== "nutritionist" && user.createdAt
+    && canFinishProfessionalSignup(user.role ?? "athlete", new Date(user.createdAt))) {
+    content = <FinishSignup user={user} onDone={loadSession} onCancel={logout} />;
   } else if (user.role !== "coach" && user.role !== "nutritionist") {
     content = (
       <div className="mx-auto mt-[16vh] max-w-115 px-5 text-center font-mono-app text-[13px] leading-7 text-fg-sec">

@@ -3,6 +3,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 
 import { db } from "@/db";
 import * as schema from "@/db/schema";
+import { passwordMustGoOnLink } from "@/lib/auth-linking";
 import { socialProvidersFromEnv } from "@/lib/auth-providers";
 import { emailEnabled, passwordResetEmail, sendEmail, verificationEmail } from "@/lib/email";
 
@@ -49,9 +50,36 @@ export const auth = betterAuth({
 
   account: {
     accountLinking: {
-      // A Google or Apple sign-in never joins an existing PULSO account just
-      // because the address matches; linking needs the athlete signed in.
-      disableImplicitLinking: true,
+      // Google or Apple sign-in joins the PULSO account with the same
+      // (provider-verified) address, even one never confirmed here: the hook
+      // below drops whatever password that account carried.
+      requireLocalEmailVerified: false,
+    },
+  },
+
+  databaseHooks: {
+    account: {
+      create: {
+        // "before" runs ahead of Better Auth marking the address verified, so
+        // `emailVerified` still says whether the password's owner proved it.
+        before: async (account, ctx) => {
+          if (!ctx || account.providerId === "credential") return;
+          const internal = ctx.context.internalAdapter;
+          const passwords = (await internal.findAccounts(account.userId))
+            .filter(existing => existing.providerId === "credential");
+          if (!passwords.length) return;
+          const owner = await internal.findUserById(account.userId);
+          if (!owner) return;
+          const token = await ctx.getSignedCookie(ctx.context.authCookies.sessionToken.name, ctx.context.secret)
+            .catch(() => null);
+          const current = ctx.context.session ?? (token ? await internal.findSession(token) : null);
+          const linkedBySignedInOwner = current?.session.userId === account.userId
+            && new Date(current.session.expiresAt).getTime() > Date.now();
+          if (!passwordMustGoOnLink({ providerId: account.providerId, emailVerified: owner.emailVerified, linkedBySignedInOwner })) return;
+          for (const password of passwords) await internal.deleteAccount(password.id);
+          await internal.deleteUserSessions(account.userId);
+        },
+      },
     },
   },
 

@@ -3,8 +3,10 @@ import { z } from "zod";
 
 import { db } from "@/db";
 import { user } from "@/db/schema";
+import { forbidden, getSessionUser, unauthorized } from "@/lib/api-auth";
 import { auth } from "@/lib/auth";
 import { googleWebSignInEnabled } from "@/lib/auth-providers";
+import { canFinishProfessionalSignup } from "@/lib/portal-access";
 import { initializeProfessionalAccount } from "@/lib/professional-profile";
 
 const signupSchema = z.object({
@@ -16,13 +18,46 @@ const signupSchema = z.object({
   signupCode: z.string().max(120).optional(),
 });
 
+const finishSchema = signupSchema.pick({ discipline: true, organizationName: true, signupCode: true });
+
 /** What the portal's login/signup screen should offer. */
 export function GET() {
   return Response.json({
     requiresCode: Boolean(process.env.PROFESSIONAL_SIGNUP_CODE),
-    // Sign-in only: a Google account must be linked from the profile first.
+    // Sign-in and sign-up: a new Google account finishes its setup with PUT.
     google: googleWebSignInEnabled(process.env),
   });
+}
+
+/**
+ * Finishes a sign-up that started with Google: Better Auth already created the
+ * account, this gives it the professional workspace the email form would have.
+ */
+export async function PUT(request: Request) {
+  const sessionUser = await getSessionUser(request);
+  if (!sessionUser) return unauthorized();
+  let input: z.infer<typeof finishSchema>;
+  try {
+    input = finishSchema.parse(await request.json());
+  } catch {
+    return Response.json({ error: "invalid_body" }, { status: 400 });
+  }
+
+  const requiredCode = process.env.PROFESSIONAL_SIGNUP_CODE;
+  if (requiredCode && input.signupCode !== requiredCode) {
+    return Response.json({ error: "invalid_signup_code" }, { status: 403 });
+  }
+
+  const [account] = await db.select({ createdAt: user.createdAt }).from(user).where(eq(user.id, sessionUser.id));
+  if (!account || !canFinishProfessionalSignup(sessionUser.role, account.createdAt)) return forbidden();
+
+  await initializeProfessionalAccount({
+    userId: sessionUser.id,
+    name: sessionUser.name,
+    discipline: input.discipline,
+    organizationName: input.organizationName,
+  });
+  return Response.json({ ok: true });
 }
 
 export async function POST(request: Request) {
