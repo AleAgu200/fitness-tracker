@@ -13,10 +13,14 @@ export const PULSO_PLUS = "pulso_plus";
  */
 export const FREE_GENERATION_LIMIT = 1;
 
-/** Statuses that still grant access — a billing retry should not lock someone out mid-period. */
-const ENTITLED_STATUSES = ["active", "in_grace_period", "billing_issue"] as const;
+/**
+ * Statuses that still grant access while the period lasts — a billing retry
+ * should not lock someone out mid-period, and "cancelled" only means
+ * auto-renew was turned off: that period is already paid for.
+ */
+const ENTITLED_STATUSES = ["active", "in_grace_period", "billing_issue", "cancelled"] as const;
 
-import { sandboxEntitlementAllowed } from "@/lib/entitlement-policy";
+import { sandboxEntitlementAllowed, shouldReverifyEntitlement } from "@/lib/entitlement-policy";
 
 export { sandboxEntitlementAllowed };
 
@@ -29,7 +33,16 @@ export interface EntitlementState {
 }
 
 export async function getEntitlement(userId: string, now = Date.now()): Promise<EntitlementState> {
-  const [row] = await db.select().from(subscriptions).where(eq(subscriptions.userId, userId)).limit(1);
+  let [row] = await db.select().from(subscriptions).where(eq(subscriptions.userId, userId)).limit(1);
+  if (row && shouldReverifyEntitlement(row, now)) {
+    // Imported here: revenuecat.ts imports this module for PULSO_PLUS.
+    const { applyEntitlement, fetchSubscriber } = await import("@/lib/revenuecat");
+    const fresh = await fetchSubscriber(userId).catch(() => null);
+    if (fresh) {
+      await applyEntitlement({ userId, entitlement: fresh, payload: { source: "lapsed_renewal_check" } });
+      [row] = await db.select().from(subscriptions).where(eq(subscriptions.userId, userId)).limit(1);
+    }
+  }
   if (!row) {
     return { entitled: false, status: null, productId: null, currentPeriodEndsAt: null, willRenew: false };
   }
