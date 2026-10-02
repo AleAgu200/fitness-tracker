@@ -52,13 +52,23 @@ export interface RevenueCatEvent {
   cancel_reason?: string;
 }
 
-/** Constant-time check of the shared secret configured in RevenueCat. */
+/** "Bearer abc" and "abc" are the same secret: RevenueCat sends the field verbatim. */
+function withoutBearer(value: string): string {
+  return value.trim().replace(/^Bearer(\s+|$)/i, "");
+}
+
+/**
+ * Constant-time check of the shared secret configured in RevenueCat. The
+ * dashboard's own example writes "Bearer <secret>", so the header is accepted
+ * with or without that prefix (and the stored secret may carry it too).
+ */
 export function verifyWebhookAuthorization(header: string | null): boolean {
   const expected = process.env.REVENUECAT_WEBHOOK_SECRET;
   // An unset secret must reject everything rather than accept everything.
   if (!expected || !header) return false;
-  const provided = Buffer.from(header);
-  const secret = Buffer.from(expected);
+  const provided = Buffer.from(withoutBearer(header));
+  const secret = Buffer.from(withoutBearer(expected));
+  if (secret.length === 0) return false;
   // Lengths are compared first because timingSafeEqual throws on a mismatch.
   return provided.length === secret.length && timingSafeEqual(provided, secret);
 }

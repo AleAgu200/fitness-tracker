@@ -18,6 +18,17 @@ test("webhook authorization fails closed", () => {
   assert.equal(verifyWebhookAuthorization(null), false);
   assert.equal(verifyWebhookAuthorization(""), false);
 
+  // RevenueCat's dashboard example uses "Bearer <secret>": both forms are the same secret.
+  assert.equal(verifyWebhookAuthorization("Bearer sk_test_secret"), true);
+  assert.equal(verifyWebhookAuthorization("bearer sk_test_secret"), true);
+  assert.equal(verifyWebhookAuthorization("Bearer sk_test_secre"), false);
+  assert.equal(verifyWebhookAuthorization("Bearer "), false);
+  process.env.REVENUECAT_WEBHOOK_SECRET = "Bearer sk_test_secret";
+  assert.equal(verifyWebhookAuthorization("sk_test_secret"), true);
+  assert.equal(verifyWebhookAuthorization("Bearer sk_test_secret"), true);
+  process.env.REVENUECAT_WEBHOOK_SECRET = "Bearer ";
+  assert.equal(verifyWebhookAuthorization("Bearer "), false, "an empty secret after the prefix rejects everything");
+
   if (original === undefined) delete process.env.REVENUECAT_WEBHOOK_SECRET;
   else process.env.REVENUECAT_WEBHOOK_SECRET = original;
 });
