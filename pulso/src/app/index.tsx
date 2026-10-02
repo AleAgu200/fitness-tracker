@@ -70,7 +70,8 @@ export default function Index() {
 
         const showOnboarding = await shouldShowOnboarding(userId);
         if (cancelled) return;
-        router.replace(showOnboarding ? '/(onboarding)/account' as any : '/hoy' as any);
+        // A first launch opens with the introduction; a resumed wizard skips it.
+        router.replace(showOnboarding ? '/(onboarding)/welcome' as any : '/hoy' as any);
       } catch (error) {
         console.error('[onboarding-gate]', error);
         if (!cancelled) router.replace('/hoy' as any);

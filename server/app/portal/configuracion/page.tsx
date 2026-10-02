@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "../lib";
 import { usePortalUser } from "../portal-context";
+import { resetPortalTour } from "../portal-tour";
 
 interface Settings {
   emailNotifications: boolean;
@@ -104,6 +105,11 @@ export default function ConfiguracionPage() {
             <input required minLength={6} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} type="password" autoComplete="new-password" placeholder="Confirmar nueva" className={inputClass} />
             <div className="flex flex-wrap items-center justify-between gap-3 sm:col-span-3"><span aria-live="polite" className={`text-xs ${passwordStatus?.startsWith("Contraseña actualizada") ? "text-neon" : "text-danger"}`}>{passwordStatus}</span><button type="submit" disabled={changingPassword} className="cursor-pointer border border-volt px-4 py-2.5 font-mono-app text-[10px] font-bold text-volt hover:bg-volt hover:text-ink disabled:opacity-60">{changingPassword ? "ACTUALIZANDO…" : "CAMBIAR CONTRASEÑA"}</button></div>
           </form>
+        </section>
+
+        <section className="flex flex-col justify-between gap-4 border border-line bg-elev p-5 sm:flex-row sm:items-center">
+          <div><h2 className="font-semibold text-fg">Recorrido del portal</h2><p className="mt-1 text-sm text-fg-sec">Volvé a ver la introducción a cada sección.</p></div>
+          <button type="button" onClick={() => { resetPortalTour(user.id); window.location.assign("/portal"); }} className="w-fit cursor-pointer border border-line px-4 py-2.5 font-mono-app text-[10px] text-fg-sec hover:border-fg-ter hover:text-fg">VER RECORRIDO</button>
         </section>
 
         <section className="flex flex-col justify-between gap-4 border border-line bg-elev p-5 sm:flex-row sm:items-center">

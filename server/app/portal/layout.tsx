@@ -7,6 +7,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { startGoogleSignIn, takeGoogleError } from "./google";
 import { api, ApiError, SessionUser } from "./lib";
 import { PortalContext } from "./portal-context";
+import { PortalTour } from "./portal-tour";
+import { ProfessionalSignupWizard } from "./signup-wizard";
 import { canAccessPortalPath, canFinishProfessionalSignup, canOpenInMode, homeForMode, portalMode, ProfessionalRole } from "@/lib/portal-access";
 
 function useReducedMotion(): boolean {
@@ -346,13 +348,9 @@ function MagicLinkForm({ onBack }: { onBack: () => void }) {
 function Login({ onDone }: { onDone: () => void }) {
   const [mode, setMode] = useState<"login" | "signup" | "magic">("login");
   const [magicEnabled, setMagicEnabled] = useState(false);
-  const [name, setName] = useState("");
+  const [requiresApproval, setRequiresApproval] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [discipline, setDiscipline] = useState<Discipline>("coach");
-  const [organizationName, setOrganizationName] = useState("");
-  const [signupCode, setSignupCode] = useState("");
   const [requiresCode, setRequiresCode] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -361,16 +359,17 @@ function Login({ onDone }: { onDone: () => void }) {
   const reducedMotion = useReducedMotion();
 
   useEffect(() => {
-    api<{ requiresCode: boolean; google?: boolean; magicLink?: boolean }>("/api/portal/signup")
+    api<{ requiresCode: boolean; google?: boolean; magicLink?: boolean; requiresApproval?: boolean }>("/api/portal/signup")
       .then(result => {
         setRequiresCode(result.requiresCode);
+        setRequiresApproval(result.requiresApproval !== false);
         setGoogleEnabled(Boolean(result.google));
         setMagicEnabled(Boolean(result.magicLink));
       })
       .catch(() => undefined);
-    // Coming back from Google with an error (unlinked account, cancelled…).
-    const googleError = takeGoogleError();
-    if (googleError) setError(googleError);
+    // Coming back from Google or a magic link with an error (expired, unlinked…).
+    const returnError = takeGoogleError();
+    if (returnError) setError(returnError);
   }, []);
 
   async function signInWithGoogle() {
@@ -389,19 +388,7 @@ function Login({ onDone }: { onDone: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      if (mode === "signup") {
-        if (password !== confirmPassword) {
-          setError("Las contraseñas no coinciden");
-          setBusy(false);
-          return;
-        }
-        await api("/api/portal/signup", {
-          method: "POST",
-          body: JSON.stringify({ name, email, password, discipline, organizationName, signupCode }),
-        });
-      } else {
-        await api("/api/auth/sign-in/email", { method: "POST", body: JSON.stringify({ email, password }) });
-      }
+      await api("/api/auth/sign-in/email", { method: "POST", body: JSON.stringify({ email, password }) });
       if (reducedMotion) {
         onDone();
       } else {
@@ -409,90 +396,58 @@ function Login({ onDone }: { onDone: () => void }) {
         window.setTimeout(onDone, 320);
       }
     } catch (cause) {
-      const status = cause instanceof Error ? cause.message : "";
       const suspended = cause instanceof ApiError && cause.body?.code === "ACCOUNT_SUSPENDED";
       setError(suspended
         ? "Tu cuenta está suspendida. Respondé el correo que te enviamos para más información."
-        : mode === "login"
-        ? "Email o contraseña incorrectos"
-        : status === "422"
-          ? "Ya existe una cuenta con ese email"
-          : status === "403"
-            ? "El código de registro no es válido"
-            : "No se pudo crear la cuenta. Revisá los datos e intentá de nuevo");
+        : cause instanceof ApiError && cause.status === 429
+          ? "Demasiados intentos. Esperá unos minutos."
+          : "Email o contraseña incorrectos");
       setBusy(false);
     }
   }
 
-  if (mode === "magic") {
-    return (
-      <div className="relative min-h-screen overflow-x-hidden">
-        {reducedMotion ? <LightningBg /> : <LightningStrikes />}
-        <MagicLinkForm onBack={() => { setMode("login"); setError(null); }} />
-      </div>
-    );
-  }
+  const backToLogin = () => { setMode("login"); setError(null); };
 
   return (
     <div className="relative min-h-screen overflow-x-hidden">
       {reducedMotion ? <LightningBg /> : <LightningStrikes />}
-      <form onSubmit={submit} className="relative z-10 mx-auto max-w-105 px-5 py-[8vh]">
-        <div className="mb-2.5 font-mono-app text-[11px] tracking-[2.4px] text-volt">
-          PULSO · PORTAL PROFESIONAL
-        </div>
-        <h1 className="mb-2 text-[28px] font-semibold text-fg">
-          {mode === "login" ? "Ingresar" : "Crear cuenta profesional"}
-        </h1>
-        <p className="mb-6 text-sm leading-6 text-fg-sec">
-          {mode === "login" ? "Accedé a tu espacio de trabajo clínico." : "Configurá tu espacio profesional y empezá con una biblioteca lista para usar."}
-        </p>
-        {mode === "signup" && (
-          <input required minLength={2} maxLength={80} value={name} onChange={e => setName(e.target.value)} placeholder="Nombre completo" autoComplete="name" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />
-        )}
-        <input
-          required
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          type="email"
-          autoComplete="email"
-          placeholder="tu@email.com"
-          className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none"
+      {mode === "signup" ? (
+        <ProfessionalSignupWizard
+          requiresCode={requiresCode}
+          requiresApproval={requiresApproval}
+          googleEnabled={googleEnabled}
+          onDone={onDone}
+          onGoogle={() => void signInWithGoogle()}
+          onBack={backToLogin}
         />
-        <input
-          required
-          minLength={6}
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          type="password"
-          autoComplete={mode === "login" ? "current-password" : "new-password"}
-          placeholder="Contraseña"
-          className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none"
-        />
-        {mode === "signup" && (
-          <>
-            <input required minLength={6} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} type="password" autoComplete="new-password" placeholder="Confirmar contraseña" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />
-            <DisciplinePicker value={discipline} onChange={setDiscipline} />
-            <input value={organizationName} onChange={e => setOrganizationName(e.target.value)} maxLength={100} placeholder="Nombre de tu consultorio o equipo (opcional)" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />
-            {requiresCode && <input required value={signupCode} onChange={e => setSignupCode(e.target.value)} placeholder="Código de registro profesional" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />}
-          </>
-        )}
-        {error && <div className="mb-3 font-mono-app text-xs text-danger">{error}</div>}
-        <button
-          type="submit"
-          disabled={busy}
-          className={`w-full cursor-pointer bg-volt p-3.5 font-mono-app text-xs font-extrabold tracking-[1px] text-ink transition hover:brightness-110 disabled:opacity-60 ${
-            charging ? "animate-[chargeUp_320ms_ease-out_forwards]" : ""
-          }`}
-        >
-          {busy ? "PROCESANDO…" : mode === "login" ? "INGRESAR" : "CREAR MI ESPACIO"}
-        </button>
-        {googleEnabled && (
-          <>
+      ) : mode === "magic" ? (
+        <MagicLinkForm onBack={backToLogin} />
+      ) : (
+        <form onSubmit={submit} className="relative z-10 mx-auto max-w-105 px-5 py-[8vh]">
+          <div className="mb-2.5 font-mono-app text-[11px] tracking-[2.4px] text-volt">PULSO · PORTAL PROFESIONAL</div>
+          <h1 className="mb-2 text-[28px] font-semibold text-fg">Ingresar</h1>
+          <p className="mb-6 text-sm leading-6 text-fg-sec">Accedé a tu espacio de trabajo clínico.</p>
+          <input required value={email} onChange={e => setEmail(e.target.value)} type="email" autoComplete="email" placeholder="tu@email.com" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />
+          <input required minLength={6} value={password} onChange={e => setPassword(e.target.value)} type="password" autoComplete="current-password" placeholder="Contraseña" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />
+          {error && <div role="alert" className="mb-3 font-mono-app text-xs text-danger">{error}</div>}
+          <button
+            type="submit"
+            disabled={busy}
+            className={`w-full cursor-pointer bg-volt p-3.5 font-mono-app text-xs font-extrabold tracking-[1px] text-ink transition hover:brightness-110 disabled:opacity-60 ${
+              charging ? "animate-[chargeUp_320ms_ease-out_forwards]" : ""
+            }`}
+          >
+            {busy ? "PROCESANDO…" : "INGRESAR"}
+          </button>
+          <a href="/cuenta/recuperar" className="mt-2 block py-1 text-center text-xs text-fg-ter hover:text-fg-sec">¿Olvidaste tu contraseña?</a>
+          {(googleEnabled || magicEnabled) && (
             <div className="my-4 flex items-center gap-3" aria-hidden>
               <span className="h-px flex-1 bg-line" />
               <span className="font-mono-app text-[9px] tracking-[1.4px] text-fg-ter">O</span>
               <span className="h-px flex-1 bg-line" />
             </div>
+          )}
+          {googleEnabled && (
             <button
               type="button"
               onClick={() => void signInWithGoogle()}
@@ -500,24 +455,19 @@ function Login({ onDone }: { onDone: () => void }) {
               className="flex w-full cursor-pointer items-center justify-center gap-2.5 border border-[#747775] bg-white p-3 text-sm font-semibold text-[#1F1F1F] transition hover:bg-[#f2f2f2] disabled:opacity-60"
             >
               <span aria-hidden className="text-base font-bold">G</span>
-              {mode === "login" ? "Continuar con Google" : "Crear cuenta con Google"}
+              Continuar con Google
             </button>
-            {mode === "signup" && <p className="mt-2 text-center text-[11px] leading-4 text-fg-ter">Después de Google elegís tu disciplina.</p>}
-          </>
-        )}
-        {mode === "login" && magicEnabled && (
-          <button type="button" onClick={() => { setMode("magic"); setError(null); }} className="mt-3 w-full cursor-pointer border border-line p-3 font-mono-app text-[11px] tracking-[1px] text-fg-sec transition hover:border-fg-ter hover:text-fg">
-            ENTRAR CON UN ENLACE POR CORREO
+          )}
+          {magicEnabled && (
+            <button type="button" onClick={() => { setMode("magic"); setError(null); }} className="mt-3 w-full cursor-pointer border border-line p-3 font-mono-app text-[11px] tracking-[1px] text-fg-sec transition hover:border-fg-ter hover:text-fg">
+              ENTRAR CON UN ENLACE POR CORREO
+            </button>
+          )}
+          <button type="button" onClick={() => { setMode("signup"); setError(null); }} className="mt-4 w-full cursor-pointer py-2 text-sm text-fg-sec hover:text-volt">
+            ¿Primera vez? Crear cuenta profesional
           </button>
-        )}
-        {mode === "login" && (
-          <a href="/cuenta/recuperar" className="mt-2 block py-1 text-center text-xs text-fg-ter hover:text-fg-sec">¿Olvidaste tu contraseña?</a>
-        )}
-        <button type="button" onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(null); }} className="mt-4 w-full cursor-pointer py-2 text-sm text-fg-sec hover:text-volt">
-          {mode === "login" ? "¿Primera vez? Crear cuenta profesional" : "Ya tengo una cuenta · Ingresar"}
-        </button>
-        {mode === "signup" && <p className="mt-3 text-center font-mono-app text-[9px] leading-4 text-fg-ter">EL ALTA CREA UN ESPACIO PRIVADO. NO OTORGA PERMISOS ADMINISTRATIVOS GLOBALES.</p>}
-      </form>
+        </form>
+      )}
     </div>
   );
 }
@@ -758,6 +708,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
               </nav>
             </header>
             <main className="min-w-0">{routeAllowed ? children : <div className="p-8 font-mono-app text-xs text-fg-ter">ABRIENDO…</div>}</main>
+            {mode === "professional" && <PortalTour userId={user.id} role={user.role ?? "coach"} />}
           </div>
         </div>
       </PortalContext.Provider>
