@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // AI plan generation — shapes shared between the deterministic pipeline (caller),
-// the OpenRouter client, and whatever eventually persists an accepted plan.
+// the model providers (upstream.ts), and whatever persists an accepted plan.
 // The LLM only ever proposes *structure* (which catalog exercise/food, how much,
 // which day) — it never emits numbers we could get wrong silently (calories,
 // macros); those are always computed server-side from the catalog data below.

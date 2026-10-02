@@ -17,7 +17,7 @@ import {
   mapLimitationsToExcludedMuscleGroups,
   type DietaryStyle,
 } from "./eligibility";
-import { generatePlan, type GenerationProgress } from "./openrouter";
+import { generatePlan, type GenerationProgress } from "./generate";
 import type {
   EligibleExercise,
   EligibleFood,

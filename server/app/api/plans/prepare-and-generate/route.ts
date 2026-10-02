@@ -7,7 +7,8 @@ import {
 import {
   GenerationTimeoutError,
   GenerationValidationError,
-} from "@/lib/generation/openrouter";
+} from "@/lib/generation/generate";
+import { GenerationConfigError } from "@/lib/generation/upstream";
 
 /**
  * POST /api/plans/prepare-and-generate
@@ -53,15 +54,11 @@ export async function POST(request: Request) {
       return Response.json({ error: "generation_invalid", issues: error.issues }, { status: 422 });
     }
     const message = error instanceof Error ? error.message : String(error);
-    if (
-      message.startsWith("openrouter_key_missing") ||
-      message.startsWith("openrouter_model_missing") ||
-      message.startsWith("openrouter_model_must_be_pinned")
-    ) {
+    if (error instanceof GenerationConfigError) {
       console.error("[plans/prepare-and-generate] misconfigured:", message);
       return Response.json({ error: "generation_unavailable" }, { status: 500 });
     }
-    if (message === "openrouter_empty_response" || message.startsWith("openrouter_")) {
+    if (message.startsWith("upstream_")) {
       console.error("[plans/prepare-and-generate] upstream error:", message);
       return Response.json({ error: "generation_upstream_error" }, { status: 502 });
     }

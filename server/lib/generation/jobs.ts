@@ -16,7 +16,8 @@ import {
   GenerationTimeoutError,
   GenerationValidationError,
   MAX_UPSTREAM_CALLS,
-} from "./openrouter";
+} from "./generate";
+import { GenerationConfigError } from "./upstream";
 
 const LEASE_DURATION_MS = 30_000;
 const HEARTBEAT_INTERVAL_MS = 10_000;
@@ -396,7 +397,7 @@ async function updateProgress(
   if (rows.length !== 1) throw new LostGenerationJobLeaseError();
 }
 
-/** Reserve the call before contacting OpenRouter. Persisting this counter keeps
+/** Reserve the call before contacting the model provider. Persisting this counter keeps
  * crash/lease recovery from resetting the two-call budget for the same job. */
 async function reserveUpstreamCall(id: string, leaseOwner: string): Promise<boolean> {
   const now = Date.now();
@@ -430,18 +431,15 @@ function classifyJobError(error: unknown): { code: string; retryable: boolean } 
     return { code: "generation_interrupted", retryable: true };
   }
 
-  const message = error instanceof Error ? error.message : "";
-  if (
-    message === "openrouter_key_missing"
-    || message === "openrouter_model_missing"
-    || message === "openrouter_model_must_be_pinned"
-  ) {
+  if (error instanceof GenerationConfigError) {
     return { code: "generation_unavailable", retryable: false };
   }
+
+  const message = error instanceof Error ? error.message : "";
   if (message.startsWith("wger_")) {
     return { code: "catalog_unavailable", retryable: true };
   }
-  const upstreamStatus = /^openrouter_(\d{3})/.exec(message)?.[1];
+  const upstreamStatus = /^upstream_(\d{3})/.exec(message)?.[1];
   if (upstreamStatus) {
     const status = Number(upstreamStatus);
     return {
@@ -449,7 +447,7 @@ function classifyJobError(error: unknown): { code: string; retryable: boolean } 
       retryable: status === 404 || status === 408 || status === 429 || status >= 500,
     };
   }
-  if (message.startsWith("openrouter_")) {
+  if (message.startsWith("upstream_")) {
     return { code: "generation_upstream_error", retryable: true };
   }
   return { code: "generation_failed", retryable: false };
@@ -558,7 +556,7 @@ export async function runGenerationJob(id: string): Promise<void> {
           callKind: progress.callKind,
           requestedModel: progress.requestedModel,
           durationMs: diagnostic.durationMs,
-          errorCode: diagnostic.errorCode ?? "openrouter_failed",
+          errorCode: diagnostic.errorCode ?? "upstream_failed",
           status: diagnostic.status ?? null,
           retryAfter: diagnostic.retryAfter ?? null,
           requestId: diagnostic.requestId ?? null,
