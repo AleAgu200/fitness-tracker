@@ -75,10 +75,9 @@ export async function callBedrock(request: UpstreamRequest): Promise<UpstreamCal
         // Converse wants alternating roles, so the correction rides in the
         // same user turn as the catalog instead of a second user message.
         messages: [{ role: "user", content: request.userTexts.map(text => ({ text })) }],
-        inferenceConfig: {
-          maxTokens: request.maxTokens,
-          temperature: request.temperature,
-        },
+        // No temperature: Kimi K3 is a reasoning model and rejects the field
+        // (ValidationException). The JSON schema below keeps the reply on shape.
+        inferenceConfig: { maxTokens: request.maxTokens },
         outputConfig: {
           textFormat: {
             type: "json_schema",

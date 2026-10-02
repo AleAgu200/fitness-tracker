@@ -5,7 +5,9 @@
 // data, which here is onboarding-derived health information.
 
 export const REQUEST_TIMEOUT_MS = 90_000;
-export const MAX_OUTPUT_TOKENS = 6_000;
+/** Reasoning models (Kimi K3) spend part of this before the JSON starts; a
+ *  4-day plan already used ~4.6k. Only generated tokens are billed. */
+export const MAX_OUTPUT_TOKENS = 12_000;
 
 export interface UpstreamRequest {
   model: string;
