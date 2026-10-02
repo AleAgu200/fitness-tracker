@@ -212,6 +212,26 @@ export function magicLinkEmail(to: string, url: string, forApp: boolean): EmailM
   });
 }
 
+/**
+ * Answer to a magic-link request for an address with no account. Same inbox,
+ * same timing as a real link, so the request itself reveals nothing.
+ */
+export function magicLinkNoAccountEmail(to: string, forApp: boolean): EmailMessage {
+  return render(to, {
+    subject: "Tu enlace para entrar a PULSO",
+    preheader: "No encontramos una cuenta con este correo.",
+    eyebrow: "ACCESO",
+    title: "No hay una cuenta con este correo",
+    paragraphs: [
+      "Alguien pidió un enlace para entrar a PULSO con esta dirección, pero no tiene cuenta.",
+      forApp
+        ? "Si querés empezar, descargá la app y creá tu cuenta desde la pantalla de inicio. Si ya tenés una, puede que esté con otro correo o con Google o Apple."
+        : "Si sos profesional, creá tu cuenta desde el portal. Si ya tenés una, puede que esté con otro correo o con Google.",
+    ],
+    note: "Si no lo pediste, ignorá este correo.",
+  });
+}
+
 /** First email after creating an athlete account. */
 export function welcomeEmail(to: string, name?: string | null): EmailMessage {
   return render(to, {

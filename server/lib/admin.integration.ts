@@ -88,7 +88,7 @@ test("admin: catalog edits reach search and deleted base foods are not re-seeded
 
   const foodName = `Alimento ${randomUUID().slice(0, 8)}`;
   const created = await adminCreateFood(actor, { name: foodName, category: "otro", kcal: 100, proteinG: 1, carbsG: 2, fatG: 3 });
-  assert.ok("id" in created);
+  if (!created.id) throw new Error("food was not created");
   assert.deepEqual(await adminCreateFood(actor, { name: foodName.toUpperCase(), category: "otro", kcal: 1, proteinG: 0, carbsG: 0, fatG: 0 }), { error: "duplicate_name" });
   assert.ok(await adminDeleteFood(actor, created.id));
   assert.ok(!(await listFoods(foodName)).some(f => f.name === foodName));

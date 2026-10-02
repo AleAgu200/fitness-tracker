@@ -1,4 +1,5 @@
 import { createAuthClient } from "better-auth/client";
+import { magicLinkClient } from "better-auth/client/plugins";
 
 const SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL ?? "http://localhost:3000";
 
@@ -26,11 +27,14 @@ let _cookieHeader = "";
 
 export const authClient = createAuthClient({
   baseURL: `${SERVER_URL}/api/auth`,
+  plugins: [magicLinkClient()],
   fetchOptions: {
     onRequest: (ctx) => {
       // React Native has no browser Origin — set it explicitly so Better Auth's
       // CSRF check sees a trusted origin instead of blocking with 403.
       ctx.headers.set("origin", SERVER_URL);
+      // Lets the server tell app sign-ups apart (welcome email, magic links).
+      ctx.headers.set("x-pulso-client", "app");
       if (_cookieHeader) ctx.headers.set("cookie", _cookieHeader);
     },
     onResponse: async (ctx) => {

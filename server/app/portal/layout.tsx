@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { startGoogleSignIn, takeGoogleError } from "./google";
-import { api, SessionUser } from "./lib";
+import { api, ApiError, SessionUser } from "./lib";
 import { PortalContext } from "./portal-context";
 import { canAccessPortalPath, canFinishProfessionalSignup, canOpenInMode, homeForMode, portalMode, ProfessionalRole } from "@/lib/portal-access";
 
@@ -285,8 +285,67 @@ function FinishSignup({ user, onDone, onCancel }: { user: SessionUser; onDone: (
   );
 }
 
+/** Sign in without a password: the email carries a one-time link back to /portal. */
+function MagicLinkForm({ onBack }: { onBack: () => void }) {
+  const [email, setEmail] = useState("");
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function send(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api("/api/auth/sign-in/magic-link", {
+        method: "POST",
+        body: JSON.stringify({ email, callbackURL: "/portal", errorCallbackURL: "/portal" }),
+      });
+      setSentTo(email);
+    } catch (cause) {
+      setError(cause instanceof ApiError && cause.status === 429
+        ? "Pediste varios enlaces seguidos. Esperá unos minutos y revisá tu correo."
+        : "No se pudo enviar el enlace. Probá de nuevo.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (sentTo) {
+    return (
+      <div className="relative z-10 mx-auto max-w-105 px-5 py-[8vh]">
+        <div className="mb-2.5 font-mono-app text-[11px] tracking-[2.4px] text-volt">PULSO · PORTAL PROFESIONAL</div>
+        <h1 className="mb-2 text-[28px] font-semibold text-fg">Revisá tu correo</h1>
+        <p className="mb-6 text-sm leading-6 text-fg-sec">
+          Si {sentTo} tiene una cuenta, le llega un enlace para entrar. Vence en 10 minutos y sirve una sola vez.
+          Abrilo en este mismo navegador.
+        </p>
+        <button type="button" onClick={() => setSentTo(null)} className="w-full cursor-pointer border border-line p-3 font-mono-app text-xs text-fg-sec hover:border-fg-ter hover:text-fg">
+          USAR OTRO CORREO
+        </button>
+        <button type="button" onClick={onBack} className="mt-4 w-full cursor-pointer py-2 text-sm text-fg-sec hover:text-volt">Volver a ingresar con contraseña</button>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={send} className="relative z-10 mx-auto max-w-105 px-5 py-[8vh]">
+      <div className="mb-2.5 font-mono-app text-[11px] tracking-[2.4px] text-volt">PULSO · PORTAL PROFESIONAL</div>
+      <h1 className="mb-2 text-[28px] font-semibold text-fg">Entrar con un enlace</h1>
+      <p className="mb-6 text-sm leading-6 text-fg-sec">Te enviamos un enlace de acceso. Sin contraseña.</p>
+      <input required type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="tu@email.com" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />
+      {error && <div role="alert" className="mb-3 font-mono-app text-xs text-danger">{error}</div>}
+      <button type="submit" disabled={busy} className="w-full cursor-pointer bg-volt p-3.5 font-mono-app text-xs font-extrabold tracking-[1px] text-ink transition hover:brightness-110 disabled:opacity-60">
+        {busy ? "ENVIANDO…" : "ENVIARME EL ENLACE"}
+      </button>
+      <button type="button" onClick={onBack} className="mt-4 w-full cursor-pointer py-2 text-sm text-fg-sec hover:text-volt">Volver a ingresar con contraseña</button>
+    </form>
+  );
+}
+
 function Login({ onDone }: { onDone: () => void }) {
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "signup" | "magic">("login");
+  const [magicEnabled, setMagicEnabled] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -302,10 +361,11 @@ function Login({ onDone }: { onDone: () => void }) {
   const reducedMotion = useReducedMotion();
 
   useEffect(() => {
-    api<{ requiresCode: boolean; google?: boolean }>("/api/portal/signup")
+    api<{ requiresCode: boolean; google?: boolean; magicLink?: boolean }>("/api/portal/signup")
       .then(result => {
         setRequiresCode(result.requiresCode);
         setGoogleEnabled(Boolean(result.google));
+        setMagicEnabled(Boolean(result.magicLink));
       })
       .catch(() => undefined);
     // Coming back from Google with an error (unlinked account, cancelled…).
@@ -350,7 +410,10 @@ function Login({ onDone }: { onDone: () => void }) {
       }
     } catch (cause) {
       const status = cause instanceof Error ? cause.message : "";
-      setError(mode === "login"
+      const suspended = cause instanceof ApiError && cause.body?.code === "ACCOUNT_SUSPENDED";
+      setError(suspended
+        ? "Tu cuenta está suspendida. Respondé el correo que te enviamos para más información."
+        : mode === "login"
         ? "Email o contraseña incorrectos"
         : status === "422"
           ? "Ya existe una cuenta con ese email"
@@ -359,6 +422,15 @@ function Login({ onDone }: { onDone: () => void }) {
             : "No se pudo crear la cuenta. Revisá los datos e intentá de nuevo");
       setBusy(false);
     }
+  }
+
+  if (mode === "magic") {
+    return (
+      <div className="relative min-h-screen overflow-x-hidden">
+        {reducedMotion ? <LightningBg /> : <LightningStrikes />}
+        <MagicLinkForm onBack={() => { setMode("login"); setError(null); }} />
+      </div>
+    );
   }
 
   return (
@@ -432,6 +504,14 @@ function Login({ onDone }: { onDone: () => void }) {
             </button>
             {mode === "signup" && <p className="mt-2 text-center text-[11px] leading-4 text-fg-ter">Después de Google elegís tu disciplina.</p>}
           </>
+        )}
+        {mode === "login" && magicEnabled && (
+          <button type="button" onClick={() => { setMode("magic"); setError(null); }} className="mt-3 w-full cursor-pointer border border-line p-3 font-mono-app text-[11px] tracking-[1px] text-fg-sec transition hover:border-fg-ter hover:text-fg">
+            ENTRAR CON UN ENLACE POR CORREO
+          </button>
+        )}
+        {mode === "login" && (
+          <a href="/cuenta/recuperar" className="mt-2 block py-1 text-center text-xs text-fg-ter hover:text-fg-sec">¿Olvidaste tu contraseña?</a>
         )}
         <button type="button" onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(null); }} className="mt-4 w-full cursor-pointer py-2 text-sm text-fg-sec hover:text-volt">
           {mode === "login" ? "¿Primera vez? Crear cuenta profesional" : "Ya tengo una cuenta · Ingresar"}

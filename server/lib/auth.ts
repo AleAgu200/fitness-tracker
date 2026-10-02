@@ -7,7 +7,7 @@ import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { passwordMustGoOnLink } from "@/lib/auth-linking";
 import { socialProvidersFromEnv } from "@/lib/auth-providers";
-import { emailEnabled, magicLinkEmail, passwordResetEmail, sendEmail, verificationEmail, welcomeEmail } from "@/lib/email";
+import { emailEnabled, magicLinkEmail, magicLinkNoAccountEmail, passwordResetEmail, sendEmail, verificationEmail, welcomeEmail } from "@/lib/email";
 import { appMagicLinkUrl, isAppClient } from "@/lib/magic-link";
 
 // Recovery and verification only exist when email can really be delivered;
@@ -69,9 +69,20 @@ export const auth = betterAuth({
       expiresIn: 10 * 60,
       storeToken: "hashed",
       rateLimit: { window: 15 * 60, max: 3 },
-      sendMagicLink: async ({ email, url, token, metadata }) => {
-        const appUrl = isAppClient(metadata) ? appMagicLinkUrl(token, metadata) : null;
-        await sendEmail(magicLinkEmail(email, appUrl ?? url, appUrl != null));
+      // Sign-in only: creating an account needs a name and the onboarding
+      // consent, so magic links never sign anyone up.
+      disableSignUp: true,
+      sendMagicLink: async ({ email, url, token, metadata }, ctx) => {
+        const forApp = isAppClient(metadata);
+        const existing = await ctx?.context.internalAdapter.findUserByEmail(email);
+        if (!existing) {
+          await sendEmail(magicLinkNoAccountEmail(email, forApp));
+          return;
+        }
+        // Suspended accounts get nothing: the session would be refused anyway.
+        if ((existing.user as { suspendedAt?: Date | null }).suspendedAt) return;
+        const appUrl = forApp ? appMagicLinkUrl(token, metadata) : null;
+        await sendEmail(magicLinkEmail(email, appUrl ?? url, forApp));
       },
     }),
   ] : [],
