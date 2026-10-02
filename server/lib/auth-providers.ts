@@ -17,15 +17,14 @@ export function parseList(value: string | undefined): string[] {
 }
 
 export interface SocialProviderConfig {
-  google?: { clientId: string[]; clientSecret: string; disableImplicitSignUp: true };
-  apple?: { clientId: string; clientSecret: string; audience: string[]; disableImplicitSignUp: true };
+  google?: { clientId: string[]; clientSecret: string };
+  apple?: { clientId: string; clientSecret: string; audience: string[] };
 }
 
 /**
- * A provider only creates an account when the request asks for it
- * (`requestSignUp`). The athlete app does; the professional portal doesn't,
- * because professionals sign up through /api/portal/signup (role, discipline,
- * organization, code) and a Google shortcut would skip all of that.
+ * Either provider signs in or creates the account, in the app and the portal.
+ * A new account starts as an athlete; the portal then finishes the
+ * professional setup (discipline, organization, code) with PUT /api/portal/signup.
  */
 export function socialProvidersFromEnv(env: Record<string, string | undefined>): SocialProviderConfig {
   const providers: SocialProviderConfig = {};
@@ -33,11 +32,11 @@ export function socialProvidersFromEnv(env: Record<string, string | undefined>):
   if (googleIds.length) {
     // The secret is used by the portal's browser redirect; the app's ID-token
     // sign-in works without it.
-    providers.google = { clientId: googleIds, clientSecret: env.GOOGLE_CLIENT_SECRET ?? "", disableImplicitSignUp: true };
+    providers.google = { clientId: googleIds, clientSecret: env.GOOGLE_CLIENT_SECRET ?? "" };
   }
   const appleIds = parseList(env.APPLE_BUNDLE_IDS);
   if (appleIds.length) {
-    providers.apple = { clientId: appleIds[0], clientSecret: env.APPLE_CLIENT_SECRET ?? "", audience: appleIds, disableImplicitSignUp: true };
+    providers.apple = { clientId: appleIds[0], clientSecret: env.APPLE_CLIENT_SECRET ?? "", audience: appleIds };
   }
   return providers;
 }

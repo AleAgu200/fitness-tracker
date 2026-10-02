@@ -66,8 +66,8 @@ export async function signIn(email: string, password: string) {
 
 /**
  * Signs in (or signs up) with an ID token obtained natively from Google or
- * Apple. The server verifies the token; an existing PULSO account with the
- * same address is never joined implicitly.
+ * Apple. The server verifies the token and joins the PULSO account with the
+ * same address, if there is one (server/lib/auth.ts).
  */
 export async function signInWithIdToken(
   provider: "google" | "apple",
@@ -76,9 +76,6 @@ export async function signInWithIdToken(
   return call("social_failed", () => authClient.signIn.social({
     provider,
     idToken: { token: token.idToken, nonce: token.nonce, user: token.user },
-    // Athletes may create their account this way; the portal never does
-    // (server/lib/auth-providers.ts).
-    requestSignUp: true,
   }));
 }
 

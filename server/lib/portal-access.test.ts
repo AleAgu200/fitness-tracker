@@ -1,7 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { availablePortalSections, canAccessPortalPath, resolveDefaultPortalPath } from "./portal-access";
+import {
+  availablePortalSections,
+  canAccessPortalPath,
+  canFinishProfessionalSignup,
+  PROFESSIONAL_SETUP_WINDOW_MS,
+  resolveDefaultPortalPath,
+} from "./portal-access";
+
+test("only a just-created account can finish a professional sign-up", () => {
+  const now = Date.now();
+  const fresh = new Date(now - 60_000);
+  const old = new Date(now - PROFESSIONAL_SETUP_WINDOW_MS - 1);
+  assert.equal(canFinishProfessionalSignup("athlete", fresh, now), true);
+  assert.equal(canFinishProfessionalSignup("athlete", old, now), false);
+  assert.equal(canFinishProfessionalSignup("coach", fresh, now), false);
+  assert.equal(canFinishProfessionalSignup("nutritionist", fresh, now), false);
+});
 
 test("nutritionists never receive the exercises section", () => {
   assert.equal(availablePortalSections("nutritionist").includes("exercises"), false);
