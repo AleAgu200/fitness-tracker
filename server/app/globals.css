@@ -37,6 +37,14 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Keyboard focus must be obvious on a dark, low-contrast UI: a 1px border
+   color change alone is easy to miss. Mouse clicks don't show it. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  /* !important: inputs carry Tailwind's focus:outline-none for mouse focus. */
+  outline: 2px solid var(--color-volt) !important;
+  outline-offset: 2px;
+}
+
 @media (prefers-color-scheme: dark) {
   html {
     color-scheme: dark;

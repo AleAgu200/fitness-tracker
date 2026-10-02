@@ -60,7 +60,7 @@ export async function storeMedia(folder: "exercises", bytes: Uint8Array): Promis
   const relative = `${folder}/${randomBytes(12).toString("hex")}.${ext}`;
   const absolute = path.join(/*turbopackIgnore: true*/ mediaRoot(), relative);
   await mkdir(path.dirname(absolute), { recursive: true });
-  await writeFile(absolute, bytes);
+  await writeFile(/*turbopackIgnore: true*/ absolute, bytes);
 
   const bucket = process.env.MEDIA_BUCKET;
   if (bucket) {
@@ -84,7 +84,7 @@ export async function readMedia(relative: string): Promise<Buffer | null> {
   const absolute = resolveMediaPath(relative);
   if (!absolute) return null;
   try {
-    return await readFile(absolute);
+    return await readFile(/*turbopackIgnore: true*/ absolute);
   } catch {
     return null;
   }

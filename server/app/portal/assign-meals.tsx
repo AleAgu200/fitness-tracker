@@ -136,6 +136,8 @@ export function AssignMeals({ athlete, onDirtyChange }: { athlete: Athlete; onDi
   const [busy, setBusy] = useState(false);
   const [confirmingOverwrite, setConfirmingOverwrite] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const foodsById = new Map(foods.map(f => [f.id, f]));
 
@@ -146,6 +148,10 @@ export function AssignMeals({ athlete, onDirtyChange }: { athlete: Athlete; onDi
   useEffect(() => {
     let alive = true;
     const load = async () => {
+      // Never leave the previous athlete's plan on screen while this one loads:
+      // a failed load would otherwise let it be assigned to the wrong person.
+      setLoading(true);
+      setCurrent(null);
       try {
         const lib = await api<{ foods: Food[] }>("/api/library/foods");
         const asg = await api<{ mealPlan: MealAssignment | null }>(`/api/assignments?athleteId=${encodeURIComponent(athlete.userId)}`);
@@ -163,11 +169,13 @@ export function AssignMeals({ athlete, onDirtyChange }: { athlete: Athlete; onDi
         setLoadFailed(false);
       } catch {
         if (alive) setLoadFailed(true);
+      } finally {
+        if (alive) setLoading(false);
       }
     };
     load();
     return () => { alive = false; };
-  }, [athlete.userId]);
+  }, [athlete.userId, reloadKey]);
 
   function patchMeal(i: number, patch: Partial<MealDraft>) {
     setMeals(m => m.map((meal, idx) => (idx === i ? { ...meal, ...patch } : meal)));
@@ -240,9 +248,9 @@ export function AssignMeals({ athlete, onDirtyChange }: { athlete: Athlete; onDi
       <div className="flex flex-col gap-3 p-4">
         {loadFailed && (
           <div className="flex items-center justify-between border border-warn/40 bg-warn/10 px-3 py-2 font-mono-app text-[11px] text-warn">
-            <span>No se pudo cargar el plan actual — puede que estés viendo datos desactualizados</span>
-            <button type="button" onClick={() => setLoadFailed(false)} className="cursor-pointer underline hover:text-fg">
-              CERRAR
+            <span>No se pudo cargar el plan actual. Para no reemplazarlo sin verlo, asignar queda bloqueado hasta que cargue.</span>
+            <button type="button" onClick={() => setReloadKey(key => key + 1)} className="shrink-0 cursor-pointer underline hover:text-fg">
+              REINTENTAR
             </button>
           </div>
         )}
@@ -324,7 +332,7 @@ export function AssignMeals({ athlete, onDirtyChange }: { athlete: Athlete; onDi
           <button
             type="button"
             onClick={handleAssignClick}
-            disabled={busy}
+            disabled={busy || loading || loadFailed}
             className="cursor-pointer bg-neon px-5 py-2 font-mono-app text-[11px] font-extrabold tracking-[1px] text-ink transition hover:brightness-110 disabled:opacity-60"
           >
             {busy ? "..." : "ASIGNAR DIETA →"}

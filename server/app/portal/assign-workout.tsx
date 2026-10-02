@@ -518,6 +518,8 @@ export function AssignWorkout({ athlete, onDirtyChange }: { athlete: Athlete; on
   const [busy, setBusy] = useState(false);
   const [confirmingOverwrite, setConfirmingOverwrite] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const dirty = JSON.stringify(rows) !== JSON.stringify(baseline);
   useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
@@ -526,6 +528,10 @@ export function AssignWorkout({ athlete, onDirtyChange }: { athlete: Athlete; on
   useEffect(() => {
     let alive = true;
     const load = async () => {
+      // Never leave the previous athlete's plan on screen while this one loads:
+      // a failed load would otherwise let it be assigned to the wrong person.
+      setLoading(true);
+      setCurrent(null);
       try {
         const lib = await api<{ exercises: LibraryExercise[] }>("/api/library/exercises");
         const asg = await api<{ workout: WorkoutAssignment | null }>(`/api/assignments?athleteId=${encodeURIComponent(athlete.userId)}`);
@@ -552,11 +558,13 @@ export function AssignWorkout({ athlete, onDirtyChange }: { athlete: Athlete; on
         setLoadFailed(false);
       } catch {
         if (alive) setLoadFailed(true);
+      } finally {
+        if (alive) setLoading(false);
       }
     };
     load();
     return () => { alive = false; };
-  }, [athlete.userId]);
+  }, [athlete.userId, reloadKey]);
 
   function patch(i: number, field: keyof Row, value: string) {
     setRows(r => r.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
@@ -635,13 +643,13 @@ export function AssignWorkout({ athlete, onDirtyChange }: { athlete: Athlete; on
       <div className="p-4">
         {loadFailed && (
           <div className="mb-3 flex items-center justify-between border border-warn/40 bg-warn/10 px-3 py-2 font-mono-app text-[11px] text-warn">
-            <span>No se pudo cargar el plan actual — puede que estés viendo datos desactualizados</span>
+            <span>No se pudo cargar el plan actual. Para no reemplazarlo sin verlo, asignar queda bloqueado hasta que cargue.</span>
             <button
               type="button"
-              onClick={() => setLoadFailed(false)}
-              className="cursor-pointer underline hover:text-fg"
+              onClick={() => setReloadKey(key => key + 1)}
+              className="shrink-0 cursor-pointer underline hover:text-fg"
             >
-              CERRAR
+              REINTENTAR
             </button>
           </div>
         )}
@@ -650,8 +658,8 @@ export function AssignWorkout({ athlete, onDirtyChange }: { athlete: Athlete; on
             the ones set once and rarely touched (step/descanso), with a spacer track between them */}
         <div className="mb-1 grid grid-cols-[2.4fr_repeat(3,1fr)_0.3fr_repeat(2,1fr)_28px] gap-2 font-mono-app text-[9px] tracking-[1px] text-fg-ter">
           <span>EJERCICIO</span><span>SERIES</span><span>REPS</span><span>PESO kg</span><span />
-          <span className="text-fg-ter/70" title="Incremento de peso por serie superada">STEP kg</span>
-          <span className="text-fg-ter/70" title="Descanso entre series, en segundos">DESC. s</span>
+          <span className="text-fg-ter/70" title="Kilos que se suman cuando el atleta completa todas las repeticiones">+KG PROG.</span>
+          <span className="text-fg-ter/70" title="Descanso entre series, en segundos">DESCANSO s</span>
           <span />
         </div>
 
@@ -667,10 +675,10 @@ export function AssignWorkout({ athlete, onDirtyChange }: { athlete: Athlete; on
             />
             <input aria-label="Series" type="number" min="1" value={row.target} onChange={e => patch(i, "target", e.target.value)} className={inputCls} />
             <input aria-label="Reps" type="number" min="1" value={row.reps} onChange={e => patch(i, "reps", e.target.value)} className={inputCls} />
-            <input aria-label="Peso" type="number" min="0" step="0.5" value={row.peso} onChange={e => patch(i, "peso", e.target.value)} className={inputCls} />
+            <input aria-label="Peso en kilos" type="number" min="0" step="0.5" value={row.peso} onChange={e => patch(i, "peso", e.target.value)} className={inputCls} />
             <span />
-            <input aria-label="Step" type="number" min="0.5" step="0.5" value={row.step} onChange={e => patch(i, "step", e.target.value)} className={`${inputCls} text-fg-sec`} />
-            <input aria-label="Descanso" type="number" min="15" step="15" value={row.restSeconds} onChange={e => patch(i, "restSeconds", e.target.value)} className={`${inputCls} text-fg-sec`} />
+            <input aria-label="Kilos a sumar al progresar" title="Kilos que se suman cuando completa todas las repeticiones" type="number" min="0.5" step="0.5" value={row.step} onChange={e => patch(i, "step", e.target.value)} className={`${inputCls} text-fg-sec`} />
+            <input aria-label="Descanso entre series en segundos" type="number" min="15" step="15" value={row.restSeconds} onChange={e => patch(i, "restSeconds", e.target.value)} className={`${inputCls} text-fg-sec`} />
             <button
               type="button"
               onClick={() => setRows(r => r.filter((_, idx) => idx !== i))}
@@ -681,6 +689,11 @@ export function AssignWorkout({ athlete, onDirtyChange }: { athlete: Athlete; on
             </button>
           </div>
         ))}
+
+        <p className="mb-3 mt-1 text-[11px] leading-4 text-fg-ter">
+          <span className="text-fg-sec">+KG PROG.</span>: cuánto sube el peso cuando completa todas las series y repeticiones.{" "}
+          <span className="text-fg-sec">DESCANSO</span>: segundos entre series; la app lo cuenta con un temporizador.
+        </p>
 
         {confirmingOverwrite && current && (
           <div className="mb-3 flex items-center justify-between border border-warn/40 bg-warn/10 px-3 py-2 font-mono-app text-[11px] text-warn">
@@ -707,7 +720,7 @@ export function AssignWorkout({ athlete, onDirtyChange }: { athlete: Athlete; on
           <button
             type="button"
             onClick={handleAssignClick}
-            disabled={busy}
+            disabled={busy || loading || loadFailed}
             className="cursor-pointer bg-volt px-5 py-2 font-mono-app text-[11px] font-extrabold tracking-[1px] text-ink transition hover:brightness-110 disabled:opacity-60"
           >
             {busy ? "..." : "ASIGNAR PLAN →"}

@@ -642,7 +642,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                         : "border-transparent text-fg-sec hover:bg-card hover:text-fg"
                     }`}
                   >
-                    <span>{item.icon}</span>
+                    <span aria-hidden>{item.icon}</span>
                     {item.label}
                   </Link>
                 );
