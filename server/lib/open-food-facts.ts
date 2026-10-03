@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { foodBarcodeCache } from "@/db/schema";
+import { findCommunityProduct } from "@/lib/community-barcodes";
 import { draftFromOpenFoodFacts, isValidBarcode, NutritionDraft, OpenFoodFactsProduct } from "@/lib/nutrition-draft";
 
 // Barcode lookup against Open Food Facts (public, ODbL). Server-side so the
@@ -42,8 +43,19 @@ function hasNutrition(draft: NutritionDraft): boolean {
   return ["kcal", "proteinG", "carbsG", "fatG"].some(key => draft.nutrients[key as keyof typeof draft.nutrients] != null);
 }
 
+/**
+ * Open Food Facts first; when it doesn't have the product (or can't be
+ * reached), what PULSO athletes contributed for that code.
+ */
 export async function lookupBarcode(barcode: string, now = Date.now()): Promise<BarcodeLookup> {
   if (!isValidBarcode(barcode)) return { status: "invalid" };
+  const fromCatalog = await lookupOpenFoodFacts(barcode, now);
+  if (fromCatalog.status === "found") return fromCatalog;
+  const fromCommunity = await findCommunityProduct(barcode);
+  return fromCommunity ? { status: "found", draft: fromCommunity } : fromCatalog;
+}
+
+async function lookupOpenFoodFacts(barcode: string, now: number): Promise<BarcodeLookup> {
   const [cached] = await db.select().from(foodBarcodeCache).where(eq(foodBarcodeCache.barcode, barcode)).limit(1);
   const fresh = cached && now - cached.fetchedAt < (cached.found ? FOUND_TTL_MS : MISS_TTL_MS);
   let found = cached?.found ?? false;

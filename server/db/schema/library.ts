@@ -1,4 +1,4 @@
-import { bigint, boolean, doublePrecision, jsonb, pgTable, text } from "drizzle-orm/pg-core";
+import { bigint, boolean, doublePrecision, index, jsonb, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
 
@@ -42,6 +42,23 @@ export const foodBarcodeCache = pgTable("food_barcode_cache", {
   product: jsonb("product").$type<unknown>(),
   fetchedAt: milliseconds("fetchedAt").notNull(),
 });
+
+/**
+ * Products athletes added for a barcode Open Food Facts doesn't know, so the
+ * next scan of that code finds them — for everyone. One row per athlete and
+ * code: each person only ever edits their own contribution, and the lookup
+ * serves the most recent one, always after Open Food Facts.
+ */
+export const communityBarcodeProducts = pgTable("community_barcode_products", {
+  barcode: text("barcode").notNull(),
+  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
+  product: jsonb("product").$type<unknown>().notNull(),
+  createdAt: milliseconds("createdAt").notNull(),
+  updatedAt: milliseconds("updatedAt").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.barcode, table.userId] }),
+  index("community_barcode_products_recent").on(table.barcode, table.updatedAt),
+]);
 
 /**
  * Admin-curated layer over the static exercise catalog (lib/exercise-catalog.json).

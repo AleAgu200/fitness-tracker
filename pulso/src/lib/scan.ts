@@ -33,6 +33,40 @@ export type ScanOutcome =
   | { status: 'busy' }
   | { status: 'invalid' };
 
+/** Whether this draft came from Open Food Facts (anything else with a code can be shared). */
+export function fromOpenFoodFacts(draft: NutritionDraft): boolean {
+  return draft.attribution?.includes('Open Food Facts') ?? false;
+}
+
+export interface SharedProduct {
+  productName: string;
+  brand: string | null;
+  basis: { amount: number; unit: 'g' | 'ml' };
+  serving: { label: string | null; amount: number } | null;
+  nutrients: Nutrients;
+}
+
+/**
+ * Adds a reviewed product to PULSO's shared catalog for a code Open Food
+ * Facts didn't have, so the next scan finds it for everyone. Best effort:
+ * offline or refused, the athlete's own save already happened.
+ */
+export async function shareBarcodeProduct(code: string, product: SharedProduct): Promise<void> {
+  try {
+    await apiFetch(`/api/nutrition/barcode/${encodeURIComponent(code)}`, { method: 'POST', body: product });
+  } catch {
+    // Nothing to tell the athlete: their product is saved on the phone either way.
+  }
+}
+
+/**
+ * A label read because its barcode wasn't in the catalog keeps that barcode,
+ * so saving it makes the next scan of the same product find it.
+ */
+export function withBarcode(draft: NutritionDraft, code: string | null): NutritionDraft {
+  return code ? { ...draft, source: 'barcode', sourceRef: code } : draft;
+}
+
 /** A product already saved from this barcode — works with no connection. */
 export function draftFromSavedFood(food: SavedFoodItem): NutritionDraft {
   return {

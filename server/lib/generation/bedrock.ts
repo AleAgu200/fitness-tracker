@@ -4,6 +4,8 @@ import {
   ConverseCommand,
 } from "@aws-sdk/client-bedrock-runtime";
 
+import { bedrockClient, DEFAULT_BEDROCK_REGION } from "@/lib/bedrock-client";
+
 import {
   GenerationConfigError,
   GenerationTimeoutError,
@@ -15,31 +17,18 @@ import {
   type UpstreamRequest,
 } from "./upstream";
 
-// Plan generation on Amazon Bedrock through the Converse API, authenticated
-// with a Bedrock API key (bearer token), so no AWS credentials are involved.
+// Plan generation on Amazon Bedrock through the Converse API, with the shared
+// Bedrock API key (lib/bedrock-client.ts).
 //
 // Configuration (server env):
-//   AWS_BEDROCK_API_KEY   Bedrock API key (BEDROCK_API_KEY / AWS_BEARER_TOKEN_BEDROCK also accepted)
+//   AWS_BEDROCK_API_KEY   see lib/bedrock-client.ts
 //   BEDROCK_PLAN_REGION   optional, defaults to us-east-2
 
-const DEFAULT_REGION = "us-east-2";
-
-let client: BedrockRuntimeClient | null = null;
-
 function getClient(): BedrockRuntimeClient {
-  const apiKey = process.env.AWS_BEDROCK_API_KEY
-    ?? process.env.BEDROCK_API_KEY
-    ?? process.env.AWS_BEARER_TOKEN_BEDROCK;
-  if (!apiKey) throw new GenerationConfigError("generation_key_missing");
-  client ??= new BedrockRuntimeClient({
-    region: process.env.BEDROCK_PLAN_REGION || DEFAULT_REGION,
-    token: { token: apiKey },
-    authSchemePreference: ["httpBearerAuth"],
-    // Throttling is retried here and doesn't spend the job's two-call budget;
-    // the abort signal below still bounds the whole exchange.
-    maxAttempts: 3,
-    retryMode: "adaptive",
-  });
+  // Throttling retries inside the client don't spend the job's two-call
+  // budget; the abort signal below still bounds the whole exchange.
+  const client = bedrockClient(process.env.BEDROCK_PLAN_REGION || DEFAULT_BEDROCK_REGION);
+  if (!client) throw new GenerationConfigError("generation_key_missing");
   return client;
 }
 
