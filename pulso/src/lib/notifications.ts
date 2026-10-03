@@ -216,7 +216,7 @@ export async function showRestTimerNotification(
     content: {
       title: `DESCANSO · ${duration}`,
       body: `${exerciseName ? `${exerciseName} · ` : ''}termina a las ${finishTime}`,
-      color: '#3DDCFF',
+      color: '#F49B35',
       sound: false,
       sticky: true,
       autoDismiss: false,
@@ -229,7 +229,7 @@ export async function showRestTimerNotification(
     content: {
       title: 'DESCANSO TERMINADO ⚡',
       body: exerciseName ? `Listo para continuar con ${exerciseName}.` : 'Listo para la siguiente serie.',
-      color: '#E8FF59',
+      color: '#F49B35',
       sound: 'default',
       data: { type: 'rest-complete' },
     },

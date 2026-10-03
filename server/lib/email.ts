@@ -93,6 +93,8 @@ function escapeHtml(text: string): string {
 }
 
 const SUPPORT_EMAIL = () => process.env.EMAIL_REPLY_TO || "pulso@pulsofitness.tech";
+/** The logo in every email header, served by the portal (public/brand). The word PULSO next to it covers clients that block images. */
+const BRAND_MARK_URL = () => `${(process.env.BETTER_AUTH_URL || "https://pulsofitness.tech").replace(/\/$/, "")}/brand/pulso-mark.png`;
 
 /** Everything a PULSO email is made of; `layout` renders it the same way every time. */
 interface EmailContent {
@@ -133,7 +135,7 @@ function render(to: string, content: EmailContent): EmailMessage {
 <span style="display:none!important;opacity:0;color:transparent;max-height:0;max-width:0;overflow:hidden">${escapeHtml(content.preheader)}</span>
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0A0A0B"><tr><td align="center" style="padding:28px 16px">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:520px;font-family:Helvetica,Arial,sans-serif">
-<tr><td style="padding:0 0 18px;font-family:Menlo,Consolas,monospace;font-size:12px;letter-spacing:4px;color:#E8FF59;font-weight:bold">PULSO</td></tr>
+<tr><td style="padding:0 0 18px"><table role="presentation" cellspacing="0" cellpadding="0"><tr><td style="padding:0 10px 0 0;vertical-align:middle"><img src="${escapeHtml(BRAND_MARK_URL())}" width="48" height="32" alt="" style="display:block;border:0"></td><td style="vertical-align:middle;font-family:Menlo,Consolas,monospace;font-size:12px;letter-spacing:4px;color:#F49B35;font-weight:bold">PULSO</td></tr></table></td></tr>
 <tr><td style="background:#121214;border:1px solid #26262B;border-top:3px solid #E8FF59;padding:26px 24px">
 <p style="margin:0 0 8px;font-family:Menlo,Consolas,monospace;font-size:11px;letter-spacing:2px;color:#3DDCFF">${escapeHtml(content.eyebrow)}</p>
 <h1 style="margin:0 0 18px;font-size:24px;line-height:1.25;color:#F2F2F2">${escapeHtml(content.title)}</h1>

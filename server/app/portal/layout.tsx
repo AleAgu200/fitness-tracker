@@ -270,6 +270,7 @@ function FinishSignup({ user, onDone, onCancel }: { user: SessionUser; onDone: (
 
   return (
     <form onSubmit={submit} className="mx-auto max-w-105 px-5 py-[8vh]">
+      <img src="/brand/pulso-mark.png" alt="PULSO" width={48} height={32} className="mb-4 block" />
       <div className="mb-2.5 font-mono-app text-[11px] tracking-[2.4px] text-volt">PULSO · PORTAL PROFESIONAL</div>
       <h1 className="mb-2 text-[28px] font-semibold text-fg">Completá tu cuenta</h1>
       <p className="mb-6 text-sm leading-6 text-fg-sec">Entraste con Google como {user.email}. Elegí tu disciplina para crear tu espacio profesional.</p>
@@ -316,6 +317,7 @@ function MagicLinkForm({ onBack }: { onBack: () => void }) {
   if (sentTo) {
     return (
       <div className="relative z-10 mx-auto max-w-105 px-5 py-[8vh]">
+        <img src="/brand/pulso-mark.png" alt="PULSO" width={48} height={32} className="mb-4 block" />
         <div className="mb-2.5 font-mono-app text-[11px] tracking-[2.4px] text-volt">PULSO · PORTAL PROFESIONAL</div>
         <h1 className="mb-2 text-[28px] font-semibold text-fg">Revisá tu correo</h1>
         <p className="mb-6 text-sm leading-6 text-fg-sec">
@@ -332,6 +334,7 @@ function MagicLinkForm({ onBack }: { onBack: () => void }) {
 
   return (
     <form onSubmit={send} className="relative z-10 mx-auto max-w-105 px-5 py-[8vh]">
+      <img src="/brand/pulso-mark.png" alt="PULSO" width={48} height={32} className="mb-4 block" />
       <div className="mb-2.5 font-mono-app text-[11px] tracking-[2.4px] text-volt">PULSO · PORTAL PROFESIONAL</div>
       <h1 className="mb-2 text-[28px] font-semibold text-fg">Entrar con un enlace</h1>
       <p className="mb-6 text-sm leading-6 text-fg-sec">Te enviamos un enlace de acceso. Sin contraseña.</p>
@@ -424,6 +427,7 @@ function Login({ onDone }: { onDone: () => void }) {
         <MagicLinkForm onBack={backToLogin} />
       ) : (
         <form onSubmit={submit} className="relative z-10 mx-auto max-w-105 px-5 py-[8vh]">
+          <img src="/brand/pulso-mark.png" alt="PULSO" width={48} height={32} className="mb-4 block" />
           <div className="mb-2.5 font-mono-app text-[11px] tracking-[2.4px] text-volt">PULSO · PORTAL PROFESIONAL</div>
           <h1 className="mb-2 text-[28px] font-semibold text-fg">Ingresar</h1>
           <p className="mb-6 text-sm leading-6 text-fg-sec">Accedé a tu espacio de trabajo clínico.</p>
@@ -598,6 +602,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   } else if (mode === "none") {
     content = (
       <div className="mx-auto mt-[16vh] max-w-115 px-5 text-center">
+        <img src="/brand/pulso-mark.png" alt="PULSO" width={48} height={32} className="mb-4 block" />
         <div className="mb-2.5 font-mono-app text-[11px] tracking-[2.4px] text-volt">PULSO · PORTAL PROFESIONAL</div>
         <p className="mb-2 text-lg font-semibold text-fg">{user.email} es una cuenta de atleta</p>
         <p className="text-sm leading-6 text-fg-sec">El portal es para entrenadores y nutricionistas. Tu progreso, planes y mensajes están en la app de PULSO. Si sos profesional, creá una cuenta profesional con otro correo o escribinos para convertir esta.</p>
@@ -622,6 +627,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           {/* sidebar */}
           <aside className="hidden w-60 shrink-0 flex-col border-r border-line md:flex">
             <div className="border-b border-line p-4.5">
+              <img src="/brand/pulso-mark.png" alt="PULSO" width={42} height={28} className="mb-3 block" />
               <div className={`mb-1.5 font-mono-app text-[10px] tracking-[2px] ${mode === "pending" ? "text-warn" : "text-volt"}`}>
                 PULSO · {roleLabel}{mode === "professional" && user.isSuperAdmin ? " · ADMIN" : ""}
               </div>
@@ -692,9 +698,12 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           <div className="min-w-0 flex-1 md:overflow-y-auto">
             <header className="sticky top-0 z-40 border-b border-line bg-ink/95 md:hidden">
               <div className="flex items-center justify-between px-4 py-3">
-                <div>
-                  <div className="font-mono-app text-[9px] tracking-[1.8px] text-volt">PULSO · {roleLabel}</div>
-                  <div className="text-sm font-semibold text-fg">{user.name}</div>
+                <div className="flex items-center gap-2.5">
+                  <img src="/brand/pulso-mark.png" alt="PULSO" width={36} height={24} className="block" />
+                  <div>
+                    <div className="font-mono-app text-[9px] tracking-[1.8px] text-volt">PULSO · {roleLabel}</div>
+                    <div className="text-sm font-semibold text-fg">{user.name}</div>
+                  </div>
                 </div>
                 {accountNav.length > 0
                   ? <Link href="/portal/perfil" className="border border-line px-3 py-2 font-mono-app text-[10px] text-fg-sec">PERFIL</Link>
