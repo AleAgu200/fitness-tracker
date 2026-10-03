@@ -32,23 +32,29 @@ export function isPaywallError(error: unknown): boolean {
 let configuredFor: string | null = null;
 
 /**
- * Configure the SDK against a specific athlete.
+ * Identify the athlete to RevenueCat.
  *
  * The RevenueCat app user id is the PULSO user id: that is what lets the
- * server's webhook map a purchase back to an account. Anonymous purchases would
+ * server's webhook map a purchase back to an account. Anonymous purchases
  * arrive with an id the server cannot resolve.
+ *
+ * Signing out switches the SDK to an anonymous user, and calling configure()
+ * again on the next sign-in does nothing — the athlete stayed anonymous, saw
+ * the paywall for a subscription they had, and paid again under that
+ * anonymous id. So configure() runs once and every later sign-in is a logIn(),
+ * which also moves what the anonymous user bought to the account.
  */
 export async function configurePurchases(userId: string): Promise<void> {
   if (!purchasesSupported || configuredFor === userId) return;
   try {
-    if (__DEV__) Purchases.setLogLevel(LOG_LEVEL.WARN);
-    if (configuredFor === null) {
+    // Asked of the SDK itself: a JS reload keeps the native SDK configured.
+    if (!(await Purchases.isConfigured())) {
+      if (__DEV__) Purchases.setLogLevel(LOG_LEVEL.WARN);
       Purchases.configure({
         apiKey: Platform.OS === 'android' ? ANDROID_KEY : IOS_KEY,
         appUserID: userId,
       });
-    } else {
-      // Another athlete signed in on this device.
+    } else if ((await Purchases.getAppUserID()) !== userId) {
       await Purchases.logIn(userId);
     }
     configuredFor = userId;

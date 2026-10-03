@@ -71,7 +71,13 @@ export function EntitlementProvider({ children }: { children: ReactNode }) {
     const local = await hasActiveEntitlement();
     setEntitled(local);
     try {
-      const status = await apiFetch<BillingStatus>('/api/billing/status');
+      let status = await apiFetch<BillingStatus>('/api/billing/status');
+      if (local && !status.entitlement.entitled) {
+        // The store says Plus but the server's copy is behind (a purchase moved
+        // from an anonymous id, a webhook still in flight): have the server
+        // re-read RevenueCat itself, or paid features stay refused.
+        status = await apiFetch<BillingStatus>('/api/billing/status', { method: 'POST' }).catch(() => status);
+      }
       setEntitled(status.entitlement.entitled || local);
       setAllowance({
         allowed: status.allowance.allowed,

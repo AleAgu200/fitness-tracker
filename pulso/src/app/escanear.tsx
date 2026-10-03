@@ -16,13 +16,14 @@ import { Paywall } from '@/components/paywall';
 import { Label, PressableScale, Segmented } from '@/components/ui/kit';
 import { F, useColors, withAlpha } from '@/constants/colors';
 import { useApp } from '@/context/app-state';
+import { useEntitlement } from '@/context/entitlement';
 import { usePreferences } from '@/context/preferences';
 import { useSession } from '@/context/session';
 import { listSavedFoods, logConsumption, saveFood } from '@/db/consumption';
 import { planFood } from '@/db/nutrition';
 import { todayStr, weekdayOf } from '@/lib/dates';
 import { combineNutrients, formatNutrient, NUTRIENT_LABEL, parseAmount, PhysicalUnit } from '@/lib/nutrition-math';
-import { draftFromSavedFood, fromOpenFoodFacts, labelReadingStatus, lookupBarcode, NutritionDraft, readLabel, ScanOutcome, shareBarcodeProduct, withBarcode } from '@/lib/scan';
+import { draftFromSavedFood, isNewBarcodeProduct, labelReadingStatus, lookupBarcode, NutritionDraft, readLabel, ScanOutcome, shareBarcodeProduct, withBarcode } from '@/lib/scan';
 
 type Mode = 'code' | 'label';
 type Stage =
@@ -205,11 +206,14 @@ function LabelInput({ code, onStage, onPaywall }: { code: string | null; onStage
   const C = useColors();
   const [status, setStatus] = useState<{ available: boolean; entitled: boolean } | null | 'loading'>('loading');
 
+  // Asked again when the subscription changes: buying Plus from the paywall
+  // right here must unlock the reader without leaving the screen.
+  const { entitled } = useEntitlement();
   useEffect(() => {
     let active = true;
     labelReadingStatus().then(result => { if (active) setStatus(result); });
     return () => { active = false; };
-  }, []);
+  }, [entitled]);
 
   async function capture(source: 'camera' | 'library') {
     const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], allowsEditing: true, quality: 1 };
@@ -340,7 +344,7 @@ function DraftReview({ draft, onScanAnother }: { draft: NutritionDraft; onScanAn
   const uncertainLabels = draft.uncertain.map(key => NUTRIENT_LABEL[key].toLowerCase());
 
   // A code Open Food Facts didn't have joins the shared catalog once reviewed.
-  const shareable = draft.source === 'barcode' && Boolean(draft.sourceRef) && !fromOpenFoodFacts(draft);
+  const shareable = isNewBarcodeProduct(draft);
   function share() {
     if (!shareable || !basisAmount) return;
     void shareBarcodeProduct(draft.sourceRef!, {
