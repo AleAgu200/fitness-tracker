@@ -22,6 +22,14 @@ function parseAction(body: Record<string, unknown>): AdminUserAction | null {
   if (body.action === "set_role" && (ASSIGNABLE_ROLES as readonly string[]).includes(String(body.role))) {
     return { action: "set_role", role: body.role as AssignableRole };
   }
+  if (body.action === "grant_plus") {
+    // `days` (1–3650) bounds the grant; without it, Plus stays until removed.
+    if (body.days == null) return { action: "grant_plus", until: null };
+    const days = Number(body.days);
+    if (!Number.isInteger(days) || days < 1 || days > 3650) return null;
+    return { action: "grant_plus", until: Date.now() + days * 86_400_000 };
+  }
+  if (body.action === "revoke_plus") return { action: "revoke_plus" };
   return null;
 }
 

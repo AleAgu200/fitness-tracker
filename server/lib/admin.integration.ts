@@ -97,3 +97,28 @@ test("admin: catalog edits reach search and deleted base foods are not re-seeded
   setCatalogOverrides([]);
   await ensureCatalogOverlay();
 });
+
+test("Plus is granted and removed only from the panel, and a store sync can't erase it", async () => {
+  const { getEntitlement } = await import("@/lib/entitlements");
+  const { applyEntitlement } = await import("@/lib/revenuecat");
+  const admin = { id: await seedUser("athlete", { isSuperAdmin: true }) };
+  const athlete = { id: await seedUser("athlete") };
+
+  // Admins may grant it to themselves too (that's how the team tests Plus).
+  await applyUserAction(admin, admin.id, { action: "grant_plus", until: null });
+  assert.equal((await getEntitlement(admin.id)).entitled, true);
+
+  await applyUserAction(admin, athlete.id, { action: "grant_plus", until: Date.now() + 86_400_000 });
+  assert.equal((await getEntitlement(athlete.id)).entitled, true);
+
+  // RevenueCat answering "nothing bought" must not wipe the panel grant.
+  await applyEntitlement({ userId: athlete.id, entitlement: { status: "expired", productId: null, store: null, isSandbox: false, currentPeriodEndsAt: null, willRenew: false } });
+  assert.equal((await getEntitlement(athlete.id)).entitled, true);
+
+  await applyUserAction(admin, athlete.id, { action: "revoke_plus" });
+  assert.equal((await getEntitlement(athlete.id)).entitled, false);
+  await assert.rejects(applyUserAction(admin, athlete.id, { action: "revoke_plus" }), (error: unknown) => error instanceof AdminActionError && error.message === "plus_not_active");
+
+  const history = (await getUserDetail(athlete.id))?.history.map(event => event.action);
+  assert.ok(history?.includes("user.plus_granted") && history.includes("user.plus_revoked"));
+});

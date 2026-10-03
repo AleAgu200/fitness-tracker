@@ -70,7 +70,22 @@ function StatusPills({ row }: { row: Pick<UserRow, "suspendedAt" | "superAdmin" 
   );
 }
 
-type PendingAction = { kind: "suspend" } | { kind: "reactivate" } | { kind: "role"; role: string };
+type PendingAction = { kind: "suspend" } | { kind: "reactivate" } | { kind: "role"; role: string }
+  | { kind: "grant_plus"; days: number | null } | { kind: "revoke_plus" };
+
+/** How long a panel grant lasts; null = until someone removes it. */
+const PLUS_DURATIONS: { days: number | null; label: string }[] = [
+  { days: 30, label: "30 días" },
+  { days: 90, label: "90 días" },
+  { days: 365, label: "1 año" },
+  { days: null, label: "Sin vencimiento" },
+];
+const ENTITLED_STATUSES = ["active", "in_grace_period", "billing_issue", "cancelled"];
+
+function plusIsActive(subscription: UserDetail["subscription"], now = Date.now()): boolean {
+  if (!subscription || !ENTITLED_STATUSES.includes(subscription.status)) return false;
+  return subscription.currentPeriodEndsAt == null || subscription.currentPeriodEndsAt > now;
+}
 
 function UserDrawer({ id, onClose, onChanged }: { id: string; onClose: () => void; onChanged: (message: string) => void }) {
   const { user: me } = usePortalUser();
@@ -79,6 +94,7 @@ function UserDrawer({ id, onClose, onChanged }: { id: string; onClose: () => voi
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [roleChoice, setRoleChoice] = useState<string>("");
+  const [plusDays, setPlusDays] = useState<number | null>(30);
 
   useEffect(() => { if (data) setRoleChoice(data.role); }, [data]);
   useEffect(() => {
@@ -92,12 +108,16 @@ function UserDrawer({ id, onClose, onChanged }: { id: string; onClose: () => voi
     setBusy(true);
     setActionError(null);
     const body = pending.kind === "role" ? { action: "set_role", role: pending.role }
-      : pending.kind === "suspend" ? { action: "suspend", reason } : { action: "reactivate" };
+      : pending.kind === "suspend" ? { action: "suspend", reason }
+        : pending.kind === "grant_plus" ? { action: "grant_plus", days: pending.days }
+          : pending.kind === "revoke_plus" ? { action: "revoke_plus" } : { action: "reactivate" };
     try {
       await api(`/api/admin/users/${id}`, { method: "PATCH", body: JSON.stringify(body) });
       setPending(null);
       onChanged(pending.kind === "suspend" ? "Cuenta suspendida y sesiones cerradas"
-        : pending.kind === "reactivate" ? "Cuenta reactivada" : "Rol actualizado");
+        : pending.kind === "reactivate" ? "Cuenta reactivada"
+          : pending.kind === "grant_plus" ? "PULSO Plus activado"
+            : pending.kind === "revoke_plus" ? "PULSO Plus quitado" : "Rol actualizado");
       await reload();
     } catch (cause) {
       setActionError(errorMessage(cause, "No se pudo aplicar el cambio. Intentá de nuevo."));
@@ -148,12 +168,30 @@ function UserDrawer({ id, onClose, onChanged }: { id: string; onClose: () => voi
                       {data.subscription.isSandbox && <Pill>SANDBOX</Pill>}
                     </div>
                     <div className="mt-2 text-fg-sec">
-                      {data.subscription.productId ?? "—"} · {data.subscription.store ?? "—"}
+                      {data.subscription.store === "admin" ? "Activado desde este panel" : `${data.subscription.productId ?? "—"} · ${data.subscription.store ?? "—"}`}
                       <br />
-                      {data.subscription.willRenew ? "Renueva" : "Acceso hasta"} el {formatDate(data.subscription.currentPeriodEndsAt)}
+                      {data.subscription.currentPeriodEndsAt == null
+                        ? "Sin vencimiento"
+                        : `${data.subscription.willRenew ? "Renueva" : "Acceso hasta"} el ${formatDate(data.subscription.currentPeriodEndsAt)}`}
                     </div>
                   </div>
                 ) : <p className="text-sm text-fg-ter">Sin suscripción.</p>}
+                {/* The only way to get Plus while store billing is off. */}
+                <div className="mt-3 flex flex-wrap items-end gap-2">
+                  {plusIsActive(data.subscription) ? (
+                    <button type="button" onClick={() => { setActionError(null); setPending({ kind: "revoke_plus" }); }} className={buttonGhost}>QUITAR PULSO PLUS</button>
+                  ) : (
+                    <>
+                      <label className="min-w-40 flex-1">
+                        <span className="mb-1.5 block font-mono-app text-[9.5px] tracking-[1.2px] text-fg-ter">DURACIÓN</span>
+                        <select value={plusDays ?? ""} onChange={event => setPlusDays(event.target.value ? Number(event.target.value) : null)} className={inputClass}>
+                          {PLUS_DURATIONS.map(option => <option key={option.label} value={option.days ?? ""}>{option.label}</option>)}
+                        </select>
+                      </label>
+                      <button type="button" onClick={() => { setActionError(null); setPending({ kind: "grant_plus", days: plusDays }); }} className={buttonPrimary}>ACTIVAR PULSO PLUS</button>
+                    </>
+                  )}
+                </div>
               </section>
 
               {data.organizations.length > 0 && (
@@ -221,16 +259,25 @@ function UserDrawer({ id, onClose, onChanged }: { id: string; onClose: () => voi
 
       {pending && data && (
         <ConfirmDialog
-          title={pending.kind === "suspend" ? `Suspender a ${data.name}` : pending.kind === "reactivate" ? `Reactivar a ${data.name}` : `Cambiar rol a ${ROLE_LABEL[pending.role]}`}
-          body={pending.kind === "suspend"
+          title={pending.kind === "suspend" ? `Suspender a ${data.name}`
+            : pending.kind === "reactivate" ? `Reactivar a ${data.name}`
+              : pending.kind === "grant_plus" ? `Activar PULSO Plus a ${data.name}`
+                : pending.kind === "revoke_plus" ? `Quitar PULSO Plus a ${data.name}`
+                  : `Cambiar rol a ${ROLE_LABEL[pending.role]}`}
+          body={pending.kind === "grant_plus"
+            ? `Tendrá planes con IA sin límite, lectura de etiquetas y el resto de PULSO Plus ${pending.days ? `durante ${pending.days} días` : "hasta que se lo quites"}. No se le cobra nada.`
+            : pending.kind === "revoke_plus"
+              ? "Pierde PULSO Plus de inmediato. Lo que ya generó con IA se conserva."
+              : pending.kind === "suspend"
             ? "Se cierran todas sus sesiones y no podrá ingresar en la app ni en el portal. Sus datos se conservan y le avisamos por correo."
             : pending.kind === "reactivate"
               ? "Podrá volver a ingresar con sus métodos de acceso habituales."
               : pending.role === "athlete"
                 ? "Pierde el acceso al portal y sus membresías profesionales se revocan. Sus atletas dejan de verlo como profesional."
                 : "Obtiene acceso al portal como profesional aprobado, con su propio espacio de trabajo."}
-          confirmLabel={pending.kind === "suspend" ? "SUSPENDER" : pending.kind === "reactivate" ? "REACTIVAR" : "CAMBIAR ROL"}
-          danger={pending.kind === "suspend" || (pending.kind === "role" && pending.role === "athlete")}
+          confirmLabel={pending.kind === "suspend" ? "SUSPENDER" : pending.kind === "reactivate" ? "REACTIVAR"
+            : pending.kind === "grant_plus" ? "ACTIVAR" : pending.kind === "revoke_plus" ? "QUITAR" : "CAMBIAR ROL"}
+          danger={pending.kind === "suspend" || pending.kind === "revoke_plus" || (pending.kind === "role" && pending.role === "athlete")}
           reason={pending.kind === "suspend" ? { label: "MOTIVO (QUEDA EN EL HISTORIAL)", placeholder: "Ej.: reporte de abuso en mensajes" } : undefined}
           busy={busy}
           error={actionError}

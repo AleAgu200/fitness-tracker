@@ -29,6 +29,8 @@ export const ERROR_LABEL: Record<string, string> = {
   already_suspended: "La cuenta ya estaba suspendida.",
   not_suspended: "La cuenta no está suspendida.",
   role_unchanged: "La cuenta ya tiene ese rol.",
+  plus_not_active: "La cuenta no tiene PULSO Plus activo.",
+  plus_until_in_past: "La fecha de vencimiento ya pasó.",
   user_not_found: "La cuenta ya no existe.",
   not_a_professional: "La cuenta ya no es de profesional.",
   missing_fields: "Completá los campos obligatorios.",

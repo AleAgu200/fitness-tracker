@@ -15,6 +15,7 @@ import {
   user,
 } from "@/db/schema";
 import {
+  ADMIN_PLUS_STORE,
   AdminUserAction,
   adminActionError,
   isProfessionalRole,
@@ -28,8 +29,10 @@ import {
   professionalRejectedEmail,
   sendEmail,
 } from "@/lib/email";
+import { getEntitlement } from "@/lib/entitlements";
 import { legacyMembershipId } from "@/lib/organizations";
 import { initializeProfessionalAccount } from "@/lib/professional-profile";
+import { applyEntitlement } from "@/lib/revenuecat";
 
 // Data behind /portal/admin. Account, organization and subscription metadata
 // only: health data (training, meals, weight) stays behind the athlete's
@@ -265,17 +268,40 @@ async function setRole(userId: string, name: string, role: "athlete" | "coach" |
   });
 }
 
-/** Suspend, reactivate or change the role of a user. Throws AdminActionError with a code. */
+/** Suspend, reactivate, change the role of a user, or grant/remove PULSO Plus. Throws AdminActionError with a code. */
 export async function applyUserAction(actor: { id: string }, targetId: string, action: AdminUserAction) {
   const [target] = await db.select().from(user).where(eq(user.id, targetId)).limit(1);
   if (!target) throw new AdminActionError("user_not_found");
+  const plusAction = action.action === "grant_plus" || action.action === "revoke_plus";
   const error = adminActionError(action, actor, {
     id: target.id,
     superAdmin: isSuperAdmin({ isSuperAdmin: target.isSuperAdmin, email: target.email, emailVerified: target.emailVerified }),
     role: target.role,
     suspended: target.suspendedAt != null,
+    plusActive: plusAction ? (await getEntitlement(targetId)).entitled : undefined,
   });
   if (error) throw new AdminActionError(error);
+
+  if (action.action === "grant_plus" || action.action === "revoke_plus") {
+    // Store billing is off: Plus exists only as this panel grant. It never
+    // renews on its own, so nothing ever asks RevenueCat about it.
+    const now = Date.now();
+    await applyEntitlement({
+      userId: targetId,
+      entitlement: action.action === "grant_plus"
+        ? { status: "active", productId: "admin_grant", store: ADMIN_PLUS_STORE, isSandbox: false, currentPeriodEndsAt: action.until, willRenew: false }
+        : { status: "expired", productId: "admin_grant", store: ADMIN_PLUS_STORE, isSandbox: false, currentPeriodEndsAt: now, willRenew: false },
+      payload: { source: "admin", actorUserId: actor.id },
+    });
+    await recordAdminAction({
+      actorUserId: actor.id,
+      action: action.action === "grant_plus" ? "user.plus_granted" : "user.plus_revoked",
+      subjectType: "user",
+      subjectId: targetId,
+      metadata: action.action === "grant_plus" ? { until: action.until } : undefined,
+    });
+    return;
+  }
 
   if (action.action === "suspend") {
     await db.transaction(async tx => {

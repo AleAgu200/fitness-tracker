@@ -2,6 +2,8 @@ export const ACTION_LABEL: Record<string, string> = {
   "user.suspended": "Cuenta suspendida",
   "user.reactivated": "Cuenta reactivada",
   "user.role_changed": "Rol cambiado",
+  "user.plus_granted": "PULSO Plus activado",
+  "user.plus_revoked": "PULSO Plus quitado",
   "professional.approved": "Profesional aprobado",
   "professional.rejected": "Profesional rechazado",
   "exercise.create": "Ejercicio creado",

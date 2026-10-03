@@ -33,3 +33,21 @@ test("an admin cannot lock themselves or another super admin out", () => {
   assert.equal(adminActionError({ action: "set_role", role: "athlete" }, actor, athlete), "role_unchanged");
   assert.equal(adminActionError({ action: "set_role", role: "coach" }, actor, athlete), null);
 });
+
+test("an admin can grant PULSO Plus to anyone, themselves included", () => {
+  const actor = { id: "a" };
+  const base = { id: "u", superAdmin: false, role: "athlete", suspended: false, plusActive: false };
+  const now = Date.now();
+  assert.equal(adminActionError({ action: "grant_plus", until: null }, actor, base, now), null);
+  assert.equal(adminActionError({ action: "grant_plus", until: null }, actor, { ...base, id: "a" }, now), null, "self");
+  assert.equal(adminActionError({ action: "grant_plus", until: null }, actor, { ...base, superAdmin: true }, now), null, "super admin");
+  assert.equal(adminActionError({ action: "grant_plus", until: now + 86_400_000 }, actor, base, now), null);
+  assert.equal(adminActionError({ action: "grant_plus", until: now - 1 }, actor, base, now), "plus_until_in_past");
+});
+
+test("Plus can only be removed from an account that has it", () => {
+  const actor = { id: "a" };
+  const base = { id: "u", superAdmin: false, role: "athlete", suspended: false };
+  assert.equal(adminActionError({ action: "revoke_plus" }, actor, { ...base, plusActive: true }), null);
+  assert.equal(adminActionError({ action: "revoke_plus" }, actor, { ...base, plusActive: false }), "plus_not_active");
+});

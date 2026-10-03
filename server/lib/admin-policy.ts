@@ -49,7 +49,17 @@ export function initialProfessionalStatus(env: { PROFESSIONAL_APPROVAL?: string 
 export type AdminUserAction =
   | { action: "suspend"; reason?: string }
   | { action: "reactivate" }
-  | { action: "set_role"; role: AssignableRole };
+  | { action: "set_role"; role: AssignableRole }
+  /** PULSO Plus granted by a super admin; `until` (epoch ms) or open-ended. */
+  | { action: "grant_plus"; until: number | null }
+  | { action: "revoke_plus" };
+
+/** Store name of a Plus granted from the panel, as opposed to a store purchase. */
+export const ADMIN_PLUS_STORE = "admin";
+
+function isPlusAction(action: AdminUserAction): action is Extract<AdminUserAction, { action: "grant_plus" | "revoke_plus" }> {
+  return action.action === "grant_plus" || action.action === "revoke_plus";
+}
 
 /**
  * Guards against an admin locking the panel out: nobody suspends or demotes
@@ -58,8 +68,16 @@ export type AdminUserAction =
 export function adminActionError(
   action: AdminUserAction,
   actor: { id: string },
-  target: { id: string; superAdmin: boolean; role: string; suspended: boolean },
+  target: { id: string; superAdmin: boolean; role: string; suspended: boolean; plusActive?: boolean },
+  now = Date.now(),
 ): string | null {
+  // Plus is a benefit, not a lockout risk: an admin may grant it to anyone,
+  // themselves included (that is how the team tests Plus while store billing is off).
+  if (isPlusAction(action)) {
+    if (action.action === "grant_plus" && action.until != null && action.until <= now) return "plus_until_in_past";
+    if (action.action === "revoke_plus" && !target.plusActive) return "plus_not_active";
+    return null;
+  }
   if (target.id === actor.id) return "cannot_modify_self";
   if (target.superAdmin) return "cannot_modify_super_admin";
   if (action.action === "suspend" && target.suspended) return "already_suspended";
