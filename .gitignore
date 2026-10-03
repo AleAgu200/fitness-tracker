@@ -1,2 +1,5 @@
 # Per-machine Claude Code permissions: local commands, paths and cloud IDs.
 .claude/settings.local.json
+
+# Gradle output of local native modules (regenerated on every build)
+pulso/modules/*/android/build/
