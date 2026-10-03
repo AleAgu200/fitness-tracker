@@ -132,8 +132,10 @@ abstract class PulsoWidgetProvider(private val variant: PulsoWidgetVariant) : Ap
         return views
       }
 
-      // Reset explicitly: the empty/complete states tint this row with the accent, and
-      // RemoteViews carries that over into the next repaint otherwise.
+      // Reset explicitly: the empty/complete states show the logo and tint this row with
+      // the accent, and RemoteViews carries that over into the next repaint otherwise.
+      views.setViewVisibility(R.id.pulso_mark, View.GONE)
+      views.setViewVisibility(R.id.pulso_current, View.VISIBLE)
       views.setTextColor(R.id.pulso_current, TITLE_COLOR)
       val currentTitle = if (variant == PulsoWidgetVariant.SMALL) {
         snapshot.currentExercise
@@ -200,12 +202,32 @@ abstract class PulsoWidgetProvider(private val variant: PulsoWidgetVariant) : Ap
       views.setViewVisibility(R.id.pulso_set_progress, View.VISIBLE)
     }
 
+    /**
+     * No workout running: the logo says whose widget this is, and the copy says what
+     * a tap does (the whole card opens the app). White, not the accent — the accent
+     * is reserved for state.
+     */
     private fun renderEmpty(views: RemoteViews, snapshot: WidgetSnapshot, variant: PulsoWidgetVariant) {
-      views.setTextViewText(R.id.pulso_current, "PULSO")
-      views.setTextColor(R.id.pulso_current, snapshot.accent)
-      if (variant.showsNext || variant == PulsoWidgetVariant.SMALL) {
-        views.setTextViewText(R.id.pulso_next, "Comenzá tu entreno")
+      views.setViewVisibility(R.id.pulso_mark, View.VISIBLE)
+      views.setTextColor(R.id.pulso_current, TITLE_COLOR)
+      if (variant == PulsoWidgetVariant.SMALL) {
+        // 1x1: the logo is the title; a word under it is all that fits.
+        views.setViewVisibility(R.id.pulso_current, View.GONE)
+        views.setTextViewText(R.id.pulso_next, "Entrenar")
         views.setViewVisibility(R.id.pulso_next, View.VISIBLE)
+      } else {
+        views.setViewVisibility(R.id.pulso_current, View.VISIBLE)
+        views.setTextViewText(R.id.pulso_current, "Sin entreno en curso")
+        if (variant.showsNext) {
+          views.setTextViewText(R.id.pulso_next, "Tocá para empezar")
+          views.setViewVisibility(R.id.pulso_next, View.VISIBLE)
+        }
+      }
+      // Leftovers from the last session would read as current data.
+      if (variant.showsDetail) views.setViewVisibility(R.id.pulso_detail, View.GONE)
+      if (variant.showsSessionData) {
+        views.setTextViewText(R.id.pulso_set_history, "")
+        views.setTextViewText(R.id.pulso_volume, "")
       }
       views.setViewVisibility(R.id.pulso_chronometer, View.GONE)
       views.setViewVisibility(R.id.pulso_rest_idle, View.GONE)
@@ -216,7 +238,10 @@ abstract class PulsoWidgetProvider(private val variant: PulsoWidgetVariant) : Ap
 
     /** Shown once the session is finished — same slots as [renderEmpty], different copy. */
     private fun renderComplete(views: RemoteViews, snapshot: WidgetSnapshot, variant: PulsoWidgetVariant) {
+      views.setViewVisibility(R.id.pulso_mark, View.VISIBLE)
+      views.setViewVisibility(R.id.pulso_current, View.VISIBLE)
       views.setTextViewText(R.id.pulso_current, "¡Buen trabajo!")
+      if (variant.showsDetail) views.setViewVisibility(R.id.pulso_detail, View.GONE)
       views.setTextColor(R.id.pulso_current, snapshot.accent)
       if (variant.showsNext || variant == PulsoWidgetVariant.SMALL) {
         views.setTextViewText(R.id.pulso_next, "Sesión completada")
