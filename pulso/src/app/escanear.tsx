@@ -22,7 +22,7 @@ import { listSavedFoods, logConsumption, saveFood } from '@/db/consumption';
 import { planFood } from '@/db/nutrition';
 import { todayStr, weekdayOf } from '@/lib/dates';
 import { combineNutrients, formatNutrient, NUTRIENT_LABEL, parseAmount, PhysicalUnit } from '@/lib/nutrition-math';
-import { draftFromSavedFood, labelReadingStatus, lookupBarcode, NutritionDraft, readLabel, ScanOutcome } from '@/lib/scan';
+import { draftFromSavedFood, fromOpenFoodFacts, labelReadingStatus, lookupBarcode, NutritionDraft, readLabel, ScanOutcome, shareBarcodeProduct, withBarcode } from '@/lib/scan';
 
 type Mode = 'code' | 'label';
 type Stage =
@@ -61,6 +61,8 @@ export default function EscanearScreen() {
   const [mode, setMode] = useState<Mode>('code');
   const [stage, setStage] = useState<Stage>({ k: 'input' });
   const [paywall, setPaywall] = useState(false);
+  // Barcode that wasn't found, carried into label reading (see withBarcode).
+  const [labelCode, setLabelCode] = useState<string | null>(null);
 
   const reset = useCallback(() => setStage({ k: 'input' }), []);
 
@@ -90,13 +92,13 @@ export default function EscanearScreen() {
           <Segmented
             options={[{ key: 'code', label: 'CÓDIGO DE BARRAS' }, { key: 'label', label: 'TABLA NUTRICIONAL' }]}
             value={mode}
-            onChange={value => { setMode(value); reset(); }}
+            onChange={value => { setMode(value); setLabelCode(null); reset(); }}
             accent={accent}
           />
         )}
 
         {stage.k === 'input' && mode === 'code' && <BarcodeInput onStage={setStage} />}
-        {stage.k === 'input' && mode === 'label' && <LabelInput onStage={setStage} onPaywall={() => setPaywall(true)} />}
+        {stage.k === 'input' && mode === 'label' && <LabelInput code={labelCode} onStage={setStage} onPaywall={() => setPaywall(true)} />}
 
         {stage.k === 'working' && (
           <View accessibilityLiveRegion="polite" style={{ alignItems: 'center', gap: 12, paddingVertical: 50 }}>
@@ -110,13 +112,13 @@ export default function EscanearScreen() {
             outcome={stage.outcome}
             code={stage.code}
             onRetry={reset}
-            onLabel={() => { setMode('label'); reset(); }}
+            onLabel={() => { setLabelCode(stage.code ?? null); setMode('label'); reset(); }}
             onManual={() => setStage({ k: 'review', draft: emptyDraft(stage.code ?? null) })}
             onPaywall={() => setPaywall(true)}
           />
         )}
 
-        {stage.k === 'review' && <DraftReview key={stage.draft.sourceRef ?? 'label'} draft={stage.draft} onScanAnother={reset} />}
+        {stage.k === 'review' && <DraftReview key={stage.draft.sourceRef ?? 'label'} draft={stage.draft} onScanAnother={() => { setLabelCode(null); reset(); }} />}
       </ScrollView>
       <Paywall visible={paywall} onClose={() => setPaywall(false)} />
     </View>
@@ -199,7 +201,7 @@ function BarcodeInput({ onStage }: { onStage: (stage: Stage) => void }) {
 
 // ── label ───────────────────────────────────────────────────────────────────
 
-function LabelInput({ onStage, onPaywall }: { onStage: (stage: Stage) => void; onPaywall: () => void }) {
+function LabelInput({ code, onStage, onPaywall }: { code: string | null; onStage: (stage: Stage) => void; onPaywall: () => void }) {
   const C = useColors();
   const [status, setStatus] = useState<{ available: boolean; entitled: boolean } | null | 'loading'>('loading');
 
@@ -226,7 +228,7 @@ function LabelInput({ onStage, onPaywall }: { onStage: (stage: Stage) => void; o
     if (!asset) return;
     onStage({ k: 'working', message: 'LEYENDO LA TABLA…' });
     const outcome = await readLabel(asset.uri);
-    onStage(outcome.status === 'draft' ? { k: 'review', draft: outcome.draft } : { k: 'problem', outcome });
+    onStage(outcome.status === 'draft' ? { k: 'review', draft: withBarcode(outcome.draft, code) } : { k: 'problem', outcome });
   }
 
   if (status === 'loading') return <ActivityIndicator color={C.textTertiary} style={{ marginVertical: 30 }} />;
@@ -249,6 +251,11 @@ function LabelInput({ onStage, onPaywall }: { onStage: (stage: Stage) => void; o
       <Text style={{ fontFamily: F.inter, fontSize: 13, lineHeight: 19, color: C.textSecondary }}>
         Encuadrá solo la tabla y recortala si hace falta. La foto se envía una vez para leerla y no se guarda: ni en PULSO ni en tu historial.
       </Text>
+      {code && (
+        <Text style={{ fontFamily: F.mono, fontSize: 10, lineHeight: 15, color: C.textTertiary }}>
+          SI LO GUARDÁS, LA PRÓXIMA VEZ QUE ESCANEES EL CÓDIGO {code} LO VAMOS A ENCONTRAR.
+        </Text>
+      )}
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <SheetButton label="TOMAR FOTO" onPress={() => void capture('camera')} primary />
         <SheetButton label="ELEGIR DE LA GALERÍA" onPress={() => void capture('library')} />
@@ -332,6 +339,19 @@ function DraftReview({ draft, onScanAnother }: { draft: NutritionDraft; onScanAn
   const preview = valid && amount ? combineNutrients([{ nutrientsPerBasis: perBasis, basis: { amount: basisAmount!, unit }, amount, unit }]) : null;
   const uncertainLabels = draft.uncertain.map(key => NUTRIENT_LABEL[key].toLowerCase());
 
+  // A code Open Food Facts didn't have joins the shared catalog once reviewed.
+  const shareable = draft.source === 'barcode' && Boolean(draft.sourceRef) && !fromOpenFoodFacts(draft);
+  function share() {
+    if (!shareable || !basisAmount) return;
+    void shareBarcodeProduct(draft.sourceRef!, {
+      productName: name.trim(),
+      brand: brand.trim() || null,
+      basis: { amount: basisAmount, unit },
+      serving: servingAmount ? { label: servingLabel.trim() || null, amount: servingAmount } : null,
+      nutrients: perBasis,
+    });
+  }
+
   async function persistFood(): Promise<string> {
     return saveFood(userId!, {
       name,
@@ -352,6 +372,7 @@ function DraftReview({ draft, onScanAnother }: { draft: NutritionDraft; onScanAn
     try {
       if (destination === 'saved') {
         await persistFood();
+        share();
         setDone('Guardado en Mis alimentos. No se registró como consumido.');
         return;
       }
@@ -380,6 +401,7 @@ function DraftReview({ draft, onScanAnother }: { draft: NutritionDraft; onScanAn
           volumeMl: unit === 'ml' ? amount : null,
         });
         await reloadNutritionToday();
+        share();
         setDone(`Registrado en ${mealLabel.toLowerCase()} de hoy.`);
         return;
       }
@@ -394,6 +416,7 @@ function DraftReview({ draft, onScanAnother }: { draft: NutritionDraft; onScanAn
       });
       const today = todayStr();
       if (target.date === today || (target.repeatWeekly && weekdayOf(new Date(`${target.date}T12:00:00`)) === weekdayOf(new Date()))) await reloadAll();
+      share();
       setDone(`Planificado para ${describePlanTarget(target)}. No se registró como consumido.`);
     } catch (e) {
       console.error('[scan-confirm]', e);
@@ -437,6 +460,11 @@ function DraftReview({ draft, onScanAnother }: { draft: NutritionDraft; onScanAn
       <Text style={{ fontFamily: F.inter, fontSize: 12, lineHeight: 17, color: C.textTertiary }}>
         Confirmá que es el producto que tenés en la mano: el envase puede haber cambiado.
       </Text>
+      {shareable && (
+        <Text style={{ fontFamily: F.inter, fontSize: 12, lineHeight: 17, color: C.textTertiary }}>
+          Este código no estaba en el catálogo. Al confirmarlo se suma al catálogo compartido de PULSO (solo el producto, nada tuyo) para que quien lo escanee después lo encuentre.
+        </Text>
+      )}
 
       <Label>PRODUCTO</Label>
       <TextInput value={name} onChangeText={setName} placeholder="Nombre" placeholderTextColor={C.textTertiary} accessibilityLabel="Nombre del producto" style={input} />
