@@ -19,8 +19,20 @@
             android:layout_weight="3"
             android:orientation="vertical">
 
+            <!-- PULSO mark: shown in the empty and completed states (PulsoWidgetProvider). -->
+            <ImageView
+                android:id="@+id/pulso_mark"
+                android:layout_width="wrap_content"
+                android:layout_height="20dp"
+                android:layout_gravity="start"
+                android:layout_marginBottom="6dp"
+                android:adjustViewBounds="true"
+                android:contentDescription="PULSO"
+                android:scaleType="fitStart"
+                android:src="@drawable/pulso_widget_mark" />
             <TextView
                 android:id="@+id/pulso_current"
+                android:text="Sin entreno en curso"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:maxLines="1"
@@ -62,13 +74,14 @@
 
             <TextView
                 android:id="@+id/pulso_next"
+                android:text="Tocá para empezar"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
                 android:maxLines="1"
                 android:ellipsize="end"
                 android:textColor="#8A8A93"
-                android:textSize="10sp" />
+                android:textSize="11sp" />
         </LinearLayout>
 
         <LinearLayout
@@ -95,7 +108,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="3dp"
                 android:textColor="#8A8A93"
-                android:textSize="10sp" />
+                android:textSize="11sp" />
 
             <TextView
                 android:id="@+id/pulso_btn_finish"
@@ -106,7 +119,7 @@
                 android:background="@drawable/pulso_widget_button"
                 android:text="FINALIZAR EN APP"
                 android:textColor="#C7C7CE"
-                android:textSize="10sp"
+                android:textSize="11sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
         </LinearLayout>

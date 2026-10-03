@@ -13,6 +13,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SocialButtons } from '@/components/auth/social-buttons';
+import { BrandMark } from '@/components/brand-mark';
 import { LightningBackground } from '@/components/ui/lightning-bg';
 import { F, useColors, withAlpha } from '@/constants/colors';
 import { usePreferences } from '@/context/preferences';
@@ -185,6 +186,7 @@ export default function SignUpScreen() {
     >
       {/* Brand */}
       <Animated.View entering={FadeInDown.duration(400)} style={{ marginBottom: 40 }}>
+        <View style={{ marginBottom: 14 }}><BrandMark height={36} /></View>
         <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 2.4, color: accent, textTransform: 'uppercase', marginBottom: 10 }}>
           PULSO · APP DEL ATLETA
         </Text>

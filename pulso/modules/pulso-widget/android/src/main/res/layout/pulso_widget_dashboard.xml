@@ -19,8 +19,20 @@
             android:layout_weight="1"
             android:orientation="vertical">
 
+            <!-- PULSO mark: shown in the empty and completed states (PulsoWidgetProvider). -->
+            <ImageView
+                android:id="@+id/pulso_mark"
+                android:layout_width="wrap_content"
+                android:layout_height="20dp"
+                android:layout_gravity="start"
+                android:layout_marginBottom="6dp"
+                android:adjustViewBounds="true"
+                android:contentDescription="PULSO"
+                android:scaleType="fitStart"
+                android:src="@drawable/pulso_widget_mark" />
             <TextView
                 android:id="@+id/pulso_current"
+                android:text="Sin entreno en curso"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:maxLines="2"
@@ -37,7 +49,7 @@
                 android:maxLines="1"
                 android:ellipsize="end"
                 android:textColor="#C7C7CE"
-                android:textSize="10sp" />
+                android:textSize="11sp" />
 
             <ProgressBar
                 android:id="@+id/pulso_set_progress"
@@ -52,6 +64,7 @@
 
             <TextView
                 android:id="@+id/pulso_next"
+                android:text="Tocá para empezar"
                 android:layout_width="match_parent"
                 android:layout_height="24dp"
                 android:layout_marginTop="5dp"
@@ -59,7 +72,7 @@
                 android:maxLines="1"
                 android:ellipsize="end"
                 android:textColor="#8A8A93"
-                android:textSize="10sp" />
+                android:textSize="11sp" />
         </LinearLayout>
 
         <Chronometer

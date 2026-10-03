@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { billingEvents, subscriptions } from "@/db/schema";
+import { ADMIN_PLUS_STORE } from "@/lib/admin-policy";
 import { PULSO_PLUS } from "@/lib/entitlements";
 import type { NormalizedEntitlement } from "@/lib/revenuecat-events";
 
@@ -23,6 +24,13 @@ export async function applyEntitlement(input: {
   payload?: unknown;
 }): Promise<void> {
   const now = Date.now();
+  if (input.entitlement.store !== ADMIN_PLUS_STORE && input.entitlement.status === "expired") {
+    // A store that says "nothing here" must not erase Plus granted from the
+    // admin panel (the user simply never bought it in the store).
+    const [current] = await db.select({ store: subscriptions.store, status: subscriptions.status, endsAt: subscriptions.currentPeriodEndsAt })
+      .from(subscriptions).where(eq(subscriptions.userId, input.userId)).limit(1);
+    if (current?.store === ADMIN_PLUS_STORE && current.status === "active" && (current.endsAt == null || current.endsAt > now)) return;
+  }
   const values = {
     userId: input.userId,
     entitlement: PULSO_PLUS,

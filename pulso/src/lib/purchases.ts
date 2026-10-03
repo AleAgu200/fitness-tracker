@@ -18,8 +18,22 @@ const IOS_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY ?? '';
 /** Entitlement identifier configured in the RevenueCat dashboard. */
 export const PULSO_PLUS = 'pulso_plus';
 
-export const purchasesSupported =
-  (Platform.OS === 'android' && ANDROID_KEY !== '') || (Platform.OS === 'ios' && IOS_KEY !== '');
+const PLATFORM_KEY = Platform.OS === 'android' ? ANDROID_KEY : Platform.OS === 'ios' ? IOS_KEY : '';
+
+/**
+ * Store billing is off until the app is approved in Google Play / the App
+ * Store: PULSO Plus is granted only from the admin panel, and the SDK is never
+ * configured. Turn it on with EXPO_PUBLIC_BILLING_ENABLED=true and a store key.
+ */
+export const billingEnabled = process.env.EXPO_PUBLIC_BILLING_ENABLED === 'true';
+
+/**
+ * RevenueCat Test Store keys (test_…) only run in development builds: in a
+ * release build the SDK shows "Wrong API Key" and closes the app. Such a build
+ * ships without purchases instead of crashing; buying there needs the store's
+ * own key (goog_… / appl_…).
+ */
+export const purchasesSupported = billingEnabled && PLATFORM_KEY !== '' && (__DEV__ || !PLATFORM_KEY.startsWith('test_'));
 
 /**
  * The server answers 402 `subscription_required` when paid work is refused.

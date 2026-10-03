@@ -1,0 +1,48 @@
+# What EAS Build uploads from this repo (only the app in pulso/ is built).
+#
+# It lives at the repo root on purpose: EAS archives the whole repository and
+# only reads .easignore here. Without it, it falls back to the nested
+# .gitignore files — and on Windows those never match (eas-cli compares
+# backslash paths against "pulso/"), which once put pulso/android (1.2 GB) and
+# server/ (including its .env files) into the upload.
+#
+# When this file exists, .gitignore files are NOT used: everything that must
+# stay out has to be listed here.
+
+# Not part of the app
+/server/
+/infra/
+/plans/
+/.agents/
+/.claude/
+/.codex/
+/.github/
+/.git/
+
+# Dependencies and caches
+node_modules/
+/pulso/.expo/
+/pulso/.test-build/
+/pulso/dist/
+/pulso/web-build/
+/pulso/dist-modal-check/
+*.tsbuildinfo
+*.log
+.DS_Store
+
+# Native projects EAS regenerates (prebuild). Not modules/*/android: the
+# widget module's native code is part of the build.
+/pulso/android/
+/pulso/ios/
+/pulso/modules/*/android/build/
+
+# Local secrets and signing material (pulso/.env is public build config and stays)
+.env.local
+.env.*.local
+*.jks
+*.keystore
+*.p8
+*.p12
+*.key
+*.pem
+*.mobileprovision

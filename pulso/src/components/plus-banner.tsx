@@ -42,7 +42,7 @@ export function PlusBanner() {
         }}
       >
         <Image
-          source={require('../../assets/expo.icon/Assets/1000399110(1).png')}
+          source={require('../../assets/brand/pulso-mark.png')}
           style={{ width: 30, height: 30 }}
           contentFit="contain"
           accessibilityLabel="PULSO"
@@ -80,7 +80,7 @@ export function PlusBanner() {
             }}
           >
             <Image
-              source={require('../../assets/expo.icon/Assets/1000399110(1).png')}
+              source={require('../../assets/brand/pulso-mark.png')}
               style={{ width: 34, height: 34 }}
               contentFit="contain"
               accessibilityLabel=""
