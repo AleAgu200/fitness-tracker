@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import { isRunningInExpoGo } from 'expo';
 import { Platform } from 'react-native';
 
@@ -69,6 +70,12 @@ function isSamePush(a: AndroidWidgetPush | null, b: AndroidWidgetPush): boolean 
     a.accent === b.accent;
 }
 
+/** The URL scheme this build registers: `pulso-dev` in dev/preview, `pulso` in production. */
+function appScheme(): string {
+  const scheme = Constants.expoConfig?.scheme;
+  return (Array.isArray(scheme) ? scheme[0] : scheme) ?? 'pulso';
+}
+
 /**
  * Pushes the exercise half of the widget state. The rest countdown is deliberately not
  * part of this: `rest-timer-store` owns the deadline, and the widget's Chronometer ticks
@@ -88,6 +95,8 @@ export function syncWorkoutWidgets(data: WorkoutWidgetData): void {
   }
 
   if (Platform.OS === 'ios' && !isRunningInExpoGo()) {
-    pulsoEntrenoWidget?.updateSnapshot(data);
+    // The widget runs isolated and can't read the app config: hand it the scheme
+    // this build registers, or its links open nothing in the dev/preview variant.
+    pulsoEntrenoWidget?.updateSnapshot({ ...data, scheme: appScheme() });
   }
 }

@@ -44,13 +44,14 @@ function EntrenoWidgetLayout(
   const timerRange = data.restActive && data.restEndAt
     ? { lower: new Date(), upper: new Date(data.restEndAt) }
     : null;
+  const S = data.scheme ?? 'pulso';
   const logDestination = data.currentSlotId
-    ? `pulso://entreno?action=done&slotId=${encodeURIComponent(data.currentSlotId)}`
-    : 'pulso://entreno';
+    ? `${S}://entreno?action=done&slotId=${encodeURIComponent(data.currentSlotId)}`
+    : `${S}://entreno`;
 
   if (data.sessionDone) {
     return (
-      <Link destination="pulso://entreno">
+      <Link destination={`${S}://entreno`}>
         <VStack alignment="leading" spacing={6} modifiers={[padding({ all: 16 }), background(BG)]}>
           <Text modifiers={[font({ size: 18, weight: 'bold' }), foregroundStyle(accent)]}>¡Buen trabajo!</Text>
           <Text modifiers={[font({ size: 12 }), foregroundStyle(TEXT_SECONDARY)]}>Sesión completada</Text>
@@ -63,7 +64,7 @@ function EntrenoWidgetLayout(
 
   if (!data.workoutActive || !data.currentExercise) {
     return (
-      <Link destination="pulso://entreno">
+      <Link destination={`${S}://entreno`}>
         <VStack alignment="leading" spacing={6} modifiers={[padding({ all: 16 }), background(BG)]}>
           <Text modifiers={[font({ size: 17, weight: 'bold' }), foregroundStyle(accent)]}>PULSO</Text>
           <Text modifiers={[font({ size: 13 }), foregroundStyle(TEXT_SECONDARY)]}>Tu próxima sesión está lista.</Text>
@@ -76,7 +77,7 @@ function EntrenoWidgetLayout(
 
   if (isSmall) {
     return (
-      <Link destination="pulso://entreno">
+      <Link destination={`${S}://entreno`}>
         <VStack alignment="center" spacing={5} modifiers={[padding({ all: 16 }), background(BG)]}>
           <Text modifiers={[font({ size: 13, weight: 'bold' }), foregroundStyle(TEXT_PRIMARY)]}>{compactName}</Text>
           <Spacer />
@@ -94,7 +95,7 @@ function EntrenoWidgetLayout(
 
   if (isRoutine) {
     return (
-      <Link destination="pulso://entreno">
+      <Link destination={`${S}://entreno`}>
         <VStack alignment="leading" spacing={7} modifiers={[padding({ all: 16 }), background(BG)]}>
           <HStack>
             <VStack alignment="leading" spacing={3}>
@@ -115,7 +116,7 @@ function EntrenoWidgetLayout(
           <Text modifiers={[font({ size: 11 }), foregroundStyle(TEXT_MUTED)]}>
             {data.nextExercises.length ? `DESPUÉS · ${data.nextExercises.join(' · ')}` : 'ÚLTIMO EJERCICIO'}
           </Text>
-          <Link destination={data.restActive ? 'pulso://entreno?action=skip-rest' : logDestination}>
+          <Link destination={data.restActive ? `${S}://entreno?action=skip-rest` : logDestination}>
             <Text modifiers={[padding({ all: 12 }), background(accent), font({ size: 11, weight: 'bold' }), foregroundStyle(BG)]}>
               {data.restActive ? 'SALTAR DESCANSO' : 'REGISTRAR SERIE'}
             </Text>
@@ -127,7 +128,7 @@ function EntrenoWidgetLayout(
 
   if (isMedium) {
     return (
-      <Link destination="pulso://entreno">
+      <Link destination={`${S}://entreno`}>
         <HStack spacing={14} modifiers={[padding({ all: 16 }), background(BG)]}>
           <VStack alignment="leading" spacing={5}>
             <Text modifiers={[font({ size: 17, weight: 'bold' }), foregroundStyle(TEXT_PRIMARY)]}>{data.currentExercise}</Text>
@@ -149,7 +150,7 @@ function EntrenoWidgetLayout(
               <Text modifiers={[font({ size: 14, weight: 'bold' }), foregroundStyle(accent)]}>LISTO</Text>
             )}
             <Spacer />
-            <Link destination={data.restActive ? 'pulso://entreno?action=skip-rest' : logDestination}>
+            <Link destination={data.restActive ? `${S}://entreno?action=skip-rest` : logDestination}>
               <Text modifiers={[padding({ all: 12 }), background(accent), font({ size: 11, weight: 'bold' }), foregroundStyle(BG)]}>
                 {data.restActive ? 'SALTAR' : 'REGISTRAR'}
               </Text>
@@ -161,7 +162,7 @@ function EntrenoWidgetLayout(
   }
 
   return (
-    <Link destination="pulso://entreno">
+    <Link destination={`${S}://entreno`}>
       <VStack alignment="leading" spacing={9} modifiers={[padding({ all: 18 }), background(BG)]}>
         <HStack>
           <VStack alignment="leading" spacing={4}>
@@ -201,13 +202,13 @@ function EntrenoWidgetLayout(
         <Spacer />
         {data.restActive ? (
           <HStack spacing={8}>
-            <Link destination="pulso://entreno?action=reduce-rest">
+            <Link destination={`${S}://entreno?action=reduce-rest`}>
               <Text modifiers={[padding({ all: 12 }), background(SURFACE), font({ size: 11, weight: 'bold' }), foregroundStyle(TEXT_SECONDARY)]}>−30 s</Text>
             </Link>
-            <Link destination="pulso://entreno?action=skip-rest">
+            <Link destination={`${S}://entreno?action=skip-rest`}>
               <Text modifiers={[padding({ all: 12 }), background(accent), font({ size: 11, weight: 'bold' }), foregroundStyle(BG)]}>SALTAR DESCANSO</Text>
             </Link>
-            <Link destination="pulso://entreno?action=add-rest">
+            <Link destination={`${S}://entreno?action=add-rest`}>
               <Text modifiers={[padding({ all: 12 }), background(SURFACE), font({ size: 11, weight: 'bold' }), foregroundStyle(TEXT_SECONDARY)]}>+30 s</Text>
             </Link>
           </HStack>
@@ -217,7 +218,7 @@ function EntrenoWidgetLayout(
               <Text modifiers={[padding({ all: 12 }), background(accent), font({ size: 11, weight: 'bold' }), foregroundStyle(BG)]}>REGISTRAR SERIE</Text>
             </Link>
             <Spacer />
-            <Link destination="pulso://entreno">
+            <Link destination={`${S}://entreno`}>
               <Text modifiers={[padding({ all: 12 }), background(SURFACE), font({ size: 11, weight: 'semibold' }), foregroundStyle(TEXT_SECONDARY)]}>FINALIZAR EN APP</Text>
             </Link>
           </HStack>

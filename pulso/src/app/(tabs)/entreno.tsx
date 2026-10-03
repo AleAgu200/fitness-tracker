@@ -350,10 +350,9 @@ export default function EntrenoScreen() {
 
     if (restActive && (!wasActive || durationChanged)) {
       const restEndAt = Date.now() + restLeft * 1000;
+      // "Descanso terminado" always; the pinned countdown only with the overlay setting.
       loadRestTimerOverlayPreference()
-        .then(enabled => enabled
-          ? showRestTimerNotification(restEndAt, activeEx?.nombre)
-          : false)
+        .then(withCountdown => showRestTimerNotification(restEndAt, activeEx?.nombre, withCountdown))
         .catch(() => {});
     } else if (wasActive && !restActive) {
       const cleanup = restLeft === 0

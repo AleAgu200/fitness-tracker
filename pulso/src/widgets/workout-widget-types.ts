@@ -30,6 +30,8 @@ export interface WorkoutWidgetData {
   restEndAt: number | null;
   restTotal: number;
   accent: string;
+  /** This build's URL scheme (pulso / pulso-dev), for the iOS widget's links. */
+  scheme?: string;
 }
 
 export const EMPTY_WIDGET_DATA: WorkoutWidgetData = {
