@@ -60,7 +60,7 @@ export function Paywall({ visible, onClose, reason }: { visible: boolean; onClos
           <ScrollView contentContainerStyle={{ padding: 24, gap: 18 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <Image
-                source={require('../../assets/expo.icon/Assets/1000399110(1).png')}
+                source={require('../../assets/brand/pulso-mark.png')}
                 style={{ width: 40, height: 40 }}
                 contentFit="contain"
                 accessibilityLabel="PULSO"
@@ -104,9 +104,15 @@ export function Paywall({ visible, onClose, reason }: { visible: boolean; onClos
             </View>
 
             {!purchasesSupported ? (
-              <Text style={{ fontFamily: F.inter, fontSize: 12, lineHeight: 18, color: C.textTertiary }}>
-                Las compras no están disponibles en esta versión de la app.
-              </Text>
+              // Store billing is off: Plus is only granted by the PULSO team.
+              <View style={{ borderWidth: 1, borderColor: withAlpha(accent, 0.35), padding: 14, gap: 6 }}>
+                <Text style={{ fontFamily: F.interSemi, fontSize: 13, color: C.textPrimary }}>
+                  Plus todavía no se vende en la app
+                </Text>
+                <Text style={{ fontFamily: F.inter, fontSize: 12, lineHeight: 18, color: C.textSecondary }}>
+                  Por ahora lo activa el equipo de PULSO. Si te lo activan, lo vas a ver acá sin hacer nada más.
+                </Text>
+              </View>
             ) : packages.length === 0 ? (
               <Text style={{ fontFamily: F.inter, fontSize: 12, lineHeight: 18, color: C.textTertiary }}>
                 No pudimos cargar los precios. Revisá tu conexión e intentá de nuevo.
@@ -145,15 +151,17 @@ export function Paywall({ visible, onClose, reason }: { visible: boolean; onClos
               <Text style={{ fontFamily: F.inter, fontSize: 12, color: C.red }}>{error}</Text>
             )}
 
-            <Pressable disabled={busy} onPress={onRestore} style={{ paddingVertical: 10 }}>
-              <Text style={{ fontFamily: F.mono, fontSize: 11, letterSpacing: 1, color: C.textTertiary, textAlign: 'center' }}>
-                RESTAURAR COMPRA
-              </Text>
-            </Pressable>
+            {purchasesSupported && (
+              <Pressable disabled={busy} onPress={onRestore} style={{ paddingVertical: 10 }}>
+                <Text style={{ fontFamily: F.mono, fontSize: 11, letterSpacing: 1, color: C.textTertiary, textAlign: 'center' }}>
+                  RESTAURAR COMPRA
+                </Text>
+              </Pressable>
+            )}
 
             <Pressable onPress={onClose} style={{ paddingVertical: 10 }}>
               <Text style={{ fontFamily: F.mono, fontSize: 11, letterSpacing: 1, color: C.textSecondary, textAlign: 'center' }}>
-                AHORA NO
+                {purchasesSupported ? 'AHORA NO' : 'ENTENDIDO'}
               </Text>
             </Pressable>
           </ScrollView>
