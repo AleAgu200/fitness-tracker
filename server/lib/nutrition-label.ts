@@ -1,22 +1,29 @@
-import Anthropic from "@anthropic-ai/sdk";
+import {
+  BedrockRuntimeServiceException,
+  ConverseCommand,
+  type ConverseCommandOutput,
+  type ToolSpecification,
+} from "@aws-sdk/client-bedrock-runtime";
 import { z } from "zod";
 
+import { bedrockApiKey, bedrockClient, DEFAULT_BEDROCK_REGION } from "@/lib/bedrock-client";
 import { draftFromLabel, LabelExtraction, NUTRIENT_KEYS, NutritionDraft } from "@/lib/nutrition-draft";
 
-// Reads a photographed nutrition table with Claude on Amazon Bedrock. The model
-// only transcribes what is printed — through a strict tool schema, since the
-// Bedrock endpoint has no structured-output mode — and every conversion and
-// check runs in code (nutrition-draft.ts). The image is never stored or
-// logged by PULSO; it lives only in this request.
+// Reads a photographed nutrition table with a vision model on Amazon Bedrock
+// (Converse API, shared Bedrock API key). The model only transcribes what is
+// printed — through a forced tool call with a strict schema — and every
+// conversion and check runs in code (nutrition-draft.ts). The image is never
+// stored or logged by PULSO; it lives only in this request.
 //
-// Configuration (server env; nothing is enabled without it):
-//   BEDROCK_API_KEY          Amazon Bedrock API key (AWS_BEARER_TOKEN_BEDROCK also accepted)
-//   BEDROCK_REGION           region the key and model access belong to, e.g. us-east-1
-//   BEDROCK_LABEL_MODEL_ID   optional, defaults to anthropic.claude-opus-5-5
-//   BEDROCK_LABEL_EFFORT     optional, low | medium | high (default medium)
+// Configuration (server env; nothing is enabled without the key):
+//   AWS_BEDROCK_API_KEY      see lib/bedrock-client.ts
+//   BEDROCK_REGION           optional, defaults to AWS_REGION, then us-east-2
+//   BEDROCK_LABEL_MODEL_ID   optional, defaults to Amazon Nova 2 Lite: low cost,
+//                            and it read a test label exactly like larger models
 
-const DEFAULT_MODEL = "anthropic.claude-opus-5-5";
+const DEFAULT_MODEL = "us.amazon.nova-2-lite-v1:0";
 const TOOL_NAME = "record_nutrition_label";
+const TIMEOUT_MS = 60_000;
 
 export class LabelServiceUnavailableError extends Error {
   constructor(reason: string) {
@@ -30,47 +37,24 @@ export class LabelUnreadableError extends Error {
   }
 }
 
-let client: Anthropic | null = null;
-
 function config() {
-  const apiKey = process.env.BEDROCK_API_KEY ?? process.env.AWS_BEARER_TOKEN_BEDROCK;
-  const region = process.env.BEDROCK_REGION ?? process.env.AWS_REGION;
-  const effort = process.env.BEDROCK_LABEL_EFFORT;
   return {
-    apiKey,
-    region,
+    region: process.env.BEDROCK_REGION || process.env.AWS_REGION || DEFAULT_BEDROCK_REGION,
     model: process.env.BEDROCK_LABEL_MODEL_ID || DEFAULT_MODEL,
-    effort: (effort === "low" || effort === "high" ? effort : "medium") as "low" | "medium" | "high",
   };
 }
 
 export function labelReadingConfigured(): boolean {
-  const { apiKey, region } = config();
-  return Boolean(apiKey && region);
-}
-
-function getClient(): Anthropic {
-  const { apiKey, region } = config();
-  if (!apiKey || !region) throw new LabelServiceUnavailableError("label_service_not_configured");
-  // Claude in Amazon Bedrock serves the Messages API; a Bedrock API key is
-  // accepted as the bearer credential on this endpoint.
-  client ??= new Anthropic({
-    apiKey,
-    baseURL: `https://bedrock-mantle.${region}.api.aws/anthropic`,
-    maxRetries: 1,
-    timeout: 90_000,
-  });
-  return client;
+  return bedrockApiKey() != null;
 }
 
 const nullableNumber = { anyOf: [{ type: "number" }, { type: "null" }] };
 const nullableString = { anyOf: [{ type: "string" }, { type: "null" }] };
 
-const LABEL_TOOL: Anthropic.Tool = {
+const LABEL_TOOL: ToolSpecification = {
   name: TOOL_NAME,
   description: "Records exactly what a packaged food's nutrition facts table states. Unknown or unprinted values are null.",
-  strict: true,
-  input_schema: {
+  inputSchema: { json: {
     type: "object",
     properties: {
       isNutritionLabel: { type: "boolean", description: "false when the image is not a legible nutrition facts table." },
@@ -102,7 +86,7 @@ const LABEL_TOOL: Anthropic.Tool = {
       "sodiumMg", "saltG", "uncertainFields",
     ],
     additionalProperties: false,
-  },
+  } },
 };
 
 const SYSTEM = `You transcribe nutrition facts tables from photos of packaged food, for an athlete who will review the result before saving it. Labels may be in Spanish or English and may have several columns.
@@ -139,43 +123,55 @@ const extractionSchema = z.object({
 
 export type LabelMediaType = "image/jpeg" | "image/png" | "image/webp";
 
+const IMAGE_FORMATS = { "image/jpeg": "jpeg", "image/png": "png", "image/webp": "webp" } as const;
+
+/** Bedrock's answer mapped to what the app can say; only the error name is logged. */
+function labelServiceError(error: unknown): Error {
+  const status = error instanceof BedrockRuntimeServiceException ? error.$metadata.httpStatusCode : undefined;
+  const name = error instanceof Error ? error.name : "unknown";
+  if (status === 401 || status === 403 || status === 404) {
+    // Wrong key, model not enabled for the account, or a model ID that doesn't exist.
+    console.error("[nutrition-label] Bedrock rejected the key or model", { status, name });
+    return new LabelServiceUnavailableError("label_service_misconfigured");
+  }
+  if (status === 400) {
+    // Usually an image the model can't take (size/format).
+    console.warn("[nutrition-label] request rejected", { status, name });
+    return new LabelUnreadableError("label_image_rejected");
+  }
+  // Throttling, 5xx, timeouts and network failures: worth retrying later.
+  return new LabelServiceUnavailableError("label_service_busy");
+}
+
 /** Reads one label into a draft. Throws the typed errors above on failure. */
 export async function readNutritionLabel(imageBase64: string, mediaType: LabelMediaType): Promise<NutritionDraft> {
-  const { model, effort } = config();
-  let response: Anthropic.Message;
+  const { model, region } = config();
+  const client = bedrockClient(region);
+  if (!client) throw new LabelServiceUnavailableError("label_service_not_configured");
+
+  let response: ConverseCommandOutput;
   try {
-    response = await getClient().messages.create({
-      model,
-      max_tokens: 16000,
-      output_config: { effort },
-      system: SYSTEM,
-      tools: [LABEL_TOOL],
+    response = await client.send(new ConverseCommand({
+      modelId: model,
+      system: [{ text: SYSTEM }],
       messages: [{
         role: "user",
         content: [
-          { type: "image", source: { type: "base64", media_type: mediaType, data: imageBase64 } },
-          { type: "text", text: `Transcribe this nutrition table with ${TOOL_NAME}.` },
+          { image: { format: IMAGE_FORMATS[mediaType], source: { bytes: Buffer.from(imageBase64, "base64") } } },
+          { text: `Transcribe this nutrition table with ${TOOL_NAME}.` },
         ],
       }],
-    });
+      toolConfig: { tools: [{ toolSpec: LABEL_TOOL }], toolChoice: { tool: { name: TOOL_NAME } } },
+      inferenceConfig: { maxTokens: 2000 },
+    }), { abortSignal: AbortSignal.timeout(TIMEOUT_MS) });
   } catch (error) {
-    if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) {
-      console.error("[nutrition-label] Bedrock rejected the credentials or model access", { status: error.status });
-      throw new LabelServiceUnavailableError("label_service_misconfigured");
-    }
-    if (error instanceof Anthropic.RateLimitError || error instanceof Anthropic.InternalServerError || error instanceof Anthropic.APIConnectionError) {
-      throw new LabelServiceUnavailableError("label_service_busy");
-    }
-    if (error instanceof Anthropic.BadRequestError) {
-      // Usually an image the endpoint can't take (size/format).
-      console.warn("[nutrition-label] request rejected", { status: error.status, message: error.message });
-      throw new LabelUnreadableError("label_image_rejected");
-    }
-    throw error;
+    throw labelServiceError(error);
   }
 
-  if (response.stop_reason === "refusal") throw new LabelUnreadableError("label_declined");
-  const call = response.content.find((block): block is Anthropic.ToolUseBlock => block.type === "tool_use" && block.name === TOOL_NAME);
+  if (response.stopReason === "content_filtered" || response.stopReason === "guardrail_intervened") {
+    throw new LabelUnreadableError("label_declined");
+  }
+  const call = response.output?.message?.content?.find(block => block.toolUse?.name === TOOL_NAME)?.toolUse;
   if (!call) throw new LabelUnreadableError("label_no_result");
   const parsed = extractionSchema.safeParse(call.input);
   if (!parsed.success) throw new LabelUnreadableError("label_invalid_result");
