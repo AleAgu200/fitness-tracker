@@ -33,9 +33,13 @@ export type ScanOutcome =
   | { status: 'busy' }
   | { status: 'invalid' };
 
-/** Whether this draft came from Open Food Facts (anything else with a code can be shared). */
-export function fromOpenFoodFacts(draft: NutritionDraft): boolean {
-  return draft.attribution?.includes('Open Food Facts') ?? false;
+/**
+ * Whether this draft is new to every catalog: read from the label or typed for
+ * a code nobody had. Drafts from Open Food Facts, the shared catalog or Mis
+ * alimentos all carry an attribution and are not offered again.
+ */
+export function isNewBarcodeProduct(draft: NutritionDraft): boolean {
+  return draft.source === 'barcode' && Boolean(draft.sourceRef) && draft.attribution == null;
 }
 
 export interface SharedProduct {
@@ -80,7 +84,7 @@ export function draftFromSavedFood(food: SavedFoodItem): NutritionDraft {
     uncertain: [],
     derived: [],
     energyInconsistent: false,
-    attribution: null,
+    attribution: 'Guardado en Mis alimentos',
   };
 }
 
