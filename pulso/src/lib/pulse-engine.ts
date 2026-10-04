@@ -8,6 +8,7 @@
 
 import { dayStart, mondayOf } from './dates';
 import type { DetailedMuscleKey, EquipmentKind } from './muscles';
+import { estimateOneRepMax, supportsEstimate } from './strength-records';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -17,6 +18,8 @@ export interface TrainingSetEntry {
   weightKg: number;
   reps: number;
   rpe: number | null;
+  /** Warm-ups never count toward estimates or records. */
+  warmup?: boolean;
 }
 
 export interface TrainingExercise {
@@ -24,6 +27,8 @@ export interface TrainingExercise {
   name: string;
   /** First item is the primary muscle; the rest are secondary. */
   muscles: DetailedMuscleKey[];
+  /** Catalog equipment; bodyweight/assisted work has no load-based estimate. */
+  equipment?: string | null;
   sets: TrainingSetEntry[];
 }
 
@@ -499,13 +504,21 @@ export function computeStrengthTrend(sessions: TrainingSession[], now: number, r
     .filter(session => sessionTime(session) >= start && sessionTime(session) <= now)
     .sort((a, b) => sessionTime(a) - sessionTime(b));
 
+  // Shown as "E1RM", so only eligible sets count (lib/strength-records):
+  // working sets with external load and 1–10 reps, never bodyweight work.
   const series = new Map<string, { name: string; points: { at: number; value: number }[] }>();
   for (const session of inRange) {
     for (const exercise of session.exercises) {
-      const top = bestSet(exercise.sets);
-      if (!top || top.weightKg <= 0) continue;
+      if (!supportsEstimate(exercise.equipment)) continue;
+      let best: number | null = null;
+      for (const set of exercise.sets) {
+        if (set.warmup) continue;
+        const estimate = estimateOneRepMax(set.weightKg, set.reps);
+        if (estimate != null && (best == null || estimate > best)) best = estimate;
+      }
+      if (best == null) continue;
       const entry = series.get(exercise.exerciseId) ?? { name: exercise.name, points: [] };
-      entry.points.push({ at: sessionTime(session), value: e1rm(top.weightKg, top.reps) });
+      entry.points.push({ at: sessionTime(session), value: best });
       series.set(exercise.exerciseId, entry);
     }
   }

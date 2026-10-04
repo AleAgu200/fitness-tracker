@@ -12,3 +12,4 @@ export * from "./schema/care";
 export * from "./schema/tracking";
 export * from "./schema/billing";
 export * from "./schema/athlete-sharing";
+export * from "./schema/backup";

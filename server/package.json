@@ -8,7 +8,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test lib/*.test.ts",
-    "test:integration": "node --import tsx --env-file-if-exists=.env.local --env-file-if-exists=.env --test lib/sync.integration.ts lib/professional.integration.ts lib/plans.integration.ts lib/team.integration.ts lib/entitlements.integration.ts lib/athlete-sharing.integration.ts lib/account.integration.ts lib/nutrition-consumption.integration.ts lib/admin.integration.ts lib/community-barcodes.integration.ts",
+    "test:integration": "node --import tsx --env-file-if-exists=.env.local --env-file-if-exists=.env --test lib/sync.integration.ts lib/professional.integration.ts lib/plans.integration.ts lib/team.integration.ts lib/entitlements.integration.ts lib/athlete-sharing.integration.ts lib/account.integration.ts lib/nutrition-consumption.integration.ts lib/admin.integration.ts lib/community-barcodes.integration.ts lib/personal-backup.integration.ts",
     "db:migrate": "drizzle-kit migrate",
     "accounts:purge": "node --import tsx --env-file-if-exists=.env.local --env-file-if-exists=.env scripts/purge-deleted-accounts.ts"
   },
@@ -16,6 +16,7 @@
     "@aws-sdk/client-bedrock-runtime": "^3.1145.0",
     "@aws-sdk/client-s3": "^3.1143.0",
     "@aws-sdk/client-sesv2": "^3.1143.0",
+    "@sentry/nextjs": "^10.76.0",
     "@tailwindcss/postcss": "^4.3.2",
     "@types/better-sqlite3": "^7.6.13",
     "better-auth": "^1.6.22",

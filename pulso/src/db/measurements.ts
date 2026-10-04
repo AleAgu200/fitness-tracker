@@ -26,8 +26,9 @@ export async function logMeasurement(
 ): Promise<void> {
   await db.transaction(async tx => {
     const start = dayStart(new Date());
+    // Only today's entered measurement is edited; an imported one is never overwritten.
     const [existing] = await tx.select().from(bodyMeasurements).where(and(
-      eq(bodyMeasurements.athleteId, athleteId), gte(bodyMeasurements.measuredAt, start),
+      eq(bodyMeasurements.athleteId, athleteId), gte(bodyMeasurements.measuredAt, start), eq(bodyMeasurements.source, 'manual'),
     )).limit(1);
     const now = new Date();
     const id = existing?.id ?? nanoid();

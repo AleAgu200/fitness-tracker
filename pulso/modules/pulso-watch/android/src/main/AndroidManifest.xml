@@ -1,0 +1,13 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <!-- Receives watch commands even when the app is closed; they wait in a queue for the app. -->
+    <service
+        android:name="expo.modules.pulsowatch.PulsoWatchListenerService"
+        android:exported="true">
+      <intent-filter>
+        <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+        <data android:scheme="wear" android:host="*" android:pathPrefix="/pulso/command" />
+      </intent-filter>
+    </service>
+  </application>
+</manifest>

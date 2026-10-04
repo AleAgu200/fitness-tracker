@@ -4,6 +4,8 @@ import { Alert, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BackupSection, ImportDataRow } from '@/components/backup-settings';
+import { DiagnosticsFooter } from '@/components/diagnostics-footer';
 import { Card, Label, PressableScale } from '@/components/ui/kit';
 import { NotificationSettings } from '@/components/notification-settings';
 import { PreferencesSettings } from '@/components/preferences-settings';
@@ -264,6 +266,8 @@ function DataSection() {
         <Text style={{ fontFamily: F.mono, fontSize: 12, color: C.textSecondary }}>↗</Text>
       </PressableScale>
 
+      <ImportDataRow rowStyle={rowStyle} />
+
       {!confirmingDelete ? (
         <PressableScale onPress={() => setConfirmingDelete(true)} style={rowStyle} accessibilityHint="Muestra qué pasa antes de confirmar">
           <View style={{ flex: 1, paddingRight: 10 }}>
@@ -355,6 +359,24 @@ export default function ConfiguracionScreen() {
 
         <TrainingPlanSection />
 
+        <View style={{ marginBottom: 20 }}>
+          <Label style={{ marginBottom: 9 }}>SALUD DEL TELÉFONO</Label>
+          <PressableScale
+            onPress={() => router.push('/salud' as any)}
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: C.card, borderWidth: 1, borderColor: C.border, padding: 14, paddingHorizontal: 16 }}
+          >
+            <View style={{ flex: 1, paddingRight: 10 }}>
+              <Text style={{ fontFamily: F.interSemi, fontSize: 14, color: C.textPrimary }}>Health Connect / Salud de Apple</Text>
+              <Text style={{ fontFamily: F.inter, fontSize: 12, color: C.textTertiary, marginTop: 3 }}>
+                Pasos, peso, sueño y pulso; guardar tus entrenos. Todo opcional
+              </Text>
+            </View>
+            <Text style={{ fontFamily: F.mono, fontSize: 12, color: C.textSecondary }}>→</Text>
+          </PressableScale>
+        </View>
+
+        <BackupSection />
+
         <DataSection />
 
         {/* CUENTA */}
@@ -372,6 +394,8 @@ export default function ConfiguracionScreen() {
             <Text style={{ fontFamily: F.mono, fontSize: 12, color: C.red }}>→</Text>
           </PressableScale>
         </View>
+
+        <DiagnosticsFooter />
       </View>
     </ScrollView>
   );
