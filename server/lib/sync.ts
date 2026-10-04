@@ -180,7 +180,35 @@ function utcDate(timestamp: number): string {
   return new Date(timestamp).toISOString().slice(0, 10);
 }
 
-async function ensureWriterDevice(athleteId: string, deviceId: string, schemaVersion: number) {
+/**
+ * Makes this device the athlete's only writer, explicitly. Used when a phone
+ * restores a backup or replaces a lost one: the previous writer is marked
+ * replaced (its history stays), and from then on only this device may push.
+ * A device id that belongs to another account is refused.
+ */
+export async function claimWriterDevice(athleteId: string, deviceId: string, schemaVersion: number): Promise<{ replaced: number }> {
+  return db.transaction(async (tx) => {
+    const [sameId] = await tx.select().from(syncDevices).where(eq(syncDevices.id, deviceId)).for("update");
+    if (sameId && sameId.athleteId !== athleteId) throw new WriterDeviceConflictError();
+    const now = Date.now();
+    const replaced = await tx.update(syncDevices)
+      .set({ status: "replaced", replacedAt: now })
+      .where(and(eq(syncDevices.athleteId, athleteId), eq(syncDevices.status, "active_writer"), sql`${syncDevices.id} <> ${deviceId}`))
+      .returning({ id: syncDevices.id });
+    if (sameId) {
+      await tx.update(syncDevices)
+        .set({ status: "active_writer", schemaVersion, lastSeenAt: now, replacedAt: null, revokedAt: null })
+        .where(eq(syncDevices.id, deviceId));
+    } else {
+      await tx.insert(syncDevices).values({
+        id: deviceId, athleteId, status: "active_writer", schemaVersion, registeredAt: now, lastSeenAt: now,
+      });
+    }
+    return { replaced: replaced.length };
+  });
+}
+
+export async function ensureWriterDevice(athleteId: string, deviceId: string, schemaVersion: number) {
   const [active] = await db.select().from(syncDevices).where(and(
     eq(syncDevices.athleteId, athleteId),
     eq(syncDevices.status, "active_writer"),

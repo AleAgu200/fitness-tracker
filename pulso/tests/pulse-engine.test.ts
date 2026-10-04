@@ -172,6 +172,18 @@ describe('computeStrengthTrend', () => {
   it('has no trend without repeated movements', () => {
     assert.equal(computeStrengthTrend(fixtures.newUser, NOW, 7).deltaPct, null);
   });
+
+  it('estimates only from eligible working sets', () => {
+    const warmupThenWork = [{ weightKg: 120, reps: 3, rpe: null, warmup: true }, ...sets([60, 8])];
+    const trend = computeStrengthTrend([
+      session(daysAgo(20), [row(warmupThenWork), { ...row(sets([10, 12])), exerciseId: 'dips', name: 'Fondos', equipment: 'bodyweight' }]),
+      session(daysAgo(2), [row([...sets([40, 15]), ...sets([62.5, 8])]), { ...row(sets([10, 14])), exerciseId: 'dips', name: 'Fondos', equipment: 'bodyweight' }]),
+    ], NOW, 28);
+    assert.deepEqual(trend.movements.map(movement => movement.name), ['Remo con barra']);
+    // 62.5 × (1 + 8/30) = 79.2: the 15-rep set and the 120 kg warm-up are ignored.
+    assert.equal(trend.movements[0].currentE1rm, 79.2);
+    assert.equal(trend.movements[0].deltaPct, 4.2);
+  });
 });
 
 describe('generateFreeSession', () => {

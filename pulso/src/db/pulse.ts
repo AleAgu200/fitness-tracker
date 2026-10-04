@@ -88,10 +88,12 @@ async function attachSets(sessionRows: SessionRow[]): Promise<TrainingSession[]>
       exerciseOrder: loggedExercises.exerciseOrder,
       name: exercises.name,
       muscleGroup: exercises.muscleGroup,
+      equipment: exercises.equipment,
       setNumber: loggedSets.setNumber,
       weightKg: loggedSets.weightKg,
       reps: loggedSets.reps,
       rpe: loggedSets.rpe,
+      setType: loggedSets.setType,
     })
     .from(loggedSets)
     .innerJoin(loggedExercises, eq(loggedSets.loggedExerciseId, loggedExercises.id))
@@ -119,11 +121,12 @@ async function attachSets(sessionRows: SessionRow[]): Promise<TrainingSession[]>
         exerciseId: row.exerciseId,
         name: row.name,
         muscles: inferExerciseMuscles(row.name, row.muscleGroup),
+        equipment: row.equipment,
         sets: [],
       };
       session.exercises.push(exercise);
     }
-    exercise.sets.push({ weightKg: row.weightKg, reps: row.reps, rpe: row.rpe });
+    exercise.sets.push({ weightKg: row.weightKg, reps: row.reps, rpe: row.rpe, warmup: row.setType === 'warmup' });
   }
   return [...bySession.values()];
 }

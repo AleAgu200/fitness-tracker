@@ -63,6 +63,7 @@ import {
   FreeSessionExercise,
   getPreviousExerciseSession,
   getPRHistory,
+  upgradeLegacyRecords,
   getTodayPlan,
   getTodaySession,
   logSet,
@@ -70,7 +71,11 @@ import {
   previousPulseRef,
   PRHistoryItem,
   startFreeSession as dbStartFreeSession,
+  undoSet as dbUndoSet,
 } from '@/db/workout';
+import { isRecoverySettled } from '@/lib/account-recovery';
+import { maybeAutoBackup } from '@/lib/backup';
+import { onSessionCompleted, refreshHealth } from '@/lib/health/sync';
 import { CLEARED_REST_STATE, loadRestTimerState, RestTimerState, saveRestTimerState } from '@/lib/rest-timer-store';
 import { addWidgetRestListener } from '@/modules/pulso-widget';
 import { getStoredAssignmentMeta, syncAssignments, syncMobileData, type ScheduledPlan } from '@/lib/sync';
@@ -344,6 +349,13 @@ interface AppContextValue {
   addRest: () => void;
   reduceRest: () => void;
   skipRest: () => void;
+  /** Watch companion: log a set with the watch's values; returns the stored set ID. */
+  logSetFromWatch: (input: { slotId: string; weightKg: number; reps: number; commandId: string }) => Promise<string | null>;
+  /** Watch companion: remove a set it logged (throws UndoRefusedError with the reason). */
+  undoSetFromWatch: (input: { slotId: string; setId: string; commandId: string }) => Promise<void>;
+  startRestFor: (seconds: number) => void;
+  /** The plan template today's session follows, for the watch's session key. */
+  currentTemplateId: () => string | null;
   addRecommendedExercise: (exercise: {
     name: string;
     sets: number;
@@ -453,6 +465,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           assignedMealsBy = meta.mealsBy;
         }
         await syncMobileData(userId);
+        // Daily personal copy (consent + Plus), never before recovery is settled.
+        void maybeAutoBackup(userId, () => isRecoverySettled(userId));
+        void refreshHealth(userId);
         const mealPlan = await getMealPlanForDate(userId, todayStr());
 
         // Sequential on purpose: each may create the default program, and two
@@ -470,6 +485,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             getMetricHistories(userId),
             getPhotos(userId),
           ]);
+        // Once: records from before heaviest load and best estimate were kept apart.
+        await upgradeLegacyRecords(userId).catch(e => console.error('[records-upgrade]', e));
         const [racha, weekDays, heatmap, sessionsCount, earned, prHistory, trainingSessions] =
           await Promise.all([
             computeStreak(userId),
@@ -931,7 +948,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (nextAppState === 'active') {
         reconcile();
         const uid = userRef.current;
-        if (uid) syncMobileData(uid).catch(() => {});
+        if (uid) {
+          syncMobileData(uid)
+            .then(() => maybeAutoBackup(uid, () => isRecoverySettled(uid)))
+            .catch(() => {});
+          void refreshHealth(uid);
+        }
       }
     });
     // Covers the case the AppState listener misses: a widget button tapped while the app
@@ -1040,8 +1062,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       showSetFeedback({ kind: beating ? 'beat' : 'saved', setNumber, exercise: ex.nombre, weightKg: peso });
 
       logSet(uid, templateIdRef.current, { slotId: ex.id, exerciseId: ex.exerciseId }, { peso, reps, rpe, workingSeconds })
-        .then(({ isPR }) => {
-          if (!isPR) return;
+        .then(({ isPR, isEstimatePR }) => {
+          // A lighter set can still raise the estimate: refresh records quietly.
+          if (!isPR) return isEstimatePR ? refreshDerived() : undefined;
           setState(st => {
             const sets = [...(st.log[ex.id] || [])];
             if (sets.length) sets[sets.length - 1] = { ...sets[sets.length - 1], pr: true };
@@ -1085,6 +1108,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const session = await getTodaySession(uid);
       if (!session) return null;
       await dbFinishSession(session.sessionId);
+      // Written to Health Connect / Apple Health only when the athlete allowed it.
+      void onSessionCompleted(uid, session.sessionId).catch(() => {});
       try {
         await createSessionCard(uid, session.sessionId);
       } catch (e) {
@@ -1245,6 +1270,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, restLeft: left, restActive: true }));
   }, []);
 
+  const logSetFromWatch = useCallback(async (input: { slotId: string; weightKg: number; reps: number; commandId: string }) => {
+    const uid = userRef.current;
+    const ex = stateRef.current.exercises.find(item => item.id === input.slotId);
+    if (!uid || !ex) return null;
+    // Same defaults as the widget quick-log: the watch has no RPE stepper.
+    const result = await logSet(uid, templateIdRef.current, { slotId: ex.id, exerciseId: ex.exerciseId },
+      { peso: input.weightKg, reps: input.reps, rpe: 8, workingSeconds: null }, { watchCommandId: input.commandId });
+    const set: ExerciseSet = { reps: input.reps, peso: input.weightKg, rpe: 8, pr: result.isPR, workingSeconds: null };
+    setState(st => ({ ...st, log: { ...st.log, [ex.id]: [...(st.log[ex.id] || []), set] }, sessionDone: false }));
+    startRest(REST_DEFAULT);
+    refreshDerived().catch(() => {});
+    return result.setId;
+  }, [startRest, refreshDerived]);
+
+  const undoSetFromWatch = useCallback(async (input: { slotId: string; setId: string; commandId: string }) => {
+    const uid = userRef.current;
+    if (!uid) return;
+    await dbUndoSet(uid, input.slotId, input.setId, { watchCommandId: input.commandId });
+    setState(st => ({ ...st, log: { ...st.log, [input.slotId]: (st.log[input.slotId] || []).slice(0, -1) } }));
+    refreshDerived().catch(() => {});
+  }, [refreshDerived]);
+
+  const startRestFor = useCallback((seconds: number) => startRest(seconds), [startRest]);
+  const currentTemplateId = useCallback(() => templateIdRef.current, []);
+
   const skipRest = useCallback(() => {
     if (restTimer.current) clearInterval(restTimer.current);
     restEndAtRef.current = null;
@@ -1330,6 +1380,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       createTrainingPlan, activateMealPlan, createMealPlan,
       startEditEx, startAddEx, cancelExForm, saveEditEx, saveAddEx, deleteEx,
       addRest, reduceRest, skipRest,
+      logSetFromWatch, undoSetFromWatch, startRestFor, currentTemplateId,
       addRecommendedExercise,
       setMetric, incWeighIn, decWeighIn, registrarPeso, addProgressPhoto,
     }}>

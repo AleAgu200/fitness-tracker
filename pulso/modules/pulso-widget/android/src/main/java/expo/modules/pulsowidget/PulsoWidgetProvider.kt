@@ -308,10 +308,31 @@ abstract class PulsoWidgetProvider(private val variant: PulsoWidgetVariant) : Ap
      * the body tap / "✓ LISTO" / "■ FIN" pending intents don't collide.
      */
     private fun openAppIntent(context: Context, path: String = "entreno"): PendingIntent {
-      val intent = Intent(Intent.ACTION_VIEW, Uri.parse("pulso://$path"))
+      // Scoped to this package: with the dev and production apps both installed, a
+      // bare pulso:// link could open the other one.
+      val intent = Intent(Intent.ACTION_VIEW, Uri.parse("${appScheme(context)}://$path"))
+        .setPackage(context.packageName)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
       return PendingIntent.getActivity(context, path.hashCode(), intent, pendingIntentFlags())
     }
+
+    /**
+     * The URL scheme this build registers: "pulso" in production, "pulso-dev" in the
+     * development/preview variant (app.config.ts). Hard-coding "pulso" broke every
+     * widget button in EAS preview builds, which only register "pulso-dev".
+     */
+    private fun appScheme(context: Context): String {
+      cachedScheme?.let { return it }
+      val scheme = listOf("pulso-dev", "pulso").firstOrNull { candidate ->
+        Intent(Intent.ACTION_VIEW, Uri.parse("$candidate://entreno"))
+          .setPackage(context.packageName)
+          .resolveActivity(context.packageManager) != null
+      } ?: "pulso"
+      cachedScheme = scheme
+      return scheme
+    }
+
+    private var cachedScheme: String? = null
 
     private fun broadcast(context: Context, action: String): PendingIntent {
       val intent = Intent(context, PulsoWidgetLargeProvider::class.java).setAction(action)

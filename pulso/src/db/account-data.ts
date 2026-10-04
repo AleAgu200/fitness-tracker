@@ -6,6 +6,7 @@
 import { eq, inArray, or, SQL, sql } from 'drizzle-orm';
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core';
 
+import { collectHealthData, wipeHealthData } from './health';
 import { db } from './index';
 import {
   aiContextSnapshots,
@@ -30,6 +31,7 @@ import {
   mealLogEntries,
   mealPlans,
   mealSlots,
+  mealSlotSkips,
   nutritionSettings,
   onboardingState,
   personalRecords,
@@ -43,6 +45,7 @@ import {
   syncOutbox,
   syncState,
   templateExerciseSlots,
+  watchCommands,
   waterLogs,
   weeklySummaries,
   workoutSessions,
@@ -50,11 +53,11 @@ import {
 } from './schema';
 
 /** `column IN ids`, or a never-true condition for an empty list. */
-function within(column: SQLiteColumn, ids: string[]): SQL {
+export function within(column: SQLiteColumn, ids: string[]): SQL {
   return ids.length ? inArray(column, ids) : sql`0`;
 }
 
-async function ownedIds(userId: string) {
+export async function ownedIds(userId: string) {
   const [programRows, sessionRows, mealPlanRows, dailyLogRows, requestRows, recommendationRows] = await Promise.all([
     db.select({ id: programs.id }).from(programs).where(eq(programs.athleteId, userId)),
     db.select({ id: workoutSessions.id, templateId: workoutSessions.templateId }).from(workoutSessions).where(eq(workoutSessions.athleteId, userId)),
@@ -91,7 +94,7 @@ export async function collectLocalData(userId: string) {
   const [
     profile, measurements, photos, checkIns, achievements, messages,
     plans, phases, templates, slots, sessions, logged, sets, records, cards, summaries,
-    mealPlanRows, slotsMeals, dailyLogs, mealEntries, water,
+    mealPlanRows, slotsMeals, slotSkips, dailyLogs, mealEntries, water,
     consumed, containers, foods, nutritionPrefs,
     requests, responses, care, consents, recommendations, feedback, onboarding, generation,
   ] = await Promise.all([
@@ -113,6 +116,9 @@ export async function collectLocalData(userId: string) {
     db.select().from(weeklySummaries).where(eq(weeklySummaries.athleteId, userId)),
     db.select().from(mealPlans).where(within(mealPlans.id, ids.mealPlanIds)),
     db.select().from(mealSlots).where(within(mealSlots.mealPlanId, ids.mealPlanIds)),
+    db.select({ id: mealSlotSkips.id, slotId: mealSlotSkips.slotId, date: mealSlotSkips.date, createdAt: mealSlotSkips.createdAt })
+      .from(mealSlotSkips).innerJoin(mealSlots, eq(mealSlotSkips.slotId, mealSlots.id))
+      .where(within(mealSlots.mealPlanId, ids.mealPlanIds)),
     db.select().from(dailyNutritionLogs).where(within(dailyNutritionLogs.id, ids.dailyLogIds)),
     db.select().from(mealLogEntries).where(within(mealLogEntries.dailyLogId, ids.dailyLogIds)),
     db.select().from(waterLogs).where(eq(waterLogs.athleteId, userId)),
@@ -148,12 +154,14 @@ export async function collectLocalData(userId: string) {
       weeklySummaries: summaries,
     },
     nutrition: {
-      mealPlans: mealPlanRows, mealSlots: slotsMeals, dailyLogs, mealEntries, water,
+      mealPlans: mealPlanRows, mealSlots: slotsMeals, mealSlotSkips: slotSkips, dailyLogs, mealEntries, water,
       consumptions: consumed, containers, savedFoods: foods, settings: nutritionPrefs[0] ?? null,
     },
     team: { careAssignments: care, sharingConsents: consents, checkinRequests: requests, checkinResponses: responses, messages },
     ai: { recommendations, feedback },
     onboarding: { state: onboarding[0] ?? null, generationProfile: generation[0] ?? null },
+    // Health Connect / Apple Health imports, manual sleep and workout exports.
+    health: await collectHealthData(userId),
   };
 }
 
@@ -174,6 +182,9 @@ export async function wipeLocalData(userId: string): Promise<void> {
 
     await tx.delete(mealLogEntries).where(within(mealLogEntries.dailyLogId, ids.dailyLogIds));
     await tx.delete(dailyNutritionLogs).where(within(dailyNutritionLogs.id, ids.dailyLogIds));
+    // Date exceptions first: foreign_keys isn't guaranteed ON, so no cascade.
+    const slotIds = (await tx.select({ id: mealSlots.id }).from(mealSlots).where(within(mealSlots.mealPlanId, ids.mealPlanIds))).map(row => row.id);
+    await tx.delete(mealSlotSkips).where(within(mealSlotSkips.slotId, slotIds));
     await tx.delete(mealSlots).where(within(mealSlots.mealPlanId, ids.mealPlanIds));
     await tx.delete(mealPlans).where(within(mealPlans.id, ids.mealPlanIds));
     await tx.delete(waterLogs).where(eq(waterLogs.athleteId, userId));
@@ -196,6 +207,7 @@ export async function wipeLocalData(userId: string): Promise<void> {
     await tx.delete(localCareAssignments).where(eq(localCareAssignments.athleteId, userId));
     await tx.delete(localSharingConsents).where(eq(localSharingConsents.athleteId, userId));
     await tx.delete(syncOutbox).where(eq(syncOutbox.athleteId, userId));
+    await tx.delete(watchCommands).where(eq(watchCommands.athleteId, userId));
     await tx.delete(syncState).where(eq(syncState.athleteId, userId));
     await tx.delete(devices).where(eq(devices.userId, userId));
     await tx.delete(onboardingState).where(eq(onboardingState.userId, userId));
@@ -203,4 +215,5 @@ export async function wipeLocalData(userId: string): Promise<void> {
     await tx.delete(athleteProfiles).where(eq(athleteProfiles.userId, userId));
     await tx.delete(coachProfiles).where(eq(coachProfiles.userId, userId));
   });
+  await wipeHealthData(userId);
 }

@@ -38,6 +38,8 @@ import {
   trainingSessions,
   trainingSets,
   user,
+  personalBackups,
+  personalBackupSettings,
 } from "@/db/schema";
 
 /** Time the athlete has to change their mind before the purge. */
@@ -280,6 +282,7 @@ export async function exportAccountData(userId: string) {
   const [
     profile, measurements, sessions, sets, nutrition, summaries, consents, care, checkins, notes,
     workouts, mealPlans, conversation, subscription, cards, planSelection, mealPlanSelection, consumed,
+    backupSettings, backupCopies,
   ] = await Promise.all([
     db.select().from(athleteProfiles).where(eq(athleteProfiles.userId, userId)),
     db.select().from(bodyMeasurements).where(eq(bodyMeasurements.athleteId, userId)).orderBy(asc(bodyMeasurements.measuredAt)),
@@ -312,6 +315,11 @@ export async function exportAccountData(userId: string) {
     db.select().from(athletePlanSelections).where(eq(athletePlanSelections.athleteId, userId)),
     db.select().from(athleteMealPlanSelections).where(eq(athleteMealPlanSelections.athleteId, userId)),
     db.select().from(nutritionConsumptions).where(eq(nutritionConsumptions.athleteId, userId)).orderBy(asc(nutritionConsumptions.localDate)),
+    db.select({ enabled: personalBackupSettings.enabled, consentedAt: personalBackupSettings.consentedAt, disabledAt: personalBackupSettings.disabledAt })
+      .from(personalBackupSettings).where(eq(personalBackupSettings.userId, userId)),
+    // What copies exist, not their contents: the phone's own data is already in the export.
+    db.select({ revision: personalBackups.revision, createdAt: personalBackups.createdAt, sizeBytes: personalBackups.sizeBytes, manifest: personalBackups.manifest })
+      .from(personalBackups).where(eq(personalBackups.userId, userId)).orderBy(asc(personalBackups.revision)),
   ]);
 
   const organizationNames = new Map(clients.map(client => [client.organizationId, client.organizationName]));
@@ -340,5 +348,6 @@ export async function exportAccountData(userId: string) {
     sharedCards: cards,
     planSelection: planSelection[0] ?? null,
     mealPlanSelection: mealPlanSelection[0] ?? null,
+    personalBackup: { settings: backupSettings[0] ?? null, copies: backupCopies },
   };
 }

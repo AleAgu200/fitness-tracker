@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Simple pulse mark for the watch launcher; replace with the brand asset when exporting it for Wear OS. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path
+        android:fillColor="#000000"
+        android:pathData="M24,0a24,24 0,1 0,0.01 0z" />
+    <path
+        android:strokeColor="#3DDCFF"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M10,25h7l3,-8l5,15l4,-11l2,4h7" />
+</vector>

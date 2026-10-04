@@ -8,6 +8,7 @@ import * as Sharing from 'expo-sharing';
 import { collectLocalData, wipeLocalData } from '@/db/account-data';
 import { dateStr } from './dates';
 import { clearDiscomfort } from './discomfort';
+import { clearRecoveryState } from './account-recovery';
 import { ApiError, apiFetch } from './api';
 import { clearAssignmentMeta } from './sync';
 
@@ -45,7 +46,7 @@ export async function requestDeletion(userId: string): Promise<PendingDeletion> 
     throw error;
   }
   await wipeLocalData(userId);
-  await Promise.all([clearAssignmentMeta(userId), clearDiscomfort(userId)]);
+  await Promise.all([clearAssignmentMeta(userId), clearDiscomfort(userId), clearRecoveryState(userId)]);
   return deletion;
 }
 

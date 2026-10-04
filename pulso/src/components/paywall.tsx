@@ -9,15 +9,15 @@ import { usePreferences } from '@/context/preferences';
 import { purchasesSupported } from '@/lib/purchases';
 
 /**
- * Only list what actually ships today. Cloud backup and data export are planned
- * but not implemented, and advertising them here would be charging for
- * something that does not exist — which is also grounds for store rejection.
- * Add them back the moment they work.
+ * Only list what actually ships today: advertising something that does not
+ * exist is charging for nothing, and grounds for store rejection. Data export
+ * and restoring a backup are free for everyone, so they are not listed.
  */
 const BENEFITS = [
   { title: 'Planes con IA sin límite', detail: 'Regenerá y ajustá tu plan cuando cambie tu objetivo.' },
   { title: 'Sin anuncios', detail: 'Entrá directo al entreno, sin esperas.' },
   { title: 'Planes propios sin límite', detail: 'Guardá varios planes de entreno y de dieta y alterná entre ellos.' },
+  { title: 'Respaldo diario en tu cuenta', detail: 'Recuperá tu historial y tus planes en otro teléfono. Restaurar es gratis aunque Plus venza.' },
 ];
 
 /**

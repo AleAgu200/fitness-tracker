@@ -4,7 +4,10 @@ import { ScrollView, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { HydrationPanel } from '@/components/nutrition/hydration-panel';
+import { UndoState, UndoToast } from '@/components/nutrition/undo-toast';
 import { PulseCore } from '@/components/pulse/pulse-core';
+import { SleepCard } from '@/components/sleep-card';
 import { SignalStrip } from '@/components/pulse/signal-strip';
 import { Card, Label, PressableScale, SMALL_TARGET_HIT_SLOP } from '@/components/ui/kit';
 import { F, useColors } from '@/constants/colors';
@@ -12,10 +15,11 @@ import { Exercise, useApp } from '@/context/app-state';
 import { PlanGenerationJob, useOnboardingGeneration } from '@/context/onboarding-generation';
 import { usePreferences } from '@/context/preferences';
 import { useSession } from '@/context/session';
+import { deleteConsumption } from '@/db/consumption';
 import { getWeeklySummary } from '@/db/pulse';
 import { getSyncSummary } from '@/db/sync';
 import { usePulse } from '@/hooks/use-pulse';
-import { addDays, dateStr, mondayOf, WEEKDAY_LABELS, weekdayOf } from '@/lib/dates';
+import { addDays, dateStr, mondayOf, todayStr, WEEKDAY_LABELS, weekdayOf } from '@/lib/dates';
 import { DETAILED_MUSCLE_LABELS, inferExerciseMuscles } from '@/lib/muscles';
 import { sessionTime } from '@/lib/pulse-engine';
 
@@ -136,7 +140,7 @@ function useWeeklyStrip(userId: string | null, plannedDays: number, now: number)
 }
 
 export default function HoyScreen() {
-  const { state } = useApp();
+  const { state, reloadNutritionToday } = useApp();
   const {
     job: generationJob,
     connectionIssue,
@@ -150,6 +154,8 @@ export default function HoyScreen() {
   const syncLine = useSyncLine(userId);
   const weekly = useWeeklyStrip(userId, state.plannedDaysPerWeek, now);
   const [generationNow, setGenerationNow] = useState(() => Date.now());
+  const [undo, setUndo] = useState<UndoState | null>(null);
+  const dismissUndo = useCallback(() => setUndo(null), []);
 
   const generationActive = generationJob?.status === 'queued' || generationJob?.status === 'running';
   useEffect(() => {
@@ -175,10 +181,12 @@ export default function HoyScreen() {
     session.status === 'completed' && new Date(sessionTime(session)).toDateString() === today.toDateString());
 
   return (
+    <View style={{ flex: 1, backgroundColor: C.bg }}>
     <ScrollView
-      style={{ flex: 1, backgroundColor: C.bg }}
+      style={{ flex: 1 }}
       contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
       showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
     >
       <View style={{ paddingTop: insets.top + 16, paddingHorizontal: 16 }}>
 
@@ -321,8 +329,41 @@ export default function HoyScreen() {
             <Text style={{ fontFamily: F.mono, fontSize: 16, color: C.textSecondary }}>→</Text>
           </PressableScale>
         )}
+
+        {/* LÍQUIDOS — the same panel, totals and goal as Dieta (one source: today's consumptions) */}
+        {state.ready && (
+          <View style={{ marginTop: 14 }}>
+            <HydrationPanel
+              localDate={todayStr()}
+              totalMl={state.hydration.totalMl}
+              plainWaterMl={state.hydration.plainWaterMl}
+              goalMl={state.hydration.goalMl}
+              onLogged={(id, message) => {
+                reloadNutritionToday().catch(e => console.error('[drink-refresh]', e));
+                setUndo({
+                  key: Date.now(),
+                  message,
+                  undo: () => {
+                    if (!userId) return;
+                    deleteConsumption(userId, id).then(reloadNutritionToday).catch(e => console.error('[undo]', e));
+                  },
+                });
+              }}
+              onGoalChanged={() => { reloadNutritionToday().catch(e => console.error('[goal]', e)); }}
+            />
+          </View>
+        )}
+
+        {/* SUEÑO — manual or from the phone's health store; shown, not scored */}
+        {state.ready && (
+          <View style={{ marginTop: 14 }}>
+            <SleepCard />
+          </View>
+        )}
       </View>
     </ScrollView>
+    <UndoToast state={undo} onDismiss={dismissUndo} />
+    </View>
   );
 }
 

@@ -65,9 +65,16 @@ export const personalRecords = sqliteTable('personal_records', {
   exerciseId: text('exercise_id')
                 .notNull()
                 .references(() => exercises.id, { onDelete: 'cascade' }),
+  // Heaviest external load (any rep count) — weightKg/reps/achievedAt/sessionId.
   weightKg:   real('weight_kg').notNull(),
   reps:       integer('reps').notNull(),
+  // Best estimated 1RM over eligible working sets (lib/strength-records); may
+  // come from a lighter, higher-rep set than the heaviest. Null when no set
+  // qualifies (bodyweight, >10 reps only, no load).
   e1rm:       real('e1rm'),
+  e1rmWeightKg:   real('e1rm_weight_kg'),
+  e1rmReps:       integer('e1rm_reps'),
+  e1rmAchievedAt: integer('e1rm_achieved_at', { mode: 'timestamp_ms' }),
   achievedAt: integer('achieved_at', { mode: 'timestamp_ms' }).notNull(),
   sessionId:  text('session_id'),
 }, t => [
@@ -153,6 +160,9 @@ export const loggedSets = sqliteTable('logged_sets', {
   reps:             integer('reps').notNull(),
   rpe:              integer('rpe'),
   isPR:             integer('is_pr', { mode: 'boolean' }).notNull().default(false),
+  // Warm-ups never count toward records or estimates. Sets logged before this
+  // column existed are working sets: the app had no way to log a warm-up.
+  setType:          text('set_type', { enum: ['working', 'warmup'] }).notNull().default('working'),
   workingSeconds:   integer('working_seconds'),
   completedAt:      integer('completed_at', { mode: 'timestamp_ms' }).notNull(),
 });
@@ -192,3 +202,20 @@ export type PersonalRecord = typeof personalRecords.$inferSelect;
 export type Program        = typeof programs.$inferSelect;
 export type SessionCardRow = typeof sessionCards.$inferSelect;
 
+
+/**
+ * Commands received from a watch, one row per command ID. Written in the same
+ * transaction as their effect, so a redelivered command is answered from here
+ * and never applied twice.
+ */
+export const watchCommands = sqliteTable('watch_commands', {
+  commandId:  text('command_id').primaryKey(),
+  athleteId:  text('athlete_id').notNull(),
+  type:       text('type').notNull(),
+  status:     text('status', { enum: ['saved', 'rejected'] }).notNull(),
+  reason:     text('reason'),
+  setId:      text('set_id'),
+  receivedAt: integer('received_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+export type WatchCommandRow = typeof watchCommands.$inferSelect;

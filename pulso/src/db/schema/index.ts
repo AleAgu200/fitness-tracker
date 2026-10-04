@@ -6,3 +6,4 @@ export * from './habits';
 export * from './ai';
 export * from './onboarding';
 export * from './sync';
+export * from './health';

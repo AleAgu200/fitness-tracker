@@ -8,6 +8,7 @@ import {
   shouldShowOnboarding,
 } from '@/db/onboarding';
 import { getPendingDeletion } from '@/lib/account';
+import { routeRecovery } from '@/lib/account-recovery';
 import { syncAthleteProfile } from '@/lib/profile-sync';
 
 const ONBOARDING_ROUTES: Record<OnboardingStep, string> = {
@@ -48,6 +49,23 @@ export default function Index() {
           }
         } catch (error) {
           console.warn('[account-deletion] status check deferred', error);
+        }
+
+        // A new phone for a returning athlete: offer their personal backup
+        // before anything treats them as new. A failed lookup is a retry
+        // screen, never onboarding.
+        const recovery = await routeRecovery(userId);
+        if (cancelled) return;
+        if (recovery.kind === 'offer_restore') {
+          router.replace({
+            pathname: '/recuperar',
+            params: { state: 'offer', revision: String(recovery.revision), createdAt: String(recovery.createdAt), totalRows: String(recovery.totalRows) },
+          });
+          return;
+        }
+        if (recovery.kind === 'retry') {
+          router.replace({ pathname: '/recuperar', params: { state: 'retry' } });
+          return;
         }
 
         try {

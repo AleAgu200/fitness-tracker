@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 
 import { nanoid } from '@/lib/id';
 import { db } from './index';
@@ -91,6 +91,11 @@ export async function getAthleteProfile(userId: string) {
   return rows[0] ?? null;
 }
 
+/**
+ * Latest weight the athlete entered in PULSO. Imported weights (Health
+ * Connect / Apple Health) are left out on purpose: this value is synced to the
+ * server profile, and imported data stays on the phone.
+ */
 export async function getLatestWeightMeasurement(athleteId: string): Promise<WeightMeasurementRecord | null> {
   const rows = await db
     .select({
@@ -99,7 +104,7 @@ export async function getLatestWeightMeasurement(athleteId: string): Promise<Wei
       weightKg: bodyMeasurements.weightKg,
     })
     .from(bodyMeasurements)
-    .where(eq(bodyMeasurements.athleteId, athleteId))
+    .where(and(eq(bodyMeasurements.athleteId, athleteId), eq(bodyMeasurements.source, 'manual')))
     .orderBy(desc(bodyMeasurements.measuredAt))
     .limit(1);
   return rows[0] ?? null;

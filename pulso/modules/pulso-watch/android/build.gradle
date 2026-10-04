@@ -1,0 +1,24 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.pulsowatch'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.pulsowatch"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+  lintOptions {
+    abortOnError false
+  }
+}
+
+dependencies {
+  // Wear OS Data Layer: phone and watch talk when they share the Google account
+  // and the app's signing key (same application ID on both).
+  implementation 'com.google.android.gms:play-services-wearable:19.0.0'
+}

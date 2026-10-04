@@ -46,6 +46,8 @@ const REMINDER_MARKER = 'pulsoReminder';
 const REST_TIMER_NOTIFICATION_ID = 'pulso-rest-timer';
 const restTimerPreferenceKey = 'pulso_rest_timer_overlay_enabled';
 const tokenKey = 'pulso_expo_push_token';
+/** Set once the app has asked for notification permission on its own (at the first rest). */
+const permissionPromptedKey = 'pulso_notification_permission_prompted';
 const preferencesKey = (userId: string) => `pulso_notification_preferences_${userId}`;
 let restCompletionNotificationId: string | null = null;
 
@@ -186,16 +188,35 @@ async function cancelScheduledRestCompletion(Notifications: NotificationsModule)
   restCompletionNotificationId = null;
 }
 
+/**
+ * Notification permission for rest alerts. Android 13+ starts denied and nothing
+ * else asks for it, so the first rest — the moment an alert is obviously useful —
+ * asks once. After that only Configuración asks again: a denial is respected.
+ */
+async function ensureRestAlertPermission(Notifications: NotificationsModule): Promise<boolean> {
+  const current = (await Notifications.getPermissionsAsync()).status;
+  if (current === NOTIFICATION_PERMISSION.GRANTED) return true;
+  if ((await SecureStore.getItemAsync(permissionPromptedKey)) === 'true') return false;
+  await SecureStore.setItemAsync(permissionPromptedKey, 'true');
+  return (await Notifications.requestPermissionsAsync()).status === NOTIFICATION_PERMISSION.GRANTED;
+}
+
+/**
+ * Alerts for a rest period. "Descanso terminado" always fires — it is the alert an
+ * athlete needs between sets. The countdown pinned to the status bar is extra, and
+ * only shows with "Timer de descanso superpuesto" on (`withCountdown`).
+ */
 export async function showRestTimerNotification(
   restEndAt: number,
   exerciseName?: string,
+  withCountdown = true,
 ): Promise<boolean> {
   const seconds = Math.round((restEndAt - Date.now()) / 1000);
   if (seconds <= 0) return false;
   await configureChannels();
   const Notifications = await getNotifications();
   if (!Notifications) return false;
-  if ((await Notifications.getPermissionsAsync()).status !== NOTIFICATION_PERMISSION.GRANTED) return false;
+  if (!(await ensureRestAlertPermission(Notifications))) return false;
 
   await cancelScheduledRestCompletion(Notifications);
   // Anchored to the same absolute deadline the rest-timer widget alarm uses (restEndAt),
@@ -211,7 +232,7 @@ export async function showRestTimerNotification(
   });
   const duration = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 
-  await Notifications.scheduleNotificationAsync({
+  if (withCountdown) await Notifications.scheduleNotificationAsync({
     identifier: REST_TIMER_NOTIFICATION_ID,
     content: {
       title: `DESCANSO · ${duration}`,

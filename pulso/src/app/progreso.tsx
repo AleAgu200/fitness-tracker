@@ -134,6 +134,7 @@ function StrengthView({ cards }: { cards: SessionCard[] }) {
   const { now } = usePulse();
   const C = useColors();
   const [range, setRange] = useState<TrendRange>(28);
+  const [allRecords, setAllRecords] = useState(false);
   const trend = useMemo(() => computeStrengthTrend(state.trainingSessions, now, range), [state.trainingSessions, now, range]);
   const latest = cards[0] ?? null;
   const values = trend.buckets.filter((value): value is number => value != null);
@@ -226,17 +227,48 @@ function StrengthView({ cards }: { cards: SessionCard[] }) {
       <SectionTitle>RÉCORDS</SectionTitle>
       {state.prHistory.length === 0 ? (
         <Text style={{ fontFamily: F.inter, fontSize: 12, color: C.textTertiary }}>Todavía no tenés récords registrados.</Text>
-      ) : state.prHistory.slice(0, 6).map((record, index) => (
-        <View key={record.exerciseId} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderTopWidth: index ? 1 : 0, borderTopColor: C.border }}>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontFamily: F.interSemi, fontSize: 13, color: C.textPrimary }}>{record.nombre}</Text>
-            <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textTertiary, marginTop: 2 }}>
-              ×{record.reps} · {record.achievedAt.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
+      ) : (allRecords ? state.prHistory : state.prHistory.slice(0, 6)).map((record, index) => {
+        const day = (date: Date) => date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' });
+        const bodyweight = record.weightKg <= 0;
+        const estimate = record.estimate;
+        return (
+          <View
+            key={record.exerciseId}
+            accessible
+            accessibilityLabel={bodyweight
+              ? `${record.nombre}: récord de ${record.reps} repeticiones`
+              : `${record.nombre}: carga máxima ${displayWeight(record.weightKg, weightUnit)} ${weightUnit} por ${record.reps}${estimate ? `; fuerza estimada ${displayWeight(estimate.e1rm, weightUnit)} ${weightUnit}` : ''}`}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderTopWidth: index ? 1 : 0, borderTopColor: C.border }}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontFamily: F.interSemi, fontSize: 13, color: C.textPrimary }}>{record.nombre}</Text>
+              <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textTertiary, marginTop: 2 }}>
+                {bodyweight ? `PESO CORPORAL · ${day(record.achievedAt)}` : `MÁX ×${record.reps} · ${day(record.achievedAt)}`}
+              </Text>
+              {estimate && (
+                <Text style={{ fontFamily: F.mono, fontSize: 9, color: C.textSecondary, marginTop: 2 }}>
+                  {`E1RM ESTIMADO ${formatWeight(estimate.e1rm, weightUnit).toUpperCase()} · ${formatWeight(estimate.weightKg, weightUnit)} ×${estimate.reps}`}
+                </Text>
+              )}
+            </View>
+            <Text style={{ fontFamily: F.monoBold, fontSize: 14, color: C.textPrimary }}>
+              {bodyweight ? `${record.reps} REPS` : formatWeight(record.weightKg, weightUnit)}
             </Text>
           </View>
-          <Text style={{ fontFamily: F.monoBold, fontSize: 14, color: C.textPrimary }}>{formatWeight(record.weightKg, weightUnit)}</Text>
-        </View>
-      ))}
+        );
+      })}
+      {state.prHistory.length > 6 && (
+        <PressableScale onPress={() => setAllRecords(!allRecords)} style={{ minHeight: 44, justifyContent: 'center', alignItems: 'center', marginTop: 4 }}>
+          <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 1, color: C.textSecondary }}>
+            {allRecords ? 'VER MENOS' : `VER TODOS · ${state.prHistory.length} EJERCICIOS`}
+          </Text>
+        </PressableScale>
+      )}
+      {state.prHistory.some(record => record.estimate) && (
+        <Text style={{ fontFamily: F.inter, fontSize: 11, lineHeight: 16, color: C.textTertiary, marginTop: 8 }}>
+          El E1RM es una estimación con la fórmula de Epley, a partir de series de 1 a 10 repeticiones. No es un peso para levantar.
+        </Text>
+      )}
     </Animated.View>
   );
 }

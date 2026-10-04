@@ -13,6 +13,8 @@
 /server/
 /infra/
 /plans/
+/watch/
+/exercise-enrichment/
 /.agents/
 /.claude/
 /.codex/

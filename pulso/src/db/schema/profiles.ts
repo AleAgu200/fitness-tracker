@@ -34,6 +34,11 @@ export const bodyMeasurements = sqliteTable('body_measurements', {
   muscleMassPct: real('muscle_mass_pct'),
   notes:         text('notes'),
   syncVersion:   integer('sync_version').notNull().default(0),
+  // Provenance: entered in PULSO, or imported from the phone's health store.
+  // Imported rows stay on the phone: they are never synced to professionals
+  // or the server profile, and the manual logger never edits them.
+  source:        text('source', { enum: ['manual', 'health_connect', 'apple_health'] }).notNull().default('manual'),
+  externalId:    text('external_id'),
 });
 
 export const progressPhotos = sqliteTable('progress_photos', {

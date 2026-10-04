@@ -1,8 +1,9 @@
-import { and, asc, desc, eq, gte, lt, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 
 import { nanoid } from '@/lib/id';
 import { dayStart, weekdayOf } from '@/lib/dates';
 import type { PreviousPulseRef } from '@/lib/pulse-engine';
+import { computeExerciseRecords, newSetImproves, RecordSet, SetKind } from '@/lib/strength-records';
 import { getPlan, getTemplateExercises, PlanExercise, resolveExerciseId } from './plan';
 import { enqueueSyncMutation } from './sync';
 import { db } from './index';
@@ -11,7 +12,9 @@ import {
   loggedExercises,
   loggedSets,
   personalRecords,
+  syncOutbox,
   templateExerciseSlots,
+  watchCommands,
   workoutSessions,
   workoutTemplates,
 } from './schema';
@@ -266,14 +269,121 @@ async function deleteFreeTemplate(templateId: string): Promise<void> {
 
 export interface LogSetResult {
   sessionId: string;
+  setId: string;
+  /** Heavier external load than any earlier working set of this exercise. */
   isPR: boolean;
+  /** Better estimated 1RM than any earlier eligible set (may be a lighter set). */
+  isEstimatePR: boolean;
+}
+
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type RecordReader = Pick<typeof db, 'select'> | Pick<Transaction, 'select'>;
+type RecordWriter = Pick<Transaction, 'select' | 'insert' | 'update' | 'delete'>;
+
+/** Every surviving logged set of one exercise for this athlete, in any session. */
+async function loadRecordSets(reader: RecordReader, athleteId: string, exerciseId: string): Promise<RecordSet[]> {
+  const rows = await reader
+    .select({
+      weightKg: loggedSets.weightKg,
+      reps: loggedSets.reps,
+      completedAt: loggedSets.completedAt,
+      kind: loggedSets.setType,
+      sessionId: loggedExercises.sessionId,
+    })
+    .from(loggedSets)
+    .innerJoin(loggedExercises, eq(loggedSets.loggedExerciseId, loggedExercises.id))
+    .innerJoin(workoutSessions, eq(loggedExercises.sessionId, workoutSessions.id))
+    .where(and(eq(workoutSessions.athleteId, athleteId), eq(loggedExercises.exerciseId, exerciseId)));
+  return rows.map(row => ({ ...row, completedAt: row.completedAt.getTime() }));
+}
+
+async function exerciseEquipment(reader: RecordReader, exerciseId: string): Promise<string | null> {
+  const [row] = await reader.select({ equipment: exercises.equipment }).from(exercises).where(eq(exercises.id, exerciseId)).limit(1);
+  return row?.equipment ?? null;
+}
+
+/**
+ * Rewrites the stored record row of one exercise from the given sets. The row
+ * is derived data: callers pass every surviving set, so an edit, deletion,
+ * import or restore can never leave a record that no set supports.
+ */
+async function writeExerciseRecord(
+  tx: RecordWriter,
+  athleteId: string,
+  exerciseId: string,
+  sets: RecordSet[],
+  equipment: string | null,
+): Promise<void> {
+  const records = computeExerciseRecords(sets, equipment);
+  const top = records.heaviest ?? records.mostReps;
+  const [existing] = await tx.select({ id: personalRecords.id }).from(personalRecords).where(and(
+    eq(personalRecords.athleteId, athleteId), eq(personalRecords.exerciseId, exerciseId),
+  )).limit(1);
+  if (!top) {
+    if (existing) await tx.delete(personalRecords).where(eq(personalRecords.id, existing.id));
+    return;
+  }
+  const estimate = records.bestEstimate;
+  const values = {
+    weightKg: records.heaviest?.weightKg ?? 0,
+    reps: top.reps,
+    achievedAt: new Date(top.at),
+    sessionId: top.sessionId,
+    e1rm: estimate ? +estimate.e1rm.toFixed(1) : null,
+    e1rmWeightKg: estimate?.weightKg ?? null,
+    e1rmReps: estimate?.reps ?? null,
+    e1rmAchievedAt: estimate ? new Date(estimate.at) : null,
+  };
+  if (existing) await tx.update(personalRecords).set(values).where(eq(personalRecords.id, existing.id));
+  else await tx.insert(personalRecords).values({ id: nanoid(), athleteId, exerciseId, ...values });
+}
+
+/** Recomputes one exercise's record from its surviving sets. */
+export async function recomputeExerciseRecord(athleteId: string, exerciseId: string): Promise<void> {
+  await db.transaction(async tx => {
+    const [sets, equipment] = await Promise.all([loadRecordSets(tx, athleteId, exerciseId), exerciseEquipment(tx, exerciseId)]);
+    await writeExerciseRecord(tx, athleteId, exerciseId, sets, equipment);
+  });
+}
+
+/**
+ * Recomputes every exercise the athlete has sets for, and drops records no set
+ * supports. Used after a restore or import, and once to replace records
+ * written before heaviest load and best estimate were kept apart.
+ */
+export async function recomputeAllRecords(athleteId: string): Promise<void> {
+  const logged = await db
+    .selectDistinct({ exerciseId: loggedExercises.exerciseId })
+    .from(loggedExercises)
+    .innerJoin(workoutSessions, eq(loggedExercises.sessionId, workoutSessions.id))
+    .where(eq(workoutSessions.athleteId, athleteId));
+  const stored = await db.select({ exerciseId: personalRecords.exerciseId }).from(personalRecords)
+    .where(eq(personalRecords.athleteId, athleteId));
+  const ids = new Set([...logged.map(row => row.exerciseId), ...stored.map(row => row.exerciseId)]);
+  for (const exerciseId of ids) await recomputeExerciseRecord(athleteId, exerciseId);
+}
+
+/**
+ * Records stored before migration 0015 took their estimate from the heaviest
+ * set. Such rows have an e1rm but no e1rm set; recomputing clears that state
+ * (to a real estimate set, or to no estimate), so this runs only once.
+ */
+export async function upgradeLegacyRecords(athleteId: string): Promise<void> {
+  const [legacy] = await db.select({ id: personalRecords.id }).from(personalRecords).where(and(
+    eq(personalRecords.athleteId, athleteId),
+    isNotNull(personalRecords.e1rm),
+    isNull(personalRecords.e1rmWeightKg),
+  )).limit(1);
+  if (legacy) await recomputeAllRecords(athleteId);
 }
 
 export async function logSet(
   athleteId: string,
   templateId: string | null,
   slot: { slotId: string; exerciseId: string },
-  set: { peso: number; reps: number; rpe: number; workingSeconds?: number | null },
+  set: { peso: number; reps: number; rpe: number; workingSeconds?: number | null; kind?: SetKind },
+  /** A watch command that logged this set: recorded in the same transaction (exactly once). */
+  origin?: { watchCommandId: string },
 ): Promise<LogSetResult> {
   return db.transaction(async tx => {
     const start = dayStart(new Date());
@@ -304,28 +414,25 @@ export async function logSet(
     const prior = await tx.select({ n: sql<number>`count(*)` }).from(loggedSets)
       .where(eq(loggedSets.loggedExerciseId, loggedExercise.id));
     const setNumber = (prior[0]?.n ?? 0) + 1;
-    const prRows = await tx.select().from(personalRecords).where(and(
-      eq(personalRecords.athleteId, athleteId), eq(personalRecords.exerciseId, slot.exerciseId),
-    )).limit(1);
-    const hasRecord = !!prRows[0];
-    const isPR = hasRecord && set.peso > prRows[0].weightKg;
     const now = new Date();
+    const kind = set.kind ?? 'working';
+    const [history, equipment] = await Promise.all([
+      loadRecordSets(tx, athleteId, slot.exerciseId),
+      exerciseEquipment(tx, slot.exerciseId),
+    ]);
+    const newSet: RecordSet = { weightKg: set.peso, reps: set.reps, completedAt: now.getTime(), kind, sessionId };
+    const improves = newSetImproves(computeExerciseRecords(history, equipment), newSet, equipment);
+    const isPR = improves.heavier;
     const setId = nanoid();
     await tx.insert(loggedSets).values({
       id: setId, loggedExerciseId: loggedExercise.id, setNumber, weightKg: set.peso,
-      reps: set.reps, rpe: set.rpe, isPR, workingSeconds: set.workingSeconds ?? null, completedAt: now,
+      reps: set.reps, rpe: set.rpe, isPR, setType: kind, workingSeconds: set.workingSeconds ?? null, completedAt: now,
     });
-    if (isPR || !hasRecord) {
-      const e1rm = +(set.peso * (1 + set.reps / 30)).toFixed(1);
-      if (prRows[0]) {
-        await tx.update(personalRecords).set({ weightKg: set.peso, reps: set.reps, e1rm, achievedAt: now, sessionId })
-          .where(eq(personalRecords.id, prRows[0].id));
-      } else {
-        await tx.insert(personalRecords).values({
-          id: nanoid(), athleteId, exerciseId: slot.exerciseId, weightKg: set.peso,
-          reps: set.reps, e1rm, achievedAt: now, sessionId,
-        });
-      }
+    await writeExerciseRecord(tx, athleteId, slot.exerciseId, [...history, newSet], equipment);
+    if (origin) {
+      await tx.insert(watchCommands).values({
+        commandId: origin.watchCommandId, athleteId, type: 'log_set', status: 'saved', reason: null, setId, receivedAt: now,
+      });
     }
     await tx.update(workoutSessions)
       .set({ totalTonnageKg: sql`${workoutSessions.totalTonnageKg} + ${set.peso * set.reps}` })
@@ -339,7 +446,86 @@ export async function logSet(
         completedAt: now.getTime(), version: 1,
       },
     });
-    return { sessionId, isPR };
+    return { sessionId, setId, isPR, isEstimatePR: improves.strongerEstimate };
+  });
+}
+
+/** Today's last logged set of a plan slot, and whether it has not left the phone yet. */
+export async function lastSetOfSlot(athleteId: string, slotId: string): Promise<{ setId: string; unsynced: boolean } | null> {
+  const [row] = await db.select({ id: loggedSets.id })
+    .from(loggedSets)
+    .innerJoin(loggedExercises, eq(loggedSets.loggedExerciseId, loggedExercises.id))
+    .innerJoin(workoutSessions, eq(loggedExercises.sessionId, workoutSessions.id))
+    .where(and(
+      eq(workoutSessions.athleteId, athleteId),
+      gte(workoutSessions.createdAt, dayStart(new Date())),
+      eq(loggedExercises.slotId, slotId),
+    ))
+    .orderBy(desc(loggedSets.setNumber))
+    .limit(1);
+  if (!row) return null;
+  // Acknowledged mutations are removed from the outbox: a create still queued
+  // (or rejected) means the server never stored this set.
+  const [queued] = await db.select({ id: syncOutbox.mutationId }).from(syncOutbox)
+    .where(and(eq(syncOutbox.athleteId, athleteId), eq(syncOutbox.entityType, 'training_set'), eq(syncOutbox.entityId, row.id)))
+    .limit(1);
+  return { setId: row.id, unsynced: queued != null };
+}
+
+export async function slotOfSet(setId: string): Promise<string | null> {
+  const [row] = await db.select({ slotId: loggedExercises.slotId })
+    .from(loggedSets)
+    .innerJoin(loggedExercises, eq(loggedSets.loggedExerciseId, loggedExercises.id))
+    .where(eq(loggedSets.id, setId))
+    .limit(1);
+  return row?.slotId ?? null;
+}
+
+export class UndoRefusedError extends Error {}
+
+/**
+ * Removes a set that is still only on this phone and still the last of its
+ * exercise: its queued create is dropped with it, the session volume and the
+ * exercise's records are recomputed. A set the server already has is refused —
+ * training sets are immutable there.
+ */
+export async function undoSet(
+  athleteId: string,
+  slotId: string,
+  setId: string,
+  origin?: { watchCommandId: string },
+): Promise<void> {
+  await db.transaction(async tx => {
+    const [row] = await tx.select({
+      id: loggedSets.id, weightKg: loggedSets.weightKg, reps: loggedSets.reps,
+      sessionId: loggedExercises.sessionId, exerciseId: loggedExercises.exerciseId, loggedExerciseId: loggedExercises.id,
+    })
+      .from(loggedSets)
+      .innerJoin(loggedExercises, eq(loggedSets.loggedExerciseId, loggedExercises.id))
+      .innerJoin(workoutSessions, eq(loggedExercises.sessionId, workoutSessions.id))
+      .where(and(eq(loggedSets.id, setId), eq(workoutSessions.athleteId, athleteId), eq(loggedExercises.slotId, slotId)))
+      .limit(1);
+    if (!row) throw new UndoRefusedError('not_found');
+    const [last] = await tx.select({ id: loggedSets.id }).from(loggedSets)
+      .where(eq(loggedSets.loggedExerciseId, row.loggedExerciseId))
+      .orderBy(desc(loggedSets.setNumber)).limit(1);
+    if (last?.id !== setId) throw new UndoRefusedError('conflict');
+    const queued = await tx.select({ id: syncOutbox.mutationId }).from(syncOutbox)
+      .where(and(eq(syncOutbox.athleteId, athleteId), eq(syncOutbox.entityType, 'training_set'), eq(syncOutbox.entityId, setId)));
+    if (!queued.length) throw new UndoRefusedError('already_synced');
+
+    await tx.delete(syncOutbox).where(and(eq(syncOutbox.athleteId, athleteId), eq(syncOutbox.entityType, 'training_set'), eq(syncOutbox.entityId, setId)));
+    await tx.delete(loggedSets).where(eq(loggedSets.id, setId));
+    await tx.update(workoutSessions)
+      .set({ totalTonnageKg: sql`max(0, ${workoutSessions.totalTonnageKg} - ${row.weightKg * row.reps})` })
+      .where(eq(workoutSessions.id, row.sessionId));
+    const [history, equipment] = await Promise.all([loadRecordSets(tx, athleteId, row.exerciseId), exerciseEquipment(tx, row.exerciseId)]);
+    await writeExerciseRecord(tx, athleteId, row.exerciseId, history, equipment);
+    if (origin) {
+      await tx.insert(watchCommands).values({
+        commandId: origin.watchCommandId, athleteId, type: 'undo_set', status: 'saved', reason: null, setId, receivedAt: new Date(),
+      });
+    }
   });
 }
 
@@ -372,9 +558,12 @@ export async function finishSession(sessionId: string): Promise<void> {
 export interface PRHistoryItem {
   exerciseId: string;
   nombre: string;
+  /** Heaviest external load; 0 for bodyweight work, where reps is the record. */
   weightKg: number;
   reps: number;
   achievedAt: Date;
+  /** Best estimated 1RM and the set it came from; null when no set qualifies. */
+  estimate: { e1rm: number; weightKg: number; reps: number; achievedAt: Date } | null;
 }
 
 export async function getPRHistory(athleteId: string): Promise<PRHistoryItem[]> {
@@ -391,5 +580,8 @@ export async function getPRHistory(athleteId: string): Promise<PRHistoryItem[]> 
       weightKg: r.weightKg,
       reps: r.reps,
       achievedAt: r.achievedAt,
+      estimate: r.e1rm != null && r.e1rmWeightKg != null && r.e1rmReps != null && r.e1rmAchievedAt != null
+        ? { e1rm: r.e1rm, weightKg: r.e1rmWeightKg, reps: r.e1rmReps, achievedAt: r.e1rmAchievedAt }
+        : null,
     }));
 }

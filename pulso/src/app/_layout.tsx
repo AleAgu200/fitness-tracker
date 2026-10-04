@@ -20,6 +20,7 @@ import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { NotificationBootstrap } from '@/components/notification-bootstrap';
+import { WatchBridge } from '@/components/watch-bridge';
 import { AppProvider } from '@/context/app-state';
 import { EntitlementProvider } from '@/context/entitlement';
 import { OnboardingGenerationProvider } from '@/context/onboarding-generation';
@@ -27,10 +28,14 @@ import { PreferencesProvider } from '@/context/preferences';
 import { SessionProvider } from '@/context/session';
 import { runMigrations } from '@/db/migrate';
 import { initializeAds } from '@/lib/ads';
+import { initCrashReporting, wrapRoot } from '@/lib/crash-reporting';
+
+// First thing at module load, so a failure during startup is reported too.
+initCrashReporting();
 
 SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
+function RootLayout() {
   const [dbReady, setDbReady] = useState(false);
 
   const [fontsLoaded] = useFonts({
@@ -75,6 +80,7 @@ export default function RootLayout() {
           <OnboardingGenerationProvider>
             <NotificationBootstrap />
             <AppProvider>
+              <WatchBridge />
               <StatusBar style="auto" />
               <Stack screenOptions={{ headerShown: false }} />
             </AppProvider>
@@ -85,3 +91,5 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+export default wrapRoot(RootLayout);
