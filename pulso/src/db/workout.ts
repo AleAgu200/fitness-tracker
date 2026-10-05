@@ -274,6 +274,8 @@ export interface LogSetResult {
   isPR: boolean;
   /** Better estimated 1RM than any earlier eligible set (may be a lighter set). */
   isEstimatePR: boolean;
+  /** The stored records changed (also the first set of an exercise, which creates them). */
+  recordChanged: boolean;
 }
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -446,7 +448,10 @@ export async function logSet(
         completedAt: now.getTime(), version: 1,
       },
     });
-    return { sessionId, setId, isPR, isEstimatePR: improves.strongerEstimate };
+    return {
+      sessionId, setId, isPR, isEstimatePR: improves.strongerEstimate,
+      recordChanged: isPR || improves.strongerEstimate || history.every(previous => (previous.kind ?? 'working') !== 'working'),
+    };
   });
 }
 
