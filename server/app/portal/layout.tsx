@@ -492,6 +492,7 @@ const ADMIN_NAV = [
   { href: "/portal/admin/profesionales", label: "PROFESIONALES", icon: "✓" },
   { href: "/portal/admin/reportes", label: "REPORTES", icon: "!" },
   { href: "/portal/admin/suscripciones", label: "SUSCRIPCIONES", icon: "$" },
+  { href: "/portal/admin/anuncios", label: "ANUNCIOS", icon: "▣" },
   { href: "/portal/admin/ejercicios", label: "CATÁLOGO EJERCICIOS", icon: "▲" },
   { href: "/portal/admin/alimentos", label: "CATÁLOGO ALIMENTOS", icon: "✚" },
   { href: "/portal/admin/actividad", label: "ACTIVIDAD", icon: "≡" },

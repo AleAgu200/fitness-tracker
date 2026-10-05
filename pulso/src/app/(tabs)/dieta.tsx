@@ -32,6 +32,7 @@ import {
 } from '@/db/consumption';
 import { CompareSheet } from '@/components/nutrition/compare-sheet';
 import { PlanFoodSheet } from '@/components/nutrition/plan-food-sheet';
+import { TabAdGate } from '@/components/tab-ad-gate';
 import {
   addMealSlot,
   deleteMealSlot,
@@ -86,7 +87,7 @@ function qualityTag(item: ConsumptionItem): string | null {
   return null;
 }
 
-export default function DietaScreen() {
+function DietaScreen() {
   const { state } = useApp();
   const { accent } = usePreferences();
   const C = useColors();
@@ -1129,5 +1130,15 @@ function FoodsView() {
         />
       )}
     </>
+  );
+}
+
+/** The screen plus its ad overlay (admin panel → Anuncios decides when it shows). */
+export default function DietaTab() {
+  return (
+    <View style={{ flex: 1 }}>
+      <DietaScreen />
+      <TabAdGate placement="dieta" />
+    </View>
   );
 }

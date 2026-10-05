@@ -6,24 +6,26 @@ import mobileAds, { AdsConsent, MaxAdContentRating, TestIds } from 'react-native
  * has to survive a JS-only environment, so guard on `adsSupported` before
  * touching anything that reaches native.
  *
- * App IDs live in app.json (react-native-google-mobile-ads plugin); only the
- * per-placement *ad unit* IDs belong here.
+ * App IDs live in app.json (react-native-google-mobile-ads plugin). Which tabs
+ * show ads, how often and with which ad units comes from the admin panel
+ * (lib/ad-config.ts, components/tab-ad-gate.tsx).
  */
 
 // Real units are Android-only for now: there is no iOS app registered in AdMob
 // yet, so iOS falls back to Google's test units (which always fill) instead of
 // an ID that would just error out.
-const ENTRENO_REWARDED_INTERSTITIAL_ANDROID = 'ca-app-pub-8542922303101158/7129481676';
 
 /**
- * Ad unit shown when the athlete opens the ENTRENO tab. `__DEV__` always uses
- * the test unit — serving real ads to yourself is a policy violation that gets
- * accounts banned, so this must never be flipped to the live ID for debugging.
+ * The unit to request. `__DEV__` always uses the test unit — serving real ads to
+ * yourself is a policy violation that gets accounts banned, so this must never
+ * be flipped to the live ID for debugging.
  */
-export const ENTRENO_AD_UNIT_ID =
-  __DEV__ || Platform.OS !== 'android'
-    ? TestIds.REWARDED_INTERSTITIAL
-    : ENTRENO_REWARDED_INTERSTITIAL_ANDROID;
+export function adUnitFor(format: 'interstitial' | 'rewarded_interstitial', adUnitId: string): string {
+  if (__DEV__ || Platform.OS !== 'android') {
+    return format === 'interstitial' ? TestIds.INTERSTITIAL : TestIds.REWARDED_INTERSTITIAL;
+  }
+  return adUnitId;
+}
 
 export const adsSupported = Platform.OS === 'android' || Platform.OS === 'ios';
 

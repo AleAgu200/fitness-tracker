@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PlusBanner } from '@/components/plus-banner';
 import { Card, Label, PressableScale } from '@/components/ui/kit';
+import { TabAdGate } from '@/components/tab-ad-gate';
 import { F, useColors } from '@/constants/colors';
 import { useApp } from '@/context/app-state';
 import { usePreferences } from '@/context/preferences';
@@ -18,7 +19,7 @@ const NAV_ROWS: { key: string; label: string; detail: string; href: string }[] =
   { key: 'configuracion', label: 'Configuración', detail: 'Datos personales, notificaciones y cuenta',     href: '/configuracion' },
 ];
 
-export default function PerfilScreen() {
+function PerfilScreen() {
   const { state } = useApp();
   const { accent } = usePreferences();
   const C = useColors();
@@ -85,5 +86,15 @@ export default function PerfilScreen() {
         <PlusBanner />
       </View>
     </ScrollView>
+  );
+}
+
+/** The screen plus its ad overlay (admin panel → Anuncios decides when it shows). */
+export default function PerfilTab() {
+  return (
+    <View style={{ flex: 1 }}>
+      <PerfilScreen />
+      <TabAdGate placement="perfil" />
+    </View>
   );
 }
