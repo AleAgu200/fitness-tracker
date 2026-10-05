@@ -6,6 +6,8 @@ export const ACTION_LABEL: Record<string, string> = {
   "user.plus_revoked": "PULSO Plus quitado",
   "professional.approved": "Profesional aprobado",
   "professional.rejected": "Profesional rechazado",
+  "report.resolved": "Reporte resuelto",
+  "report.dismissed": "Reporte descartado",
   "exercise.create": "Ejercicio creado",
   "exercise.update": "Ejercicio editado",
   "exercise.hide": "Ejercicio ocultado",

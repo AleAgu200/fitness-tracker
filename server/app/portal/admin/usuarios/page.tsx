@@ -298,10 +298,13 @@ export default function AdminUsersPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const query = useDebounced(q);
 
-  // Deep links from the overview (?status=suspended). Read once, client-side.
+  // Deep links from the overview (?status=suspended) and from reports (?q=email). Read once, client-side.
   useEffect(() => {
-    const initial = new URLSearchParams(window.location.search).get("status");
+    const search = new URLSearchParams(window.location.search);
+    const initial = search.get("status");
     if (initial === "suspended" || initial === "pending" || initial === "unverified") setStatus(initial);
+    const initialQuery = search.get("q");
+    if (initialQuery) setQ(initialQuery);
   }, []);
   useEffect(() => { setPage(1); }, [query, role, status]);
 

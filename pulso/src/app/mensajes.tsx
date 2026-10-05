@@ -12,6 +12,7 @@ import {
 import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ReportSheet } from '@/components/report-sheet';
 import { Label, PressableScale } from '@/components/ui/kit';
 import { F, useColors, withAlpha } from '@/constants/colors';
 import { usePreferences } from '@/context/preferences';
@@ -34,6 +35,7 @@ export default function MensajesScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [reporting, setReporting] = useState(false);
 
   const lastRef = useRef(0);
   const listRef = useRef<FlatList<ChatMessage>>(null);
@@ -116,6 +118,11 @@ export default function MensajesScreen() {
           </Text>
         </View>
         {offline && <Label style={{ color: C.orange }}>SIN CONEXIÓN</Label>}
+        {active && (
+          <PressableScale onPress={() => setReporting(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel={`Reportar a ${active.name}`}>
+            <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 0.8, color: C.textSecondary }}>REPORTAR</Text>
+          </PressableScale>
+        )}
       </View>
 
       {/* Conversation switcher when both professionals are linked */}
@@ -219,6 +226,7 @@ export default function MensajesScreen() {
           </PressableScale>
         </View>
       )}
+      <ReportSheet target={reporting ? active : null} onClose={() => setReporting(false)} />
     </KeyboardAvoidingView>
   );
 }

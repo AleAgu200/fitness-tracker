@@ -29,7 +29,7 @@ class PulsoWidgetModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("PulsoWidget")
 
-    Events(REST_CHANGED_EVENT)
+    Events(REST_CHANGED_EVENT, LAUNCH_ACTION_EVENT)
 
     OnCreate { live = WeakReference(this@PulsoWidgetModule) }
     OnDestroy { live = null }
@@ -51,6 +51,17 @@ class PulsoWidgetModule : Module() {
       PulsoWidgetProvider.renderAll(context)
     }
 
+    /**
+     * Action of the intent that started the activity. Health Connect opens the app with its
+     * permissions-rationale action (via an alias on Android 14+) to show the privacy policy.
+     */
+    Function("getLaunchAction") { appContext.currentActivity?.intent?.action }
+
+    /** The activity is singleTask, so a rationale request while running arrives here instead. */
+    OnNewIntent { intent ->
+      sendEvent(LAUNCH_ACTION_EVENT, mapOf("action" to intent.action))
+    }
+
     /** Source of truth the app reconciles against when it returns to the foreground. */
     Function("getRest") {
       val snapshot = PulsoWidgetStore.read(context)
@@ -63,6 +74,7 @@ class PulsoWidgetModule : Module() {
 
   companion object {
     private const val REST_CHANGED_EVENT = "onRestChanged"
+    private const val LAUNCH_ACTION_EVENT = "onLaunchAction"
 
     /**
      * Set while a module instance exists so the widget provider — which runs in a broadcast

@@ -89,13 +89,21 @@ export async function projectAcceptedLink(input: {
       activatedAt: input.acceptedAt,
     }).onConflictDoNothing();
 
-    const [client] = await tx.select({ id: organizationClients.id })
+    const [client] = await tx.select({ id: organizationClients.id, status: organizationClients.status })
       .from(organizationClients)
       .where(and(
         eq(organizationClients.organizationId, organizationId),
         eq(organizationClients.athleteId, input.athleteId),
       ));
     if (!client) throw new Error("organization_client_projection_failed");
+
+    // An athlete who left this organization comes back through a new invite.
+    const rejoined = client.status === "revoked";
+    if (rejoined) {
+      await tx.update(organizationClients)
+        .set({ status: "active", activatedAt: input.acceptedAt, revokedAt: null })
+        .where(eq(organizationClients.id, client.id));
+    }
 
     await tx.insert(careAssignments).values({
       id: assignmentId,
@@ -107,14 +115,38 @@ export async function projectAcceptedLink(input: {
       createdAt: input.acceptedAt,
     }).onConflictDoNothing();
 
+    // Same professional and discipline as an assignment the athlete ended: that row is
+    // unique per pair, so it is the one to bring back. Primary only if nobody took it.
+    const [primaryTaken] = await tx.select({ id: careAssignments.id }).from(careAssignments).where(and(
+      eq(careAssignments.organizationClientId, client.id),
+      eq(careAssignments.discipline, input.discipline),
+      eq(careAssignments.primary, true),
+      eq(careAssignments.status, "active"),
+    ));
+    await tx.update(careAssignments)
+      .set({ status: "active", primary: !primaryTaken, revokedAt: null })
+      .where(and(
+        eq(careAssignments.organizationClientId, client.id),
+        eq(careAssignments.professionalMembershipId, membershipId),
+        eq(careAssignments.discipline, input.discipline),
+        eq(careAssignments.status, "revoked"),
+      ));
+
     for (const category of [domainCategory, "checkins"] as const) {
-      await tx.insert(sharingConsents).values({
+      const consent = tx.insert(sharingConsents).values({
         id: `consent_${assignmentId}_${category}`,
         organizationClientId: client.id,
         category,
         grantedAt: input.acceptedAt,
         updatedAt: input.acceptedAt,
-      }).onConflictDoNothing();
+      });
+      // Rejoining grants the same defaults as joining for the first time.
+      await (rejoined
+        ? consent.onConflictDoUpdate({
+          target: [sharingConsents.organizationClientId, sharingConsents.category],
+          set: { grantedAt: input.acceptedAt, revokedAt: null, updatedAt: input.acceptedAt },
+        })
+        : consent.onConflictDoNothing());
     }
 
     const changeId = newId("change");

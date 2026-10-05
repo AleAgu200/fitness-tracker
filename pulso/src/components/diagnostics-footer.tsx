@@ -5,6 +5,7 @@ import { Alert, Pressable, Text, View } from 'react-native';
 import { PressableScale } from '@/components/ui/kit';
 import { F, useColors } from '@/constants/colors';
 import { crashReportingEnabled, sendTestError, triggerNativeTestCrash } from '@/lib/crash-reporting';
+import { openLegal } from '@/lib/legal';
 
 const TAPS_TO_UNLOCK = 7;
 
@@ -30,6 +31,14 @@ export function DiagnosticsFooter() {
 
   return (
     <View style={{ marginTop: 24, alignItems: 'center', gap: 10 }}>
+      <View style={{ flexDirection: 'row', gap: 18 }}>
+        <Pressable onPress={() => openLegal('privacy')} accessibilityRole="link" hitSlop={8}>
+          <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 1, color: C.textSecondary }}>PRIVACIDAD</Text>
+        </Pressable>
+        <Pressable onPress={() => openLegal('terms')} accessibilityRole="link" hitSlop={8}>
+          <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 1, color: C.textSecondary }}>TÉRMINOS</Text>
+        </Pressable>
+      </View>
       <Pressable onPress={() => setTaps(count => count + 1)} accessibilityRole="text" hitSlop={8}>
         <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 1, color: C.textTertiary }}>PULSO {version}</Text>
       </Pressable>

@@ -21,6 +21,7 @@ import { useSession } from '@/context/session';
 import { startOnboarding } from '@/db/onboarding';
 import { getLatestWeightMeasurement, saveAthleteProfile, saveInitialWeight } from '@/db/profile';
 import { AuthError, getActiveSession, isUserExistsError, signIn, signUp } from '@/lib/auth';
+import { openLegal } from '@/lib/legal';
 import { getInitials } from '@/lib/names';
 import { pushAthleteProfile } from '@/lib/profile-sync';
 
@@ -322,6 +323,14 @@ export default function SignUpScreen() {
           : <Text style={{ fontFamily: F.monoBold, fontSize: 12, letterSpacing: 0.8, color: C.onAccent, textTransform: 'uppercase' }}>CREAR CUENTA</Text>
         }
       </TouchableOpacity>
+
+      <Text style={{ fontFamily: F.inter, fontSize: 12, lineHeight: 18, color: C.textTertiary, textAlign: 'center', marginTop: 10 }}>
+        {'Al crear tu cuenta aceptás los '}
+        <Text accessibilityRole="link" onPress={() => openLegal('terms')} style={{ color: C.textSecondary, textDecorationLine: 'underline' }}>Términos</Text>
+        {' y la '}
+        <Text accessibilityRole="link" onPress={() => openLegal('privacy')} style={{ color: C.textSecondary, textDecorationLine: 'underline' }}>Política de privacidad</Text>
+        {'. PULSO es para mayores de 18 años y no reemplaza el consejo médico.'}
+      </Text>
 
       <View style={{ marginTop: 10 }}>
         <SocialButtons

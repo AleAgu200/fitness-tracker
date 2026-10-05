@@ -13,6 +13,7 @@ import {
   session,
   subscriptions,
   user,
+  userReports,
 } from "@/db/schema";
 import {
   ADMIN_PLUS_STORE,
@@ -67,7 +68,7 @@ const ENTITLED = ["active", "in_grace_period", "billing_issue"];
 export async function adminOverview(now = Date.now()) {
   const weekAgo = new Date(now - 7 * 86_400_000);
   const monthAgo = new Date(now - 30 * 86_400_000);
-  const [roles, pending, suspended, week, month, subs, sandbox] = await Promise.all([
+  const [roles, pending, suspended, week, month, subs, sandbox, reports] = await Promise.all([
     db.select({ role: user.role, value: count() }).from(user).groupBy(user.role),
     db.select({ value: count() }).from(user).where(eq(user.professionalStatus, "pending")),
     db.select({ value: count() }).from(user).where(isNotNull(user.suspendedAt)),
@@ -76,6 +77,7 @@ export async function adminOverview(now = Date.now()) {
     db.select({ status: subscriptions.status, value: count() }).from(subscriptions)
       .where(eq(subscriptions.isSandbox, false)).groupBy(subscriptions.status),
     db.select({ value: count() }).from(subscriptions).where(eq(subscriptions.isSandbox, true)),
+    db.select({ value: count() }).from(userReports).where(eq(userReports.status, "open")),
   ]);
   const byRole = Object.fromEntries(roles.map(row => [row.role, Number(row.value)]));
   const byStatus = Object.fromEntries(subs.map(row => [row.status, Number(row.value)]));
@@ -90,6 +92,7 @@ export async function adminOverview(now = Date.now()) {
       suspended: Number(suspended[0]?.value ?? 0),
     },
     professionalsPending: Number(pending[0]?.value ?? 0),
+    reportsOpen: Number(reports[0]?.value ?? 0),
     subscriptions: {
       entitled: ENTITLED.reduce((sum, status) => sum + (byStatus[status] ?? 0), 0),
       active: byStatus.active ?? 0,

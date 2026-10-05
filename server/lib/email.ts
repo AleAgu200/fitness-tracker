@@ -368,3 +368,19 @@ export function subscriptionEndedEmail(to: string, name: string | null, kind: "c
     note: "Podés volver a Plus cuando quieras desde la app.",
   });
 }
+
+/** Tells the PULSO admins a user was reported. No message content: it stays in the panel. */
+export function userReportedEmail(to: string, reason: string, panelUrl: string): EmailMessage {
+  return render(to, {
+    subject: "Nuevo reporte de usuario en PULSO",
+    preheader: "Hay un reporte esperando revisión en el panel.",
+    eyebrow: "ADMINISTRACIÓN",
+    title: "Un usuario hizo un reporte",
+    paragraphs: [
+      `Motivo: ${reason}.`,
+      "Revisalo en el panel de administración. Los detalles y los mensajes adjuntos solo se ven ahí.",
+    ],
+    action: { label: "VER REPORTES", url: panelUrl },
+    note: "Recibís este correo porque sos administrador de PULSO.",
+  });
+}
