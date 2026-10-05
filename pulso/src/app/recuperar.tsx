@@ -10,6 +10,7 @@ import { usePreferences } from '@/context/preferences';
 import { useSession } from '@/context/session';
 import { markRecoverySettled } from '@/lib/account-recovery';
 import { restoreBackup, RestoreStep } from '@/lib/backup';
+import { syncDevices } from '@/lib/device-sync';
 
 const STEP_LABELS: Record<RestoreStep, string> = {
   downloading: 'Descargando tu copia…',
@@ -36,6 +37,26 @@ export default function RecuperarScreen() {
   useEffect(() => { currentUser.current = userId; }, [userId]);
 
   const retryState = params.state === 'retry';
+  const syncState = params.state === 'sync';
+  const [syncing, setSyncing] = useState(false);
+
+  async function syncNow() {
+    const uid = userId;
+    if (!uid || syncing) return;
+    setSyncing(true);
+    const outcome = await syncDevices(uid);
+    if (currentUser.current !== uid) return;
+    if (outcome.status === 'synced') {
+      await markRecoverySettled(uid);
+      await reloadAll().catch(e => console.error('[sync-reload]', e));
+      router.replace('/');
+      return;
+    }
+    setSyncing(false);
+    Alert.alert('No se pudo sincronizar', outcome.status === 'plus_required'
+      ? 'La sincronización entre dispositivos es parte de PULSO Plus.'
+      : 'Revisá tu conexión e intentá de nuevo. Nada cambió en este teléfono.');
+  }
   const createdAt = params.createdAt ? Number(params.createdAt) : null;
   const date = createdAt
     ? new Date(createdAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })
@@ -98,19 +119,27 @@ export default function RecuperarScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: C.bg, paddingTop: insets.top + 40, paddingBottom: insets.bottom + 20, paddingHorizontal: 20, justifyContent: 'space-between' }}>
       <View style={{ gap: 14 }}>
-        <Label style={{ color: accent }}>{retryState ? 'SIN CONEXIÓN' : 'TENÉS UNA COPIA'}</Label>
+        <Label style={{ color: accent }}>{retryState ? 'SIN CONEXIÓN' : syncState ? 'DISPOSITIVOS SINCRONIZADOS' : 'TENÉS UNA COPIA'}</Label>
         <Text accessibilityRole="header" style={{ fontFamily: F.grotesk, fontSize: 28, lineHeight: 32, color: C.textPrimary }}>
-          {retryState ? 'No pudimos revisar tu cuenta.' : 'Recuperá tus datos en este teléfono.'}
+          {retryState ? 'No pudimos revisar tu cuenta.' : syncState ? 'Traé tus datos a este teléfono.' : 'Recuperá tus datos en este teléfono.'}
         </Text>
         <Text style={{ fontFamily: F.inter, fontSize: 14, lineHeight: 21, color: C.textSecondary }}>
           {retryState
             ? 'Necesitamos conexión para saber si tenés una copia de respaldo. Así no te hacemos empezar de cero si ya tenías historial.'
+            : syncState
+              ? 'Tu cuenta sincroniza tus dispositivos. Este teléfono va a tener tus planes, entrenos, comidas y medidas, y desde ahora todo lo que registres en cualquiera se ve en todos.'
             : `Tu copia personal${date ? ` del ${date}` : ''} tiene tu perfil, tus planes y tu historial de entrenos, comidas y medidas. Las fotos de progreso quedan en el teléfono anterior.`}
         </Text>
-        {!retryState && (
+        {!retryState && !syncState && (
           <Text style={{ fontFamily: F.inter, fontSize: 12, lineHeight: 18, color: C.textTertiary }}>
             Al restaurar, este teléfono pasa a ser el que registra tu actividad: el anterior deja de sincronizar. Lo que compartís con tu coach o nutricionista no cambia.
           </Text>
+        )}
+        {syncing && (
+          <View accessibilityLiveRegion="polite" style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 }}>
+            <ActivityIndicator color={accent} />
+            <Text style={{ fontFamily: F.mono, fontSize: 11, color: C.textSecondary }}>Sincronizando…</Text>
+          </View>
         )}
         {busy && (
           <View accessibilityLiveRegion="polite" style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 }}>
@@ -121,13 +150,13 @@ export default function RecuperarScreen() {
       </View>
       <View style={{ gap: 10 }}>
         <PressableScale
-          onPress={() => (retryState ? router.replace('/') : void restore())}
-          disabled={busy}
+          onPress={() => (retryState ? router.replace('/') : syncState ? void syncNow() : void restore())}
+          disabled={busy || syncing}
           haptic="success"
           style={{ minHeight: 50, justifyContent: 'center', alignItems: 'center', backgroundColor: accent }}
         >
           <Text style={{ fontFamily: F.monoXBold, fontSize: 12, letterSpacing: 0.8, color: C.onAccent }}>
-            {retryState ? 'REINTENTAR' : busy ? 'RESTAURANDO…' : 'RESTAURAR MI COPIA'}
+            {retryState ? 'REINTENTAR' : syncState ? (syncing ? 'SINCRONIZANDO…' : 'SINCRONIZAR') : busy ? 'RESTAURANDO…' : 'RESTAURAR MI COPIA'}
           </Text>
         </PressableScale>
         <PressableScale

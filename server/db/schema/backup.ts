@@ -18,6 +18,9 @@ export const personalBackupSettings = pgTable("personal_backup_settings", {
   enabled: boolean("enabled").notNull().default(false),
   consentedAt: milliseconds("consentedAt"),
   disabledAt: milliseconds("disabledAt"),
+  /** Multi-device sync (Plus): its own consent, independent of backups. */
+  syncEnabled: boolean("syncEnabled").notNull().default(false),
+  syncConsentedAt: milliseconds("syncConsentedAt"),
   updatedAt: milliseconds("updatedAt").notNull(),
 });
 

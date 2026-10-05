@@ -29,6 +29,15 @@ interface BootstrapResponse {
   backup: null | { revision: number; createdAt: number; manifest: { totalRows: number } };
 }
 
+async function lookupSync(): Promise<{ active: boolean; records: number } | null> {
+  try {
+    const status = await apiFetch<{ active: boolean; records: number }>('/api/records/status');
+    return { active: status.active, records: status.records };
+  } catch {
+    return null;
+  }
+}
+
 async function lookupBackup(): Promise<BackupLookup> {
   try {
     const { backup } = await apiFetch<BootstrapResponse>('/api/backup/bootstrap');
@@ -44,8 +53,8 @@ async function lookupBackup(): Promise<BackupLookup> {
 /** Decides where a signed-in athlete goes before onboarding. Network only on an unsettled phone. */
 export async function routeRecovery(userId: string): Promise<RecoveryRoute> {
   const [settled, localHistory] = await Promise.all([isRecoverySettled(userId), hasLocalHistory(userId)]);
-  const lookup = settled || localHistory ? null : await lookupBackup();
-  const route = decideRecovery({ settled, localHistory, lookup });
+  const [lookup, sync] = settled || localHistory ? [null, null] : await Promise.all([lookupBackup(), lookupSync()]);
+  const route = decideRecovery({ settled, localHistory, lookup, sync });
   if (route.kind === 'continue' && route.settle) await markRecoverySettled(userId);
   if (route.kind !== 'continue') recordStep('recovery', route.kind);
   return route;

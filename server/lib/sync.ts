@@ -23,6 +23,7 @@ import {
   trainingSessions,
   trainingSets,
 } from "@/db/schema";
+import { multiDeviceSyncActive } from "@/lib/device-sync";
 import {
   CURRENT_SYNC_SCHEMA_VERSION,
   decodeSyncCursor,
@@ -214,10 +215,21 @@ export async function ensureWriterDevice(athleteId: string, deviceId: string, sc
     eq(syncDevices.status, "active_writer"),
   ));
   const now = Date.now();
-  if (active && active.id !== deviceId) throw new WriterDeviceConflictError();
-
   const [sameId] = await db.select().from(syncDevices).where(eq(syncDevices.id, deviceId));
   if (sameId && sameId.athleteId !== athleteId) throw new WriterDeviceConflictError();
+
+  if (active && active.id !== deviceId) {
+    // With multi-device sync (Plus), every device of the athlete records and
+    // sends professional data; the writer stays the primary. Revoked never returns.
+    if (sameId?.status === "revoked" || !(await multiDeviceSyncActive(athleteId))) throw new WriterDeviceConflictError();
+    if (!sameId) {
+      await db.insert(syncDevices).values({ id: deviceId, athleteId, status: "secondary", schemaVersion, registeredAt: now, lastSeenAt: now });
+    } else {
+      await db.update(syncDevices).set({ status: "secondary", schemaVersion, lastSeenAt: now, replacedAt: null }).where(eq(syncDevices.id, deviceId));
+    }
+    return;
+  }
+
   if (!sameId) {
     await db.insert(syncDevices).values({
       id: deviceId,

@@ -76,6 +76,7 @@ import {
 import { isRecoverySettled } from '@/lib/account-recovery';
 import { maybeAutoBackup } from '@/lib/backup';
 import { onSessionCompleted, refreshHealth } from '@/lib/health/sync';
+import { syncDevices } from '@/lib/device-sync';
 import { CLEARED_REST_STATE, loadRestTimerState, RestTimerState, saveRestTimerState } from '@/lib/rest-timer-store';
 import { addWidgetRestListener } from '@/modules/pulso-widget';
 import { getStoredAssignmentMeta, syncAssignments, syncMobileData, type ScheduledPlan } from '@/lib/sync';
@@ -406,6 +407,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   weightUnitRef.current = weightUnit;
 
   const templateIdRef = useRef<string | null>(null);
+  // Set once reloadAll exists (defined further down); lets the load and foreground effects reload after a sync.
+  const reloadAllRef = useRef<(() => Promise<void>) | null>(null);
   const mealPlanIdRef = useRef<string | null>(null);
   const restTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   /** Authoritative rest-timer end timestamp — mirrored to SecureStore so the widget can read/mutate it. */
@@ -468,6 +471,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Daily personal copy (consent + Plus), never before recovery is settled.
         void maybeAutoBackup(userId, () => isRecoverySettled(userId));
         void refreshHealth(userId);
+        // Other devices' changes (Plus): reload only when something arrived.
+        void syncDevices(userId).then(outcome => {
+          if (outcome.status === 'synced' && outcome.applied > 0 && userRef.current === userId) void reloadAllRef.current?.();
+        }).catch(() => {});
         const mealPlan = await getMealPlanForDate(userId, todayStr());
 
         // Sequential on purpose: each may create the default program, and two
@@ -722,6 +729,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       reloadProfile(),
     ]);
   }, [refreshDerived, reloadMeals, reloadPlan, reloadProfile]);
+  useEffect(() => { reloadAllRef.current = reloadAll; }, [reloadAll]);
 
   // ── profile actions ───────────────────────────────────────────────────────
 
@@ -953,7 +961,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             .then(() => maybeAutoBackup(uid, () => isRecoverySettled(uid)))
             .catch(() => {});
           void refreshHealth(uid);
+          void syncDevices(uid).then(outcome => {
+            if (outcome.status === 'synced' && outcome.applied > 0 && userRef.current === uid) void reloadAllRef.current?.();
+          }).catch(() => {});
         }
+      }
+      // Leaving the app: send what was logged so the other devices have it.
+      if (nextAppState === 'background') {
+        const uid = userRef.current;
+        if (uid) void syncDevices(uid).catch(() => {});
       }
     });
     // Covers the case the AppState listener misses: a widget button tapped while the app

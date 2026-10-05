@@ -63,6 +63,10 @@ export default function Index() {
           });
           return;
         }
+        if (recovery.kind === 'offer_sync') {
+          router.replace({ pathname: '/recuperar', params: { state: 'sync', totalRows: String(recovery.records) } });
+          return;
+        }
         if (recovery.kind === 'retry') {
           router.replace({ pathname: '/recuperar', params: { state: 'retry' } });
           return;
