@@ -338,7 +338,8 @@ export default function EntrenoScreen() {
       .catch(e => console.error('[week-summary]', e));
   }, [userId]);
 
-  useEffect(() => { refreshWeekPlanCounts(); }, [refreshWeekPlanCounts]);
+  // Also when the active plan changes (Mis planes): the counts belong to that plan.
+  useEffect(() => { refreshWeekPlanCounts(); }, [refreshWeekPlanCounts, activePlan?.id]);
   const activeEx = exercises[exIndex];
   const previousSession = activeEx ? state.previousSessions[activeEx.exerciseId] : null;
   const previousRestActive = useRef(false);
@@ -849,7 +850,8 @@ export default function EntrenoScreen() {
         )}
         </>
         ) : (
-          <OtherDayPlanEditor weekday={selectedWeekday} onChanged={refreshWeekPlanCounts} />
+          // Keyed by plan too: switching plans in Mis planes must not leave the previous plan's day on screen.
+          <OtherDayPlanEditor key={`${activePlan?.id ?? 'none'}-${selectedWeekday}`} weekday={selectedWeekday} onChanged={refreshWeekPlanCounts} />
         )}
       </View>
     </ScrollView>
