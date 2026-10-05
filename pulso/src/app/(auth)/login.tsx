@@ -19,6 +19,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { PasswordInput } from '@/components/auth/password-input';
 import { SocialButtons } from '@/components/auth/social-buttons';
 import { BrandMark } from '@/components/brand-mark';
 import { LightningBackground, LightningHandle } from '@/components/ui/lightning-bg';
@@ -190,18 +191,12 @@ export default function LoginScreen() {
           <Text style={{ fontFamily: F.mono, fontSize: 9, letterSpacing: 1.4, color: C.textTertiary, textTransform: 'uppercase', marginBottom: 7 }}>
             CONTRASEÑA
           </Text>
-          <TextInput
+          <PasswordInput
             value={password}
             onChangeText={setPassword}
             onFocus={handleFieldFocus}
-            secureTextEntry
             autoComplete="password"
-            placeholderTextColor={C.textTertiary}
             placeholder="••••••••"
-            style={{
-              backgroundColor: C.card, borderWidth: 1, borderColor: C.border,
-              padding: 14, color: C.textPrimary, fontFamily: F.inter, fontSize: 15,
-            }}
           />
         </View>
 

@@ -25,9 +25,11 @@ export const auth = betterAuth({
     enabled: true,
     minPasswordLength: 6,
     autoSignIn: true,
-    // Off until every existing account had a chance to verify; turning it on
-    // would lock out athletes who signed up before verification existed.
-    requireEmailVerification: process.env.REQUIRE_EMAIL_VERIFICATION === "true",
+    // A new account confirms its address before it can sign in. Only possible
+    // when email is delivered; REQUIRE_EMAIL_VERIFICATION=false is the escape
+    // hatch if delivery breaks. Unverified accounts get "confirm your email" with
+    // a resend button (app and portal) instead of a session.
+    requireEmailVerification: canEmail && process.env.REQUIRE_EMAIL_VERIFICATION !== "false",
     // One-time link, one hour. A new password ends every other session.
     resetPasswordTokenExpiresIn: 60 * 60,
     revokeSessionsOnPasswordReset: true,
