@@ -62,7 +62,11 @@ export default function TermsPage() {
           <li>No intentes vulnerar, sobrecargar ni copiar el servicio.</li>
           <li>Lo que agregás al catálogo comunitario de productos debe ser información real del producto.</li>
         </ul>
-        <p>Podemos suspender cuentas que incumplan estos términos.</p>
+        <p>
+          Si alguien te molesta o te da indicaciones peligrosas, reportalo desde la app (Equipo o la
+          conversación) o salí de su equipo. Revisamos cada reporte y podemos suspender cuentas que
+          incumplan estos términos.
+        </p>
       </Section>
 
       <Section title="6. Tus datos">

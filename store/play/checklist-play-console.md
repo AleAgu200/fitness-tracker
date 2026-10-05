@@ -41,6 +41,14 @@ Las cuentas personales nuevas necesitan una **prueba cerrada con al menos 12 tes
       comunicación u otra". Sin violencia, sexo, drogas ni apuestas. Los usuarios interactúan
       (mensajes con su entrenador): Sí. Comparte ubicación: No. Compras digitales: Sí
       (cuando se active Plus).
+      Uso compartido de contenido del usuario: **Sí** (chat con el profesional y fotos compartidas).
+      Bloquear usuarios: **Sí** (Equipo → Salir del equipo corta el contacto). Informar de
+      usuarios: **Sí** (Reportar, en Equipo y en el chat). Moderación de chat: **No**
+      (los reportes se revisan a mano en el panel de admin, no hay moderación automática).
+      Interacciones limitadas a invitados: **Sí** (solo con un código de invitación).
+      Contenido en línea: **Sí** (planes generados con IA, planes del profesional, catálogo de
+      productos y anuncios).
+- [ ] **Público objetivo:** 18 años o más únicamente. No atrae a niños.
 - [ ] **Público objetivo:** 18 años o más únicamente. No atrae a niños.
 - [ ] **App de noticias:** No.
 - [ ] **Apps de salud:** marcar "Actividad física y fitness" y "Nutrición y control de peso".

@@ -8,6 +8,7 @@ import { AdminHeader, ErrorBanner, relativeTime, Stat, useAdminData } from "./ui
 interface Overview {
   users: { total: number; athletes: number; coaches: number; nutritionists: number; newLast7Days: number; newLast30Days: number; suspended: number };
   professionalsPending: number;
+  reportsOpen: number;
   subscriptions: { entitled: number; active: number; inGracePeriod: number; billingIssue: number; cancelled: number; expired: number; sandbox: number };
 }
 
@@ -27,6 +28,18 @@ export default function AdminOverviewPage() {
       />
       <div className="space-y-8 px-5 py-6 md:px-8">
         {overview.error && <ErrorBanner message={overview.error} onRetry={overview.reload} />}
+
+        {o && o.reportsOpen > 0 && (
+          <Link href="/portal/admin/reportes" className="flex items-center justify-between gap-4 border border-danger/50 bg-danger/10 px-4 py-3.5 transition hover:bg-danger/15">
+            <span>
+              <span className="block font-mono-app text-[10px] tracking-[1.4px] text-danger">REPORTES ABIERTOS</span>
+              <span className="text-sm text-fg">
+                {o.reportsOpen === 1 ? "1 reporte de usuario espera revisión" : `${o.reportsOpen} reportes de usuarios esperan revisión`}
+              </span>
+            </span>
+            <span className="font-mono-app text-[11px] text-danger">REVISAR →</span>
+          </Link>
+        )}
 
         {o && o.professionalsPending > 0 && (
           <Link href="/portal/admin/profesionales" className="flex items-center justify-between gap-4 border border-warn/50 bg-warn/10 px-4 py-3.5 transition hover:bg-warn/15">

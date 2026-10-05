@@ -64,6 +64,12 @@ export default function PrivacyPage() {
           quieras: el profesional deja de verlas en ese momento. El profesional no ve tus otros planes ni
           tus datos de salud importados.
         </p>
+        <p>
+          Desde Equipo podés <strong className="text-fg">salir del equipo</strong> de un profesional: deja de ver tus datos y
+          ya no pueden escribirse. También podés <strong className="text-fg">reportarlo</strong>: el reporte llega al equipo de
+          PULSO junto con los últimos mensajes de esa conversación, que usamos solo para revisarlo. La otra persona no
+          se entera de que la reportaste.
+        </p>
       </Section>
 
       <Section title="5. Respaldo personal y sincronización (PULSO Plus)">

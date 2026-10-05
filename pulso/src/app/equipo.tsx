@@ -1,9 +1,10 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ReportSheet } from '@/components/report-sheet';
 import { Card, Label, PressableScale } from '@/components/ui/kit';
 import { F, useColors } from '@/constants/colors';
 import { usePreferences } from '@/context/preferences';
@@ -11,7 +12,7 @@ import { useSession } from '@/context/session';
 import { getLocalSharingConsents, getPendingProfessionalCheckin, getSyncSummary, SharingCategory } from '@/db/sync';
 import { ApiError } from '@/lib/api';
 import { fetchUnread } from '@/lib/messages';
-import { fetchTeam, redeemInvite, TeamMember } from '@/lib/team';
+import { fetchTeam, leaveTeam, redeemInvite, TeamMember } from '@/lib/team';
 import { syncMobileData, updateSharingConsent } from '@/lib/sync';
 
 const KIND_LABELS = { coach: 'ENTRENADOR', nutritionist: 'NUTRICIONISTA' } as const;
@@ -135,9 +136,12 @@ function SupervisionControls() {
   );
 }
 
-function TeamSection() {
+function TeamSection({ onLeft }: { onLeft: () => void }) {
   const { accent } = usePreferences();
   const C = useColors();
+  const { userId } = useSession();
+  const [reporting, setReporting] = useState<TeamMember | null>(null);
+  const [leaving, setLeaving] = useState<string | null>(null);
   const [team, setTeam] = useState<TeamMember[] | null>(null);
   const [unread, setUnread] = useState<Record<string, number>>({});
   const [offline, setOffline] = useState(false);
@@ -184,6 +188,32 @@ function TeamSection() {
     }
   }
 
+  function confirmLeave(member: TeamMember) {
+    Alert.alert(
+      `Salir del equipo de ${member.name}`,
+      `${member.name} deja de ver tus datos y ya no pueden escribirse. Tus registros siguen en tu teléfono. Para volver vas a necesitar un código de invitación nuevo.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Salir', style: 'destructive', onPress: () => { void leave(member); } },
+      ],
+    );
+  }
+
+  async function leave(member: TeamMember) {
+    setLeaving(member.userId);
+    try {
+      await leaveTeam(member.userId);
+      // Pull the revoked consents so this phone stops sending that organization data.
+      if (userId) await syncMobileData(userId);
+      await load();
+      onLeft();
+    } catch {
+      Alert.alert('No se pudo salir del equipo', 'Revisá tu conexión e intentá de nuevo.');
+    } finally {
+      setLeaving(null);
+    }
+  }
+
   const coach = team?.find(t => t.kind === 'coach');
   const nutri = team?.find(t => t.kind === 'nutritionist');
   const missingAny = team != null && (!coach || !nutri);
@@ -227,13 +257,24 @@ function TeamSection() {
               </View>
             );
             return member ? (
-              <PressableScale
-                key={kind}
-                haptic="light"
-                onPress={() => router.push({ pathname: '/mensajes', params: { with: member.userId } } as any)}
-              >
-                {row}
-              </PressableScale>
+              <View key={kind}>
+                <PressableScale
+                  haptic="light"
+                  onPress={() => router.push({ pathname: '/mensajes', params: { with: member.userId } } as any)}
+                >
+                  {row}
+                </PressableScale>
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 22, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.borderLight }}>
+                  <PressableScale onPress={() => setReporting(member)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel={`Reportar a ${member.name}`}>
+                    <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 0.8, color: C.textSecondary }}>REPORTAR</Text>
+                  </PressableScale>
+                  <PressableScale onPress={() => confirmLeave(member)} disabled={leaving != null} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel={`Salir del equipo de ${member.name}`}>
+                    <Text style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: 0.8, color: C.red }}>
+                      {leaving === member.userId ? 'SALIENDO…' : 'SALIR DEL EQUIPO'}
+                    </Text>
+                  </PressableScale>
+                </View>
+              </View>
             ) : (
               <View key={kind}>{row}</View>
             );
@@ -282,6 +323,7 @@ function TeamSection() {
           )}
         </>
       )}
+      <ReportSheet target={reporting} onClose={() => setReporting(null)} />
     </Card>
   );
 }
@@ -289,6 +331,8 @@ function TeamSection() {
 export default function EquipoScreen() {
   const C = useColors();
   const insets = useSafeAreaInsets();
+  // Bumped after leaving a team so the sharing controls reload from the local database.
+  const [teamVersion, setTeamVersion] = useState(0);
 
   return (
     <ScrollView
@@ -309,8 +353,8 @@ export default function EquipoScreen() {
           </View>
         </View>
 
-        <TeamSection />
-        <SupervisionControls />
+        <TeamSection onLeft={() => setTeamVersion(version => version + 1)} />
+        <SupervisionControls key={teamVersion} />
       </View>
     </ScrollView>
   );

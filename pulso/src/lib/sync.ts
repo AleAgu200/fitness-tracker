@@ -252,6 +252,14 @@ async function applyChange(tx: SyncTransaction, athleteId: string, change: PullC
       .onConflictDoUpdate({ target: localSharingConsents.id, set: { granted, updatedAt } });
     return;
   }
+  if (change.entityType === 'organization_client' && change.operation === 'delete') {
+    // The athlete left this organization: its sharing switches go away until a new invite.
+    await tx.delete(localSharingConsents).where(and(
+      eq(localSharingConsents.athleteId, athleteId),
+      eq(localSharingConsents.organizationId, String(payload.organizationId ?? '')),
+    ));
+    return;
+  }
   if (change.entityType === 'care_assignment') {
     const organizationId = String(payload.organizationId ?? '');
     const discipline = payload.discipline === 'nutritionist' ? 'nutritionist' : 'coach';
