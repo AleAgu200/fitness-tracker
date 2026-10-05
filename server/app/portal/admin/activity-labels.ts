@@ -8,6 +8,7 @@ export const ACTION_LABEL: Record<string, string> = {
   "professional.rejected": "Profesional rechazado",
   "report.resolved": "Reporte resuelto",
   "report.dismissed": "Reporte descartado",
+  "ads.updated": "Anuncios configurados",
   "exercise.create": "Ejercicio creado",
   "exercise.update": "Ejercicio editado",
   "exercise.hide": "Ejercicio ocultado",

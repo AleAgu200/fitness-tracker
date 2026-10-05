@@ -10,6 +10,7 @@ import { PulseCore } from '@/components/pulse/pulse-core';
 import { SleepCard } from '@/components/sleep-card';
 import { SignalStrip } from '@/components/pulse/signal-strip';
 import { Card, Label, PressableScale, SMALL_TARGET_HIT_SLOP } from '@/components/ui/kit';
+import { TabAdGate } from '@/components/tab-ad-gate';
 import { F, useColors } from '@/constants/colors';
 import { Exercise, useApp } from '@/context/app-state';
 import { PlanGenerationJob, useOnboardingGeneration } from '@/context/onboarding-generation';
@@ -139,7 +140,7 @@ function useWeeklyStrip(userId: string | null, plannedDays: number, now: number)
   return strip;
 }
 
-export default function HoyScreen() {
+function HoyScreen() {
   const { state, reloadNutritionToday } = useApp();
   const {
     job: generationJob,
@@ -447,6 +448,16 @@ function Mission({ accent, weekdayLabel, loggedSets, todaysSessionId, recovering
           </PressableScale>
         ))}
       </View>
+    </View>
+  );
+}
+
+/** The screen plus its ad overlay (admin panel → Anuncios decides when it shows). */
+export default function HoyTab() {
+  return (
+    <View style={{ flex: 1 }}>
+      <HoyScreen />
+      <TabAdGate placement="hoy" />
     </View>
   );
 }

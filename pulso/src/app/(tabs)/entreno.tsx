@@ -4,11 +4,11 @@ import { AccessibilityInfo, ActivityIndicator, Alert, ScrollView, Text, View } f
 import Animated, { Easing, FadeIn, FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { EntrenoAdGate } from '@/components/entreno-ad-gate';
 import { ExerciseAnimationModal } from '@/components/exercise-animation-modal';
 import { ExercisePlanForm, ExercisePlanValues, ExistingPlanExercise } from '@/components/exercise-plan-form';
 import { PreviousPulse } from '@/components/pulse/previous-pulse';
 import { AnimatedBar, Card, GlowPulse, Label, PressableScale, SMALL_TARGET_HIT_SLOP } from '@/components/ui/kit';
+import { TabAdGate } from '@/components/tab-ad-gate';
 import { F, useColors, withAlpha } from '@/constants/colors';
 import { SetFeedback, useApp } from '@/context/app-state';
 import { usePreferences } from '@/context/preferences';
@@ -866,7 +866,7 @@ export default function EntrenoScreen() {
     )}
     {/* Last child on purpose: it's an absolutely-positioned overlay that has to
         paint above the whole screen until the ad is done. */}
-    <EntrenoAdGate />
+    <TabAdGate placement="entreno" />
     </>
   );
 }

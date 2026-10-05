@@ -145,6 +145,10 @@ Sin esto el botón de Google falla en el build de Play. Correo y contraseña fun
 - [ ] **Privacidad y mensajes** → crear y publicar un mensaje de **GDPR** (EEE, Reino Unido,
       Suiza). La app ya lo muestra a quien corresponda (UMP). Sin mensaje publicado, en esos
       países solo se sirven anuncios limitados.
+- [ ] Crear un bloque **Intersticial** por cada pestaña que vaya a tener anuncios y pegar su ID en
+      el panel de admin → **Anuncios** (ahí se elige también la frecuencia). El bloque actual de
+      Entreno es *intersticial bonificado*: conviene pasar Entreno a un bloque intersticial,
+      porque el bonificado exige ofrecer una recompensa.
 - [ ] Agregar los teléfonos de prueba como **dispositivos de prueba** en AdMob. Los builds
       preview y production muestran anuncios reales, y tocarlos uno mismo es tráfico inválido.
 

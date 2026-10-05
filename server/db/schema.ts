@@ -15,3 +15,4 @@ export * from "./schema/athlete-sharing";
 export * from "./schema/backup";
 export * from "./schema/device-sync";
 export * from "./schema/reports";
+export * from "./schema/settings";
