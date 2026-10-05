@@ -29,6 +29,7 @@ import { SessionProvider } from '@/context/session';
 import { runMigrations } from '@/db/migrate';
 import { initializeAds } from '@/lib/ads';
 import { initCrashReporting, wrapRoot } from '@/lib/crash-reporting';
+import { watchPrivacyRationale } from '@/lib/legal';
 
 // First thing at module load, so a failure during startup is reported too.
 initCrashReporting();
@@ -68,6 +69,12 @@ function RootLayout() {
 
   useEffect(() => {
     if (fontsLoaded && dbReady) SplashScreen.hideAsync();
+  }, [fontsLoaded, dbReady]);
+
+  // Health Connect's "privacy policy" link opens the app with a rationale action.
+  useEffect(() => {
+    if (!fontsLoaded || !dbReady) return;
+    return watchPrivacyRationale();
   }, [fontsLoaded, dbReady]);
 
   if (!fontsLoaded || !dbReady) return null;

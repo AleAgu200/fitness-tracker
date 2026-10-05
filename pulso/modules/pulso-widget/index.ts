@@ -72,3 +72,21 @@ export function addWidgetRestListener(
   if (!module) return { remove: () => {} };
   return module.addListener('onRestChanged', listener);
 }
+
+/** Action of the intent that launched the app (Android), or null when unknown. */
+export function getLaunchAction(): string | null {
+  const module = widget();
+  if (!module) return null;
+  try {
+    return module.getLaunchAction();
+  } catch {
+    return null;
+  }
+}
+
+/** Fires when a new intent reaches the running app, e.g. Health Connect's rationale link. */
+export function addLaunchActionListener(listener: (action: string | null) => void): { remove: () => void } {
+  const module = widget();
+  if (!module) return { remove: () => {} };
+  return module.addListener('onLaunchAction', event => listener(event.action));
+}

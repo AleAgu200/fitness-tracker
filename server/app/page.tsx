@@ -468,6 +468,9 @@ export default function Home() {
         <div>
           <span>pulsofitness</span>
           <Link href="/portal">Portal profesional</Link>
+          <Link href="/privacidad">Privacidad</Link>
+          <Link href="/terminos">Términos</Link>
+          <Link href="/eliminar-cuenta">Borrar mi cuenta</Link>
         </div>
       </footer>
     </main>

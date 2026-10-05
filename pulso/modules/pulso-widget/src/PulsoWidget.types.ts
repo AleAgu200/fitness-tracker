@@ -8,4 +8,6 @@ export interface WidgetRestState {
 export type PulsoWidgetEvents = {
   /** Emitted when a widget button moved the timer while the app happened to be running. */
   onRestChanged: (state: WidgetRestState) => void;
+  /** Emitted when an intent reaches the already-running activity. */
+  onLaunchAction: (event: { action: string | null }) => void;
 };

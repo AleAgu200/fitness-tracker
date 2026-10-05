@@ -20,6 +20,7 @@ declare class PulsoWidgetModule extends NativeModule<PulsoWidgetEvents> {
   }): void;
   setRest(restEndAt: number | null, restTotal: number): void;
   getRest(): WidgetRestState;
+  getLaunchAction(): string | null;
 }
 
 export default requireNativeModule<PulsoWidgetModule>('PulsoWidget');
