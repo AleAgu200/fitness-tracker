@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import mobileAds, { MaxAdContentRating, TestIds } from 'react-native-google-mobile-ads';
+import mobileAds, { AdsConsent, MaxAdContentRating, TestIds } from 'react-native-google-mobile-ads';
 
 /**
  * AdMob wiring. The native SDK is NOT available in Expo Go — every export here
@@ -39,14 +39,21 @@ export function initializeAds(): Promise<void> {
   if (!adsSupported) return Promise.resolve();
   if (initPromise) return initPromise;
 
-  initPromise = mobileAds()
-    .setRequestConfiguration({
+  // Google's consent message (UMP, configured in AdMob → Privacy & messaging) must run
+  // before ads load where the law requires it (EEA, UK, Switzerland). Elsewhere, or with
+  // no message published, it resolves without showing anything. A failure must not block
+  // ads: the SDK then serves non-personalized ads only where consent is missing.
+  initPromise = AdsConsent.gatherConsent()
+    .catch((e) => {
+      console.warn('[ads] consent failed', e);
+    })
+    .then(() => mobileAds().setRequestConfiguration({
       // The app is a training/nutrition tracker used by minors in some markets,
       // so cap creatives at a general audience rating.
       maxAdContentRating: MaxAdContentRating.PG,
       tagForChildDirectedTreatment: false,
       tagForUnderAgeOfConsent: false,
-    })
+    }))
     .then(() => mobileAds().initialize())
     .then(() => undefined)
     .catch((e) => {
