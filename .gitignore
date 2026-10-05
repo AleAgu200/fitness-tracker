@@ -3,3 +3,6 @@
 
 # Gradle output of local native modules (regenerated on every build)
 pulso/modules/*/android/build/
+
+# Capturas de la tienda: borradores con datos de cuentas reales
+/store/play/screenshots/
