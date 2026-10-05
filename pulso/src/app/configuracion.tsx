@@ -4,7 +4,7 @@ import { Alert, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { BackupSection, ImportDataRow } from '@/components/backup-settings';
+import { BackupSection, DeviceSyncSection, ImportDataRow } from '@/components/backup-settings';
 import { DiagnosticsFooter } from '@/components/diagnostics-footer';
 import { Card, Label, PressableScale } from '@/components/ui/kit';
 import { NotificationSettings } from '@/components/notification-settings';
@@ -374,6 +374,8 @@ export default function ConfiguracionScreen() {
             <Text style={{ fontFamily: F.mono, fontSize: 12, color: C.textSecondary }}>→</Text>
           </PressableScale>
         </View>
+
+        <DeviceSyncSection />
 
         <BackupSection />
 

@@ -18,6 +18,7 @@ const BENEFITS = [
   { title: 'Sin anuncios', detail: 'Entrá directo al entreno, sin esperas.' },
   { title: 'Planes propios sin límite', detail: 'Guardá varios planes de entreno y de dieta y alterná entre ellos.' },
   { title: 'Respaldo diario en tu cuenta', detail: 'Recuperá tu historial y tus planes en otro teléfono. Restaurar es gratis aunque Plus venza.' },
+  { title: 'Todos tus dispositivos al día', detail: 'Registrá en el teléfono o en la tablet y lo ves en todos, también sin conexión.' },
 ];
 
 /**

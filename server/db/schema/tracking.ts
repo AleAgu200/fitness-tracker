@@ -16,7 +16,7 @@ export const syncDevices = pgTable("sync_devices", {
   replacedAt: milliseconds("replacedAt"),
   revokedAt: milliseconds("revokedAt"),
 }, (table) => [
-  check("sync_devices_status_check", sql`${table.status} in ('active_writer', 'replaced', 'revoked')`),
+  check("sync_devices_status_check", sql`${table.status} in ('active_writer', 'replaced', 'revoked', 'secondary')`),
   uniqueIndex("sync_devices_one_active_writer")
     .on(table.athleteId)
     .where(sql`${table.status} = 'active_writer'`),

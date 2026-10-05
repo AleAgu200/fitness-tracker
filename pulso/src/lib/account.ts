@@ -6,6 +6,7 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
 import { collectLocalData, wipeLocalData } from '@/db/account-data';
+import { withCapturePaused } from '@/db/device-sync';
 import { dateStr } from './dates';
 import { clearDiscomfort } from './discomfort';
 import { clearRecoveryState } from './account-recovery';
@@ -45,7 +46,8 @@ export async function requestDeletion(userId: string): Promise<PendingDeletion> 
     if (error instanceof ApiError && error.code === 'professional_account') throw new ProfessionalAccountError();
     throw error;
   }
-  await wipeLocalData(userId);
+  // Not a deletion to spread to the other devices: the account is closing.
+  await withCapturePaused(() => wipeLocalData(userId));
   await Promise.all([clearAssignmentMeta(userId), clearDiscomfort(userId), clearRecoveryState(userId)]);
   return deletion;
 }

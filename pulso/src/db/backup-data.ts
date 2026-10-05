@@ -44,7 +44,7 @@ import {
 } from './schema';
 import { recomputeAllRecords } from './workout';
 
-const TABLES: Record<BackupTable, SQLiteTable> = {
+export const TABLES: Record<BackupTable, SQLiteTable> = {
   athlete_profiles: athleteProfiles,
   onboarding_state: onboardingState,
   generation_profiles: generationProfiles,
@@ -171,7 +171,7 @@ export async function listLocalExercises(): Promise<{ id: string; name: string }
 }
 
 /** JSON carries timestamps as ms or ISO strings; Drizzle's timestamp columns need Dates. */
-function toInsertRow(table: SQLiteTable, row: Row): Row {
+export function toInsertRow(table: SQLiteTable, row: Row): Row {
   const columns = getTableColumns(table) as Record<string, { dataType: string }>;
   const result: Row = {};
   for (const [key, column] of Object.entries(columns)) {

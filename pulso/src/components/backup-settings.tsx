@@ -19,6 +19,7 @@ import {
   setBackupEnabled,
   uploadBackup,
 } from '@/lib/backup';
+import { DeviceSyncStatus, getDeviceSyncStatus, localSyncSummary, setDeviceSync, SyncOutcome, syncDevices } from '@/lib/device-sync';
 
 const CONSENT_TEXT = 'Si activás el respaldo personal, PULSO guarda una copia de tus datos en tu cuenta para recuperarlos en otro dispositivo. Esto no los comparte con tu coach ni nutricionista; compartir con profesionales se controla por separado.';
 
@@ -336,5 +337,121 @@ export function ImportDataRow({ rowStyle }: { rowStyle: object }) {
       </View>
       <Text style={{ fontFamily: F.mono, fontSize: 12, color: C.textSecondary }}>↙</Text>
     </PressableScale>
+  );
+}
+
+const SYNC_CONSENT_TEXT = 'Si activás la sincronización, PULSO guarda tus datos en tu cuenta para que todos tus dispositivos vean y registren lo mismo. No los comparte con tu coach ni nutricionista; eso se controla por separado.';
+
+/** Multi-device sync (Plus): consent, status and "sync now". */
+export function DeviceSyncSection() {
+  const { userId } = useSession();
+  const { reloadAll } = useApp();
+  const { accent } = usePreferences();
+  const C = useColors();
+  const [status, setStatus] = useState<DeviceSyncStatus | null>(null);
+  const [local, setLocal] = useState<{ lastSyncAt: Date | null; pending: number; lastError: string | null } | null>(null);
+  const [offline, setOffline] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    if (!userId) return;
+    getDeviceSyncStatus()
+      .then(next => { setStatus(next); setOffline(false); })
+      .catch(() => setOffline(true));
+    localSyncSummary(userId).then(setLocal).catch(() => {});
+  }, [userId]);
+  useEffect(load, [load]);
+
+  async function runSync(action: () => Promise<SyncOutcome>) {
+    setBusy(true);
+    const outcome = await action().catch(() => ({ status: 'offline' as const }));
+    setBusy(false);
+    if (outcome.status === 'synced' && outcome.applied > 0) await reloadAll().catch(() => {});
+    if (outcome.status === 'plus_required') Alert.alert('Parte de PULSO Plus', 'La sincronización entre dispositivos es parte de PULSO Plus.');
+    else if (outcome.status === 'offline') Alert.alert('Sin conexión', 'Tus cambios quedan en este teléfono y se sincronizan cuando vuelva la conexión.');
+    else if (outcome.status === 'failed') Alert.alert('No se pudo sincronizar', 'Probá de nuevo en un momento.');
+    load();
+  }
+
+  function toggle(next: boolean) {
+    if (!userId) return;
+    const uid = userId;
+    if (next) {
+      Alert.alert('Sincronizar mis dispositivos', SYNC_CONSENT_TEXT, [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Activar', onPress: () => void runSync(() => setDeviceSync(uid, true)) },
+      ]);
+      return;
+    }
+    Alert.alert('Desactivar la sincronización', 'Borramos la copia sincronizada del servidor. Cada dispositivo conserva lo que ya tiene, pero dejan de compartir cambios.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Desactivar', style: 'destructive', onPress: () => void runSync(() => setDeviceSync(uid, false)) },
+    ]);
+  }
+
+  const text = (size: number, color: string, family: string = F.inter) => ({ fontFamily: family, fontSize: size, lineHeight: size * 1.45, color });
+  const lastSync = local?.lastSyncAt
+    ? local.lastSyncAt.toLocaleString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    : null;
+
+  return (
+    <View style={{ marginBottom: 20 }}>
+      <Label style={{ marginBottom: 9 }}>MIS DISPOSITIVOS</Label>
+      <View style={{ backgroundColor: C.card, borderWidth: 1, borderColor: C.border, padding: 14, gap: 12 }}>
+        {offline ? (
+          <View style={{ gap: 10 }}>
+            <Text style={text(13, C.textSecondary)}>No pudimos consultar la sincronización. Tus datos siguen en este teléfono.</Text>
+            <PressableScale onPress={load} style={{ minHeight: 44, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: C.border }}>
+              <Text style={text(10, C.textPrimary, F.monoBold)}>REINTENTAR</Text>
+            </PressableScale>
+          </View>
+        ) : !status ? (
+          <ActivityIndicator color={accent} />
+        ) : (
+          <>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontFamily: F.interSemi, fontSize: 14, color: C.textPrimary }}>Sincronizar mis dispositivos</Text>
+                <Text style={text(12, C.textTertiary)}>
+                  {status.enabled
+                    ? status.entitled ? 'Activado · lo que registres en uno aparece en todos' : 'En pausa · requiere PULSO Plus'
+                    : 'Desactivado · cada dispositivo guarda solo lo suyo'}
+                </Text>
+              </View>
+              <Switch
+                value={status.enabled}
+                onValueChange={toggle}
+                disabled={busy}
+                trackColor={{ true: accent, false: C.border }}
+                accessibilityLabel="Sincronizar mis dispositivos"
+              />
+            </View>
+            <Text style={text(12, C.textSecondary)}>{SYNC_CONSENT_TEXT}</Text>
+            {status.enabled && (
+              <>
+                <Text style={text(11, C.textTertiary)}>
+                  {[
+                    lastSync ? `Última sincronización: ${lastSync}` : 'Todavía no se sincronizó este dispositivo',
+                    local?.pending ? `${local.pending} cambios esperando` : null,
+                  ].filter(Boolean).join(' · ')}
+                </Text>
+                {status.entitled && (
+                  <PressableScale
+                    onPress={() => { if (userId) void runSync(() => syncDevices(userId)); }}
+                    disabled={busy}
+                    style={{ minHeight: 44, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: C.border }}
+                  >
+                    <Text style={text(10, C.textPrimary, F.monoBold)}>{busy ? 'SINCRONIZANDO…' : 'SINCRONIZAR AHORA'}</Text>
+                  </PressableScale>
+                )}
+              </>
+            )}
+            <Text style={text(11, C.textTertiary)}>
+              Si editás lo mismo en dos dispositivos sin conexión, queda el cambio más reciente. Los récords y logros se recalculan en cada uno; los datos de Health Connect y Salud quedan en el teléfono que los importó.
+            </Text>
+          </>
+        )}
+      </View>
+    </View>
   );
 }

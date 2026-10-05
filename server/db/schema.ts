@@ -13,3 +13,4 @@ export * from "./schema/tracking";
 export * from "./schema/billing";
 export * from "./schema/athlete-sharing";
 export * from "./schema/backup";
+export * from "./schema/device-sync";

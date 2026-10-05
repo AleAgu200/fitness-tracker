@@ -7,3 +7,4 @@ export * from './ai';
 export * from './onboarding';
 export * from './sync';
 export * from './health';
+export * from './device-sync';

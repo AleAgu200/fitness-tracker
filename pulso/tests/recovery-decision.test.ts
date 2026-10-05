@@ -25,6 +25,12 @@ describe('decideRecovery', () => {
     assert.deepEqual(decideRecovery({ settled: false, localHistory: true, lookup: found }), { kind: 'continue', settle: true });
   });
 
+  it('prefers syncing from the other devices over a daily copy', () => {
+    assert.deepEqual(decideRecovery({ settled: false, localHistory: false, lookup: found, sync: { active: true, records: 900 } }), { kind: 'offer_sync', records: 900 });
+    assert.deepEqual(decideRecovery({ settled: false, localHistory: false, lookup: found, sync: { active: false, records: 900 } }).kind, 'offer_restore');
+    assert.deepEqual(decideRecovery({ settled: false, localHistory: false, lookup: { status: 'absent' }, sync: { active: true, records: 0 } }), { kind: 'continue', settle: true });
+  });
+
   it('asks only once per phone', () => {
     assert.deepEqual(decideRecovery({ settled: true, localHistory: false, lookup: found }), { kind: 'continue', settle: false });
   });
