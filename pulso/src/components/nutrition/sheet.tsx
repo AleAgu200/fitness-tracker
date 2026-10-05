@@ -1,5 +1,5 @@
-import { ReactNode } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { ReactNode, useEffect, useState } from 'react';
+import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Label, PressableScale } from '@/components/ui/kit';
@@ -15,10 +15,22 @@ export function Sheet({ visible, onClose, eyebrow, title, children }: {
 }) {
   const C = useColors();
   const insets = useSafeAreaInsets();
+  // Android draws edge to edge, so the window no longer shrinks for the
+  // keyboard: lift the sheet by the keyboard's height or it covers the fields.
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const shown = Keyboard.addListener('keyboardDidShow', event => setKeyboardHeight(event.endCoordinates.height));
+    const hidden = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    return () => {
+      shown.remove();
+      hidden.remove();
+    };
+  }, []);
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' }}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end', paddingBottom: keyboardHeight }}>
           <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Cerrar" accessibilityRole="button" />
           <View style={{ backgroundColor: C.bg, borderTopWidth: 1, borderColor: C.border, maxHeight: '90%' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 }}>

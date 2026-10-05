@@ -1078,9 +1078,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       showSetFeedback({ kind: beating ? 'beat' : 'saved', setNumber, exercise: ex.nombre, weightKg: peso });
 
       logSet(uid, templateIdRef.current, { slotId: ex.id, exerciseId: ex.exerciseId }, { peso, reps, rpe, workingSeconds })
-        .then(({ isPR, isEstimatePR }) => {
-          // A lighter set can still raise the estimate: refresh records quietly.
-          if (!isPR) return isEstimatePR ? refreshDerived() : undefined;
+        .then(({ isPR, recordChanged }) => {
+          // A first set or a lighter set with a better estimate changes records too: refresh quietly.
+          if (!isPR) return recordChanged ? refreshDerived() : undefined;
           setState(st => {
             const sets = [...(st.log[ex.id] || [])];
             if (sets.length) sets[sets.length - 1] = { ...sets[sets.length - 1], pr: true };
