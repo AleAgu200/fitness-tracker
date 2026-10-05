@@ -97,12 +97,14 @@ export async function POST(request: Request) {
       name: input.name,
       email: input.email,
       password: input.password,
+      callbackURL: "/cuenta/verificado?portal=1",
     }),
   });
   const authResponse = await auth.handler(authRequest);
   if (!authResponse.ok) return authResponse;
 
-  const payload = await authResponse.clone().json() as { user?: { id?: string } };
+  // With verification required, Better Auth creates the user but no session.
+  const payload = await authResponse.clone().json() as { token?: string | null; user?: { id?: string } };
   const userId = payload.user?.id;
   if (!userId) return Response.json({ error: "signup_failed" }, { status: 500 });
 
@@ -123,7 +125,7 @@ export async function POST(request: Request) {
   await notifyRequest(input.email, input.name, input.discipline);
   const responseHeaders = new Headers(authResponse.headers);
   responseHeaders.set("content-type", "application/json");
-  return new Response(JSON.stringify({ ok: true, status: initialProfessionalStatus() }), {
+  return new Response(JSON.stringify({ ok: true, status: initialProfessionalStatus(), verifyEmail: !payload.token }), {
     status: 201,
     headers: responseHeaders,
   });

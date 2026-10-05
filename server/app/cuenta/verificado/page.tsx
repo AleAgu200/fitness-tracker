@@ -23,9 +23,18 @@ export default async function EmailVerifiedPage({
       </AccountShell>
     );
   }
+  if (params.portal === "1") {
+    return (
+      <AccountShell title="Correo confirmado">
+        <p className="text-fg-mid leading-relaxed">
+          Gracias. Ya podés <a className="text-neon" href="/portal">ingresar al portal</a> con tu correo y contraseña.
+        </p>
+      </AccountShell>
+    );
+  }
   return (
     <AccountShell title="Correo confirmado">
-      <p className="text-fg-mid leading-relaxed">Gracias. Ya podés volver a la app.</p>
+      <p className="text-fg-mid leading-relaxed">Gracias. Volvé a PULSO: la app entra sola o tocá “Ya lo confirmé”.</p>
     </AccountShell>
   );
 }

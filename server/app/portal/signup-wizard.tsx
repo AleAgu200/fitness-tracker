@@ -56,6 +56,7 @@ export function ProfessionalSignupWizard({ requiresCode, requiresApproval, googl
   const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [verifySentTo, setVerifySentTo] = useState<string | null>(null);
 
   function next(e: React.FormEvent) {
     e.preventDefault();
@@ -73,10 +74,15 @@ export function ProfessionalSignupWizard({ requiresCode, requiresApproval, googl
     setBusy(true);
     setError(null);
     try {
-      await api("/api/portal/signup", {
+      const result = await api<{ verifyEmail?: boolean }>("/api/portal/signup", {
         method: "POST",
         body: JSON.stringify({ name, email, password, discipline, organizationName, signupCode }),
       });
+      if (result.verifyEmail) {
+        setVerifySentTo(email.trim().toLowerCase());
+        setBusy(false);
+        return;
+      }
       onDone();
     } catch (cause) {
       const status = cause instanceof ApiError ? cause.status : 0;
@@ -91,6 +97,22 @@ export function ProfessionalSignupWizard({ requiresCode, requiresApproval, googl
   }
 
   const selected = DISCIPLINES.find(d => d.value === discipline);
+
+  if (verifySentTo) {
+    return (
+      <div className="relative z-10 mx-auto max-w-115 px-5 py-[7vh]">
+        <div className="mb-2.5 font-mono-app text-[11px] tracking-[2.4px] text-volt">PULSO · ALTA PROFESIONAL</div>
+        <h1 className="mb-2 text-[26px] font-semibold text-fg">Confirmá tu correo</h1>
+        <p className="mb-5 text-sm leading-6 text-fg-sec">
+          Te enviamos un enlace a <strong className="text-fg">{verifySentTo}</strong>. Tocalo para confirmar tu cuenta y
+          después ingresá con tu correo y contraseña. Si no lo ves, revisá spam.
+        </p>
+        <button type="button" onClick={onBack} className="w-full cursor-pointer bg-volt p-3.5 font-mono-app text-xs font-extrabold tracking-[1px] text-ink transition hover:brightness-110">
+          IR A INGRESAR
+        </button>
+      </div>
+    );
+  }
 
   return (
     <form onSubmit={step === 2 ? submit : next} className="relative z-10 mx-auto max-w-115 px-5 py-[7vh]">

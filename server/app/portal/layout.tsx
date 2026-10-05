@@ -359,6 +359,8 @@ function Login({ onDone }: { onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   const [charging, setCharging] = useState(false);
   const [googleEnabled, setGoogleEnabled] = useState(false);
+  const [unverified, setUnverified] = useState(false);
+  const [resent, setResent] = useState(false);
   const reducedMotion = useReducedMotion();
 
   useEffect(() => {
@@ -386,10 +388,24 @@ function Login({ onDone }: { onDone: () => void }) {
     }
   }
 
+  async function resendVerification() {
+    try {
+      await api("/api/auth/send-verification-email", {
+        method: "POST",
+        body: JSON.stringify({ email: email.trim().toLowerCase(), callbackURL: "/cuenta/verificado?portal=1" }),
+      });
+      setResent(true);
+    } catch {
+      setError("No se pudo reenviar el enlace. Probá de nuevo en unos minutos.");
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
+    setUnverified(false);
+    setResent(false);
     try {
       await api("/api/auth/sign-in/email", { method: "POST", body: JSON.stringify({ email, password }) });
       if (reducedMotion) {
@@ -400,6 +416,12 @@ function Login({ onDone }: { onDone: () => void }) {
       }
     } catch (cause) {
       const suspended = cause instanceof ApiError && cause.body?.code === "ACCOUNT_SUSPENDED";
+      if (cause instanceof ApiError && cause.body?.code === "EMAIL_NOT_VERIFIED") {
+        setUnverified(true);
+        setError("Confirmá tu correo antes de entrar. Revisá tu bandeja o pedí otro enlace.");
+        setBusy(false);
+        return;
+      }
       setError(suspended
         ? "Tu cuenta está suspendida. Respondé el correo que te enviamos para más información."
         : cause instanceof ApiError && cause.status === 429
@@ -434,6 +456,11 @@ function Login({ onDone }: { onDone: () => void }) {
           <input required value={email} onChange={e => setEmail(e.target.value)} type="email" autoComplete="email" placeholder="tu@email.com" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />
           <input required minLength={6} value={password} onChange={e => setPassword(e.target.value)} type="password" autoComplete="current-password" placeholder="Contraseña" className="mb-3 w-full border border-line bg-elev p-3 text-sm text-fg placeholder:text-fg-ter focus:border-volt focus:outline-none" />
           {error && <div role="alert" className="mb-3 font-mono-app text-xs text-danger">{error}</div>}
+          {unverified && (
+            <button type="button" onClick={() => void resendVerification()} disabled={resent} className="mb-3 cursor-pointer font-mono-app text-xs text-neon hover:underline disabled:cursor-default disabled:text-fg-ter disabled:no-underline">
+              {resent ? "TE ENVIAMOS OTRO ENLACE" : "REENVIAR ENLACE DE CONFIRMACIÓN"}
+            </button>
+          )}
           <button
             type="submit"
             disabled={busy}
