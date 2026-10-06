@@ -1,4 +1,7 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+
+import { SITE_DESCRIPTION, SITE_URL } from "@/lib/site";
 
 import { DemoVideo } from "./demo-video";
 import styles from "./page.module.css";
@@ -33,6 +36,53 @@ function CheckIcon() {
     </svg>
   );
 }
+
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
+
+/** What search engines read about PULSO: the publisher, the site, the app and the demo video. */
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": `${SITE_URL}/#organization`,
+      name: "PULSO",
+      url: SITE_URL,
+      logo: `${SITE_URL}/icon.png`,
+      email: "pulso@pulsofitness.tech",
+    },
+    {
+      "@type": "WebSite",
+      "@id": `${SITE_URL}/#website`,
+      url: SITE_URL,
+      name: "PULSO",
+      inLanguage: "es",
+      publisher: { "@id": `${SITE_URL}/#organization` },
+    },
+    {
+      "@type": "MobileApplication",
+      name: "PULSO",
+      operatingSystem: "Android, iOS",
+      applicationCategory: "HealthApplication",
+      description: SITE_DESCRIPTION,
+      inLanguage: "es",
+      offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+      publisher: { "@id": `${SITE_URL}/#organization` },
+    },
+    {
+      "@type": "VideoObject",
+      name: "PULSO en 30 segundos",
+      description: "Series, récords, comidas, agua, sueño y los mensajes de tu entrenador, en el mismo lugar.",
+      thumbnailUrl: `${SITE_URL}/media/pulso-demo-16x9.jpg`,
+      contentUrl: `${SITE_URL}/media/pulso-demo-16x9.mp4`,
+      uploadDate: "2026-10-06",
+      duration: "PT30S",
+      inLanguage: "es",
+    },
+  ],
+};
 
 /** Store listings. Fill in each URL when the app is published; until then the badge is not a link. */
 const STORE_LINKS: { googlePlay: string | null; appStore: string | null } = { googlePlay: null, appStore: null };
@@ -105,6 +155,7 @@ const portalNav = ["Atención", "Atletas", "Equipo", "Alimentos", "Ejercicios"];
 export default function Home() {
   return (
     <main className={styles.page}>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <a className={styles.skipLink} href="#contenido">
         Saltar al contenido
       </a>
