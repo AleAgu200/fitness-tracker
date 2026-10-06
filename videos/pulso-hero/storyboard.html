@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PULSO · La línea del pulso — storyboard v1</title>
+<style>
+  @font-face { font-family: "Grotesk"; src: url("assets/fonts/SpaceGrotesk_700Bold.ttf"); font-weight: 700; }
+  @font-face { font-family: "Grotesk"; src: url("assets/fonts/SpaceGrotesk_500Medium.ttf"); font-weight: 500; }
+  @font-face { font-family: "Mono"; src: url("assets/fonts/JetBrainsMono_400Regular.ttf"); font-weight: 400; }
+  @font-face { font-family: "Mono"; src: url("assets/fonts/JetBrainsMono_700Bold.ttf"); font-weight: 700; }
+  @font-face { font-family: "Inter"; src: url("assets/fonts/Inter_400Regular.ttf"); font-weight: 400; }
+  @font-face { font-family: "Inter"; src: url("assets/fonts/Inter_600SemiBold.ttf"); font-weight: 600; }
+  :root {
+    --bg: #0A0A0B; --fg: #FAFAFA; --sec: #8A8A93; --ter: #5A5A62; --card: #141416; --line: #26262A;
+    --orange: #F49B35; --volt: #E8FF59; --cyan: #3DDCFF;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #1A1A1D; color: #D8D8DE; font-family: Inter, system-ui, sans-serif; padding: 40px 32px 80px; }
+  header { max-width: 1500px; margin: 0 auto 28px; display: flex; align-items: end; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+  h1 { font-family: Grotesk, sans-serif; font-size: 34px; color: #fff; }
+  h1 small { font-family: Mono, monospace; font-size: 14px; color: var(--volt); margin-left: 10px; vertical-align: middle; }
+  .dek { color: #A0A0A8; margin-top: 6px; font-size: 15px; }
+  .tag { font-family: Mono, monospace; font-size: 12px; color: #A0A0A8; border: 1px solid #333; padding: 6px 10px; }
+  .grid { max-width: 1500px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; }
+  @media (max-width: 1100px) { .grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+  .item { display: flex; flex-direction: column; gap: 8px; }
+  .frame { aspect-ratio: 16 / 9; container-type: inline-size; position: relative; overflow: hidden; background: var(--bg); border: 1px solid #2A2A2E; }
+  .meta { display: flex; justify-content: space-between; font-family: Mono, monospace; font-size: 11px; color: #8A8A93; letter-spacing: .06em; }
+  .meta b { color: #EDEDF0; }
+  .note { font-size: 13px; line-height: 1.5; color: #B8B8C0; }
+  .note b { color: #fff; }
+  .chip { align-self: flex-start; font-family: Mono, monospace; font-size: 10px; letter-spacing: .08em; color: var(--orange); border: 1px solid rgba(244,155,53,.45); padding: 3px 8px; }
+
+  /* frame vocabulary (sizes in cqw: 1cqw = 19.2px at 1920) */
+  .ecg { position: absolute; left: 0; width: 100%; height: 30cqw; top: 31cqw; overflow: visible; }
+  .ecg path { fill: none; stroke: var(--orange); stroke-width: .42cqw; stroke-linejoin: round; stroke-linecap: round; }
+  .glow { position: absolute; border-radius: 50%; filter: blur(4cqw); opacity: .22; }
+  .label { position: absolute; font-family: Mono, monospace; font-size: 1.3cqw; letter-spacing: .14em; color: var(--sec); }
+  .hl { position: absolute; font-family: Grotesk, sans-serif; font-weight: 700; color: var(--fg); font-size: 6.2cqw; line-height: 1.02; letter-spacing: -.02em; }
+  .sub { position: absolute; font-family: Inter, sans-serif; color: var(--sec); font-size: 1.9cqw; }
+  .card { position: absolute; background: var(--card); border: .15cqw solid var(--line); padding: 1.8cqw; }
+  .k { font-family: Mono, monospace; font-size: 1.15cqw; letter-spacing: .14em; color: var(--sec); }
+  .num { font-family: Mono, monospace; font-weight: 700; color: var(--fg); }
+  .btn { background: var(--volt); color: var(--bg); font-family: Mono, monospace; font-weight: 700; font-size: 1.3cqw; letter-spacing: .08em; text-align: center; padding: 1.1cqw; }
+  .pill { display: inline-block; font-family: Mono, monospace; font-weight: 700; font-size: 1.2cqw; letter-spacing: .12em; color: var(--bg); background: var(--volt); padding: .5cqw 1cqw; }
+  .bar { height: .9cqw; background: #222226; position: relative; margin-top: .6cqw; }
+  .bar i { position: absolute; inset: 0 auto 0 0; background: var(--volt); }
+  .tokens { container-type: normal; aspect-ratio: auto; padding: 18px; font-size: 13px; line-height: 1.6; }
+  .sw { display: inline-block; width: 14px; height: 14px; vertical-align: -2px; margin-right: 6px; border: 1px solid #333; }
+  .seams { aspect-ratio: auto; container-type: normal; padding: 18px; font-family: Mono, monospace; font-size: 12px; line-height: 1.9; color: #C8C8CE; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>PULSO · La línea del pulso <small>v2</small></h1>
+    <p class="dek">Promo para el hero de pulsofitness.tech. La línea de latido del logo recorre la app y termina siendo el corredor.</p>
+  </div>
+  <span class="tag">1920×1080 · ~30.5 s · 10 frames · sin audio · loop</span>
+</header>
+
+<main class="grid">
+
+<!-- 01 -->
+<section class="item">
+  <div class="frame" id="frame-01">
+    <span class="label" style="left:5cqw;top:5cqw">PULSO · 06:00</span>
+    <svg class="ecg" viewBox="0 0 1000 300" preserveAspectRatio="none"><path d="M0 150 H1000" /></svg>
+    <span style="position:absolute;left:61cqw;top:44.6cqw;width:1.6cqw;height:1.6cqw;border-radius:50%;background:var(--orange);box-shadow:0 0 2cqw var(--orange)"></span>
+  </div>
+  <div class="meta"><span><b>01</b> · LÍNEA PLANA</span><span>0.0–2.0 s</span></div>
+  <p class="note"><b>Lo primero que se mueve:</b> la línea se dibuja de derecha a izquierda y el punto empieza a viajar. Nada de texto grande todavía.</p>
+  <span class="chip">ENTRA: CORTE (EMPALME DEL LOOP)</span>
+</section>
+
+<!-- 02 -->
+<section class="item">
+  <div class="frame" id="frame-02">
+    <span class="label" style="left:5cqw;top:5cqw">PULSO · 06:00</span>
+    <div class="hl" style="left:5cqw;top:13cqw">Tu día<br>tiene pulso.</div>
+    <svg class="ecg" viewBox="0 0 1000 300" preserveAspectRatio="none"><path d="M0 150 H560 L585 150 L600 60 L618 230 L635 120 L650 150 H1000" /></svg>
+  </div>
+  <div class="meta"><span><b>02</b> · UN LATIDO</span><span>2.0–4.5 s</span></div>
+  <p class="note"><b>Lo primero:</b> el pico de la línea; el titular aparece palabra por palabra justo después, anclado arriba a la izquierda.</p>
+  <span class="chip">CORTE A LA IZQUIERDA →</span>
+</section>
+
+<!-- 03 -->
+<section class="item">
+  <div class="frame" id="frame-03">
+    <div class="hl" style="left:5cqw;top:9cqw;font-size:5.4cqw">Cada serie,<br>en segundos.</div>
+    <div class="card" style="left:53cqw;top:5cqw;width:39cqw">
+      <div class="k">SENTADILLA · SERIE 3 DE 3</div>
+      <div style="display:flex;gap:1.2cqw;margin-top:1.4cqw">
+        <div style="flex:1;border:.15cqw solid var(--line);padding:1.2cqw;text-align:center"><div class="k">PESO KG</div><div class="num" style="font-size:4.6cqw">62.5</div></div>
+        <div style="flex:1;border:.15cqw solid var(--line);padding:1.2cqw;text-align:center"><div class="k">REPS</div><div class="num" style="font-size:4.6cqw">8</div></div>
+      </div>
+      <div class="k" style="margin-top:1.3cqw">RPE · ESFUERZO PERCIBIDO</div>
+      <div style="display:flex;gap:.6cqw;margin-top:.7cqw;font-family:Mono;font-size:1.3cqw">
+        <span style="border:.15cqw solid var(--line);padding:.5cqw 1cqw;color:var(--sec)">6</span><span style="border:.15cqw solid var(--line);padding:.5cqw 1cqw;color:var(--sec)">7</span><span style="border:.15cqw solid var(--orange);padding:.5cqw 1cqw;color:var(--orange)">8</span><span style="border:.15cqw solid var(--line);padding:.5cqw 1cqw;color:var(--sec)">9</span><span style="border:.15cqw solid var(--line);padding:.5cqw 1cqw;color:var(--sec)">10</span>
+      </div>
+      <div class="btn" style="margin-top:1.5cqw">✓ GUARDAR SET</div>
+    </div>
+    <svg class="ecg" viewBox="0 0 1000 300" preserveAspectRatio="none" style="top:36cqw"><path d="M0 150 H420 L440 150 L452 80 L466 215 L480 130 L492 150 H1000" /></svg>
+  </div>
+  <div class="meta"><span><b>03</b> · LA SERIE</span><span>4.5–8.0 s</span></div>
+  <p class="note"><b>Lo primero:</b> el pico empuja la tarjeta desde la derecha. 62.5 y 8 cuentan hacia arriba en la segunda mitad; al final se presiona GUARDAR SET.</p>
+  <span class="chip">CORTE A LA IZQUIERDA →</span>
+</section>
+
+<!-- 04 -->
+<section class="item">
+  <div class="frame" id="frame-04">
+    <div class="glow" style="left:2cqw;top:4cqw;width:44cqw;height:30cqw;background:var(--volt)"></div>
+    <span class="label" style="left:5cqw;top:7cqw">1RM ESTIMADO · SENTADILLA</span>
+    <div class="num" style="position:absolute;left:5cqw;top:10cqw;font-size:13cqw;letter-spacing:-.03em">79.2<span style="font-size:5cqw;color:var(--sec)"> kg</span></div>
+    <span class="pill" style="position:absolute;left:5.3cqw;top:27cqw">NUEVO RÉCORD</span>
+    <div class="hl" style="left:58cqw;top:11cqw;font-size:4.6cqw">Tus récords<br>se calculan<br>solos.</div>
+    <svg class="ecg" viewBox="0 0 1000 300" preserveAspectRatio="none" style="top:33cqw"><path d="M0 150 H300 L322 150 L338 -40 L360 270 L378 110 L392 150 H1000" /></svg>
+  </div>
+  <div class="meta"><span><b>04</b> · EL RÉCORD</span><span>8.0–11.0 s</span></div>
+  <p class="note"><b>Lo primero:</b> el pico más alto de todo el video (responde al 02). El número cuenta de 62.5 a 79.2 y recién ahí se enciende NUEVO RÉCORD.</p>
+  <span class="chip">CORTE A LA IZQUIERDA →</span>
+</section>
+
+<!-- 05 -->
+<section class="item">
+  <div class="frame" id="frame-05">
+    <div class="hl" style="left:5cqw;top:5cqw;font-size:4.8cqw">Lo que comés, sin vueltas.</div>
+    <div class="card" style="left:5cqw;top:15cqw;width:42cqw">
+      <div class="k">CONSUMIDO · HOY</div>
+      <div class="num" style="font-size:5cqw;margin-top:.4cqw">1 840 <span style="font-size:2cqw;color:var(--sec)">kcal</span></div>
+      <div class="k" style="margin-top:1cqw">PROTEÍNA · 132 g</div><div class="bar"><i style="width:82%"></i></div>
+      <div class="k" style="margin-top:.8cqw">CARBOS · 190 g</div><div class="bar"><i style="width:68%"></i></div>
+      <div class="k" style="margin-top:.8cqw">GRASAS · 58 g</div><div class="bar"><i style="width:54%"></i></div>
+    </div>
+    <svg style="position:absolute;left:58cqw;top:14.5cqw;width:21cqw;height:21cqw" viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" fill="none" stroke="#222226" stroke-width="7"/><circle cx="50" cy="50" r="42" fill="none" stroke="var(--cyan)" stroke-width="7" stroke-dasharray="264" stroke-dashoffset="40" transform="rotate(-90 50 50)" stroke-linecap="round"/></svg>
+    <div style="position:absolute;left:58cqw;top:21.5cqw;width:21cqw;text-align:center"><div class="k" style="color:var(--cyan)">LÍQUIDOS</div><div class="num" style="font-size:4cqw">2.1 L</div></div>
+    <svg class="ecg" viewBox="0 0 1000 300" preserveAspectRatio="none" style="top:36cqw"><path d="M0 150 H640 L660 150 L672 90 L686 205 L700 135 L712 150 H1000" /></svg>
+  </div>
+  <div class="meta"><span><b>05</b> · COMIDA Y AGUA</span><span>11.0–15.0 s</span></div>
+  <p class="note"><b>Lo primero:</b> la tarjeta CONSUMIDO entra con el pico; las kcal cuentan, las barras se llenan en cascada y al final se completa el anillo de agua (único uso del cian).</p>
+  <span class="chip">CORTE A LA IZQUIERDA →</span>
+</section>
+
+<!-- 06 -->
+<section class="item">
+  <div class="frame" id="frame-06">
+    <div class="hl" style="left:5cqw;top:11cqw;font-size:5.4cqw">Y lo que<br>descansás.</div>
+    <div class="card" style="left:56cqw;top:11cqw;width:34cqw">
+      <div class="k">SUEÑO · ANOCHE</div>
+      <div class="num" style="font-size:6cqw;margin-top:.6cqw">7 h 12 <span style="font-size:2.4cqw;color:var(--sec)">min</span></div>
+      <div class="k" style="margin-top:.8cqw;color:var(--ter)">23:40 → 06:52</div>
+    </div>
+    <svg class="ecg" viewBox="0 0 1000 300" preserveAspectRatio="none"><path d="M0 150 C 90 110, 160 110, 250 150 S 410 190, 500 150 S 660 110, 750 150 S 910 190, 1000 150" /></svg>
+  </div>
+  <div class="meta"><span><b>06</b> · EL DESCANSO</span><span>15.0–18.0 s</span></div>
+  <p class="note"><b>Lo primero:</b> la línea afloja los picos y se vuelve ondas largas; una sola entrada de la tarjeta y después todo quieto. Es el respiro antes del cierre.</p>
+  <span class="chip">CORTE A LA IZQUIERDA →</span>
+</section>
+
+<!-- 07 -->
+<section class="item">
+  <div class="frame" id="frame-07">
+    <div class="hl" style="left:5cqw;top:11cqw;font-size:5.4cqw">Tu entrenador,<br>a un mensaje.</div>
+    <div class="card" style="left:55cqw;top:5cqw;width:38cqw;padding:0">
+      <div style="padding:1.3cqw 1.6cqw;border-bottom:.15cqw solid var(--line)"><div class="k">ENTRENADOR</div><div style="font-family:Grotesk;font-size:2cqw;color:var(--fg);margin-top:.3cqw">Diego · Coach</div></div>
+      <div style="padding:1.6cqw;display:flex;flex-direction:column;gap:1cqw">
+        <div style="align-self:flex-end;background:#1F1F23;padding:1cqw 1.3cqw;font-size:1.5cqw;color:var(--fg);max-width:80%">Sentadilla 62.5 × 8 ✓</div>
+        <div style="align-self:flex-start;background:var(--volt);color:var(--bg);padding:1cqw 1.3cqw;font-size:1.6cqw;font-weight:600;max-width:88%">¡Nuevo récord! La semana que viene probamos 65 kg.</div>
+      </div>
+    </div>
+    <svg class="ecg" viewBox="0 0 1000 300" preserveAspectRatio="none" style="top:36cqw"><path d="M0 150 H700 L720 150 L732 95 L746 200 L760 135 L772 150 H1000" /></svg>
+  </div>
+  <div class="meta"><span><b>07</b> · TU ENTRENADOR</span><span>18.0–21.5 s</span></div>
+  <p class="note"><b>Lo primero:</b> tres puntos de "escribiendo…" en la conversación; después llega la burbuja del coach (entrada suave, sin rebote).</p>
+  <span class="chip">FUNDIDO →</span>
+</section>
+
+<!-- 08 -->
+<section class="item">
+  <div class="frame" id="frame-08">
+    <div class="hl" style="left:5cqw;top:9cqw;font-size:7cqw">Todo tu día.<br><span style="color:var(--orange)">Un solo pulso.</span></div>
+    <svg class="ecg" viewBox="0 0 1000 300" preserveAspectRatio="none"><path d="M0 150 H470 L490 150 L502 85 L516 210 L530 130 L542 150 H1000" /></svg>
+  </div>
+  <div class="meta"><span><b>08</b> · UN SOLO PULSO</span><span>21.5–24.0 s</span></div>
+  <p class="note"><b>El beat quieto:</b> una sola entrada corta del titular; después no se mueve nada salvo un temblor mínimo de la línea.</p>
+  <span class="chip">CORTE →</span>
+</section>
+
+<!-- 09 -->
+<section class="item">
+  <div class="frame" id="frame-09">
+    <!-- Block (logo 22.8cqw + gap 3.4cqw + wordmark ~5cqw) centered on the 56.25cqw-tall frame. -->
+    <div class="glow" style="left:31cqw;top:8.6cqw;width:38cqw;height:30cqw;background:var(--orange)"></div>
+    <img src="assets/brand/pulso-mark-tight.svg" alt="" style="position:absolute;left:33cqw;top:12.2cqw;width:34cqw;height:22.8cqw" />
+    <div style="position:absolute;left:0;right:0;top:38.4cqw;text-align:center;font-family:Grotesk;font-weight:700;font-size:5.6cqw;line-height:1;letter-spacing:.08em;padding-left:.08em;color:var(--fg)">PULSO</div>
+  </div>
+  <div class="meta"><span><b>09</b> · EL CORREDOR</span><span>24.0–28.0 s</span></div>
+  <p class="note"><b>Lo primero:</b> la línea se recoge hacia el centro y dibuja el latido del logo; el corredor se revela siguiendo el trazo y después aparece PULSO. Esta secuencia es también el loop del logo.</p>
+  <span class="chip">CORTE →</span>
+</section>
+
+<!-- 10 -->
+<section class="item">
+  <div class="frame" id="frame-10">
+    <img src="assets/brand/pulso-mark-tight.svg" alt="" style="position:absolute;left:5cqw;top:7cqw;width:16cqw;height:10.7cqw" />
+    <div class="hl" style="left:5cqw;top:21cqw;font-size:4.6cqw">Entreno y nutrición,<br>con pulso.</div>
+    <div style="position:absolute;left:5cqw;top:38cqw;font-family:Mono;font-weight:700;font-size:2.4cqw;color:var(--volt);letter-spacing:.04em">pulsofitness.tech</div>
+    <svg class="ecg" viewBox="0 0 1000 300" preserveAspectRatio="none" style="top:21cqw"><path d="M560 150 H1000" opacity=".9" /></svg>
+  </div>
+  <div class="meta"><span><b>10</b> · CIERRE</span><span>28.0–30.5 s</span></div>
+  <p class="note"><b>Lo primero:</b> logo, frase y URL en una sola entrada. En los últimos 0.6 s la línea del logo se estira hacia la izquierda y queda plana: es exactamente el frame 01 (empalme del loop).</p>
+  <span class="chip">LOOP → 01</span>
+</section>
+
+<!-- seam map -->
+<section class="item">
+  <div class="frame seams">
+    <div style="color:#fff;font-family:Grotesk;font-size:16px;margin-bottom:8px">Mapa de transiciones</div>
+    01 ─corte─ 02 ─izq─ 03 ─izq─ 04 ─izq─ 05<br>
+    05 ─izq─ 06 ─izq─ 07 ─fundido─ 08<br>
+    08 ─corte─ 09 ─corte─ 10 ─línea plana─ 01<br>
+    <span style="color:#8A8A93">Una sola dirección: todo avanza hacia la izquierda, como un monitor. Las tarjetas entran por la derecha llevadas por el pico y salen por la izquierda a la misma velocidad.</span>
+  </div>
+  <div class="meta"><span><b>—</b> · COSTURAS</span><span>10 cortes</span></div>
+</section>
+
+<!-- tokens -->
+<section class="item">
+  <div class="frame tokens">
+    <div style="color:#fff;font-family:Grotesk;font-size:16px;margin-bottom:6px">Tokens (del código de la app)</div>
+    <span class="sw" style="background:#0A0A0B"></span>fondo #0A0A0B · <span class="sw" style="background:#141416"></span>tarjeta #141416<br>
+    <span class="sw" style="background:#F49B35"></span>línea / marca #F49B35 · <span class="sw" style="background:#E8FF59"></span>dato #E8FF59<br>
+    <span class="sw" style="background:#3DDCFF"></span>solo agua #3DDCFF · <span class="sw" style="background:#8A8A93"></span>secundario #8A8A93<br>
+    <span style="font-family:Grotesk;font-weight:700">Space Grotesk 700</span> titulares 110–140 px · <span style="font-family:Mono">JetBrains Mono</span> números y etiquetas · Inter apoyo<br>
+    <span style="color:#8A8A93">No: rebotes, paneos lentos, degradados en texto, teléfonos brillosos, fotos de stock, promesas de tienda.</span>
+  </div>
+  <div class="meta"><span><b>—</b> · TOKENS</span><span>marca</span></div>
+</section>
+
+</main>
+</body>
+</html>

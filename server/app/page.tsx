@@ -1,18 +1,12 @@
 import Link from "next/link";
 
+import { DemoVideo } from "./demo-video";
 import styles from "./page.module.css";
 
-function PulseMark({ compact = false }: { compact?: boolean }) {
-  return (
-    <svg
-      aria-hidden="true"
-      className={compact ? styles.markCompact : styles.mark}
-      viewBox="0 0 42 24"
-      fill="none"
-    >
-      <path d="M1 13h8l3-8 6 17 5-13 3 4h15" />
-    </svg>
-  );
+/** The real logo (runner + heartbeat): draws in on load, then beats now and then. */
+function LogoMark({ large = false }: { large?: boolean }) {
+  // eslint-disable-next-line @next/next/no-img-element -- static SVG, no optimization to gain
+  return <img className={large ? styles.logoLarge : styles.logoMark} src="/brand/pulso-mark.svg" alt="" width={large ? 240 : 36} height={large ? 161 : 24} />;
 }
 
 function ArrowIcon() {
@@ -40,33 +34,73 @@ function CheckIcon() {
   );
 }
 
+/** Store listings. Fill in each URL when the app is published; until then the badge is not a link. */
+const STORE_LINKS: { googlePlay: string | null; appStore: string | null } = { googlePlay: null, appStore: null };
+
+function GooglePlayIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M22.018 13.298l-3.919 2.218-3.515-3.493 3.543-3.521 3.891 2.202a1.49 1.49 0 0 1 0 2.594zM1.337.924a1.486 1.486 0 0 0-.112.568v21.017c0 .217.045.419.124.6l11.155-11.087L1.337.924zm12.207 10.065l3.258-3.238L3.45.195a1.466 1.466 0 0 0-.946-.179l11.04 10.973zm0 2.067l-11 10.933c.298.036.612-.016.906-.183l13.324-7.54-3.23-3.21z" />
+    </svg>
+  );
+}
+
+function AppleIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701" />
+    </svg>
+  );
+}
+
+function StoreBadges() {
+  const badges = [
+    { key: "googlePlay", href: STORE_LINKS.googlePlay, store: "Google Play", icon: <GooglePlayIcon /> },
+    { key: "appStore", href: STORE_LINKS.appStore, store: "App Store", icon: <AppleIcon /> },
+  ];
+  return (
+    <div className={styles.storeBadges}>
+      {badges.map(({ key, href, store, icon }) => href ? (
+        <a key={key} className={styles.storeBadge} href={href} target="_blank" rel="noopener noreferrer">
+          {icon}<span>{store}</span>
+        </a>
+      ) : (
+        <span key={key} className={styles.storeBadge} aria-label={`${store}, próximamente`}>
+          {icon}<span aria-hidden="true">{store}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+const capabilities = ["Entrenamiento", "Nutrición", "Agua y sueño", "Récords", "Tu equipo"];
+
 const daySteps = [
   {
     time: "06:10",
-    title: "Entrena con intención",
-    copy: "Series, cargas, repeticiones y descansos. El plan está listo antes de que llegues al gym.",
-    color: "volt",
+    title: "Entrená con intención",
+    copy: "Series, cargas y descansos en segundos. Tus récords y tu 1RM estimado se calculan solos.",
   },
   {
-    time: "12:40",
-    title: "Come dentro del plan",
-    copy: "Registra lo que comes, sigue tus objetivos y deja una nota cuando la vida exige un cambio.",
-    color: "cyan",
+    time: "13:00",
+    title: "Comé dentro del plan",
+    copy: "Buscá el alimento, escaneá el código de barras o la tabla nutricional y sumá el agua del día.",
   },
   {
-    time: "21:30",
-    title: "Cierra el día con evidencia",
-    copy: "Peso, medidas y check-in. Menos memoria selectiva; más contexto para ajustar mañana.",
-    color: "orange",
+    time: "22:30",
+    title: "Cerrá el día con evidencia",
+    copy: "Sueño, peso y check-in semanal. Menos memoria selectiva, más contexto para ajustar mañana.",
   },
 ];
 
 const professionalTools = [
-  ["Plantillas", "Crea entrenamientos y asígnalos sin rehacer el trabajo."],
-  ["Adherencia", "Lee tendencias y resúmenes sin invadir el registro privado."],
-  ["Nutrición", "Entrega planes de comida claros y fáciles de seguir."],
-  ["Mensajes", "Da contexto dentro del mismo sistema donde sucede el trabajo."],
+  ["Planes", "Armá entrenamientos y planes de comida, y asignalos sin rehacer el trabajo."],
+  ["Check-ins", "Revisá las respuestas de cada semana y decidí el próximo ajuste."],
+  ["Atención", "Lo que importa primero: quién necesita una mirada hoy."],
+  ["Mensajes", "Hablá con tu atleta en el mismo sistema donde entrena y come."],
 ];
+
+const portalNav = ["Atención", "Atletas", "Equipo", "Alimentos", "Ejercicios"];
 
 export default function Home() {
   return (
@@ -77,205 +111,173 @@ export default function Home() {
 
       <header className={styles.header}>
         <Link className={styles.wordmark} href="/" aria-label="PULSO, inicio">
-          <PulseMark compact />
+          <LogoMark />
           <span>PULSO</span>
         </Link>
 
         <nav className={styles.nav} aria-label="Navegación principal">
-          <a href="#sistema">El sistema</a>
+          <a href="#demo">Demo</a>
+          <a href="#sistema">Cómo funciona</a>
           <a href="#privacidad">Tus datos</a>
           <a href="#profesionales">Profesionales</a>
         </nav>
 
         <Link className={styles.headerCta} href="/portal">
-          Entrar al portal
+          Portal profesional
           <ArrowIcon />
         </Link>
       </header>
 
+      {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <section className={styles.hero} id="contenido">
-        <div className={styles.heroGrid}>
-          <div className={styles.heroCopy}>
-            <p className={styles.heroSignal}>
-              <span /> Un sistema para el día real
-            </p>
-            <h1>
-              Entrena como la persona que dijiste que <em>serías.</em>
-            </h1>
-            <p className={styles.heroBody}>
-              PULSO reúne tu entrenamiento, nutrición, mediciones y la guía de
-              profesionales reales. Funciona sin señal. Tus datos completos se
-              quedan contigo.
-            </p>
-            <div className={styles.heroActions}>
-              <a className={styles.primaryCta} href="#sistema">
-                Ver cómo funciona
-                <ArrowIcon />
-              </a>
-              <Link className={styles.textCta} href="/portal">
-                Soy profesional
-              </Link>
-            </div>
-            <p className={styles.accessNote}>
-              PULSO se habilita a través de tu coach o nutricionista.
-            </p>
+        <div className={styles.heroCopy}>
+          <h1>
+            Entrená como la persona que dijiste que <em>serías.</em>
+          </h1>
+          <p className={styles.lede}>
+            PULSO junta tu entrenamiento, tu nutrición, tu descanso y la guía de tu entrenador en una
+            sola app. Funciona sin señal y tus datos se quedan en tu teléfono.
+          </p>
+          <div className={styles.actions}>
+            <a className={styles.primaryCta} href="#demo">
+              Ver la demo
+              <ArrowIcon />
+            </a>
+            <Link className={styles.textCta} href="/portal">
+              Soy profesional
+            </Link>
           </div>
-
-          <div className={styles.deviceStage} aria-label="Vista previa de la aplicación PULSO">
-            <div className={styles.stagePulse} aria-hidden="true">
-              <svg viewBox="0 0 720 280" preserveAspectRatio="none" fill="none">
-                <path className={styles.pulseGlow} d="M0 156h108l20-46 34 92 42-136 34 90h86l16-31 30 59 34-28h316" />
-                <path className={styles.pulseCore} d="M0 156h108l20-46 34 92 42-136 34 90h86l16-31 30 59 34-28h316" />
-              </svg>
-            </div>
-
-            <div className={styles.phone}>
-              <div className={styles.phoneTop}>
-                <span>06:08</span>
-                <span className={styles.dynamicIsland} />
-                <span>84%</span>
-              </div>
-              <div className={styles.phoneHeader}>
-                <div>
-                  <span>HOY · SÁB 15</span>
-                  <strong>Buenos días, Alex.</strong>
-                </div>
-                <span className={styles.avatar}>AL</span>
-              </div>
-
-              <div className={styles.readinessRow}>
-                <div className={styles.readinessScore}>
-                  <span className={styles.scoreRing}>82</span>
-                  <div>
-                    <small>DISPOSICIÓN</small>
-                    <strong>Listo para entrenar</strong>
-                  </div>
-                </div>
-                <span className={styles.liveDot}>EN LÍNEA</span>
-              </div>
-
-              <div className={styles.workoutPanel}>
-                <div className={styles.panelMeta}>
-                  <span>FUERZA · PIERNA A</span>
-                  <span>55 MIN</span>
-                </div>
-                <strong>El trabajo de hoy</strong>
-                <div className={styles.exerciseLine}>
-                  <span>Sentadilla trasera</span>
-                  <b>4 × 6</b>
-                </div>
-                <div className={styles.progressTrack}><span /></div>
-                <div className={styles.panelFooter}>
-                  <span>2 de 7 ejercicios</span>
-                  <span>Continuar →</span>
-                </div>
-              </div>
-
-              <div className={styles.dailyStats}>
-                <div><span>COMIDAS</span><strong>2 / 4</strong></div>
-                <div><span>AGUA</span><strong>1.8 L</strong></div>
-                <div><span>RACHA</span><strong>11 días</strong></div>
-              </div>
-
-              <div className={styles.phoneNav}>
-                <span className={styles.activeNav}><i />Hoy</span>
-                <span><i />Entrenar</span>
-                <span><i />Progreso</span>
-              </div>
-            </div>
-
-            <div className={styles.coachNote}>
-              <div className={styles.noteTop}>
-                <span className={styles.noteAvatar}>C</span>
-                <div><strong>Tu coach</strong><small>Hoy, 07:14</small></div>
-                <span className={styles.noteStatus} />
-              </div>
-              <p>Controla la bajada. No regales la última repetición.</p>
-              <span className={styles.sampleLabel}>EJEMPLO DE MENSAJE</span>
-            </div>
-
-            <div className={styles.offlineTag}>
-              <span className={styles.offlineIcon}>↯</span>
-              <div><strong>Sin señal</strong><small>Todo sigue guardándose</small></div>
-            </div>
-          </div>
+          <StoreBadges />
         </div>
 
-        <div className={styles.capabilityRail} aria-label="Capacidades principales">
-          <span>Entrenamiento</span>
-          <i />
-          <span>Nutrición</span>
-          <i />
-          <span>Check-ins</span>
-          <i />
-          <span>Mediciones</span>
-          <i />
-          <span>Guía profesional</span>
-        </div>
-      </section>
-
-      <section className={styles.systemSection} id="sistema">
-        <div className={styles.sectionHeading} aria-label="La diferencia entre entrenar con información dispersa y usar PULSO">
-          <div className={styles.comparisonPulse} aria-hidden="true">
-            <svg viewBox="0 0 1400 160" preserveAspectRatio="none" fill="none">
-              <path
-                className={styles.brokenPulse}
-                d="M0 84h94m34 0h118m42 0h76m52 0h126m46 0h112"
-              />
-              <path
-                className={styles.strongPulseGlow}
-                d="M700 84h78l20-20 22 43 31-91 34 68h54l18-28 24 54 30-94 33 68h64l17-18 19 36 25-66 27 48h204"
-              />
-              <path
-                className={styles.strongPulse}
-                d="M700 84h78l20-20 22 43 31-91 34 68h54l18-28 24 54 30-94 33 68h64l17-18 19 36 25-66 27 48h204"
-              />
-              <path
-                className={styles.comparisonSweep}
-                d="M700 84h78l20-20 22 43 31-91 34 68h54l18-28 24 54 30-94 33 68h64l17-18 19 36 25-66 27 48h204"
-              />
-              <circle className={styles.pulseSwitch} cx="700" cy="84" r="7" />
+        <div className={styles.deviceStage} aria-label="Vista previa de la app PULSO">
+          <div className={styles.stagePulse} aria-hidden="true">
+            <svg viewBox="0 0 720 280" preserveAspectRatio="none" fill="none">
+              <path className={styles.pulseGlow} d="M0 156h108l20-46 34 92 42-136 34 90h86l16-31 30 59 34-28h316" />
+              <path className={styles.pulseCore} d="M0 156h108l20-46 34 92 42-136 34 90h86l16-31 30 59 34-28h316" />
             </svg>
           </div>
 
-          <article className={`${styles.comparisonSide} ${styles.problemSide}`}>
-            <p className={styles.comparisonLabel}>
-              <span /> Sin un sistema
-            </p>
+          <div className={styles.phone}>
+            <div className={styles.phoneTop}>
+              <span>06:08</span>
+              <span className={styles.dynamicIsland} />
+              <span>84%</span>
+            </div>
+            <div className={styles.phoneHeader}>
+              <div>
+                <span>HOY · SÁB 15</span>
+                <strong>Buenos días, Alex.</strong>
+              </div>
+              <span className={styles.avatar}>AL</span>
+            </div>
+
+            <div className={styles.readinessRow}>
+              <div className={styles.readinessScore}>
+                <span className={styles.scoreRing}>82</span>
+                <div>
+                  <small>DISPOSICIÓN</small>
+                  <strong>Listo para entrenar</strong>
+                </div>
+              </div>
+              <span className={styles.liveDot}>EN LÍNEA</span>
+            </div>
+
+            <div className={styles.workoutPanel}>
+              <div className={styles.panelMeta}>
+                <span>FUERZA · PIERNA A</span>
+                <span>55 MIN</span>
+              </div>
+              <strong>El trabajo de hoy</strong>
+              <div className={styles.exerciseLine}>
+                <span>Sentadilla trasera</span>
+                <b>4 × 6</b>
+              </div>
+              <div className={styles.progressTrack}><span /></div>
+              <div className={styles.panelFooter}>
+                <span>2 de 7 ejercicios</span>
+                <span>Continuar →</span>
+              </div>
+            </div>
+
+            <div className={styles.dailyStats}>
+              <div><span>COMIDAS</span><strong>2 / 4</strong></div>
+              <div><span>AGUA</span><strong>1.8 L</strong></div>
+              <div><span>RACHA</span><strong>11 días</strong></div>
+            </div>
+
+            <div className={styles.phoneNav}>
+              <span className={styles.activeNav}><i />Hoy</span>
+              <span><i />Dieta</span>
+              <span><i />Entreno</span>
+              <span><i />Perfil</span>
+            </div>
+          </div>
+
+          <div className={styles.coachNote}>
+            <div className={styles.noteTop}>
+              <span className={styles.noteAvatar}>C</span>
+              <div><strong>Tu coach</strong><small>Hoy, 07:14</small></div>
+              <span className={styles.noteStatus} />
+            </div>
+            <p>Controlá la bajada. No regales la última repetición.</p>
+            <span className={styles.sampleLabel}>EJEMPLO DE MENSAJE</span>
+          </div>
+
+          <div className={styles.offlineTag}>
+            <span className={styles.offlineIcon}>↯</span>
+            <div><strong>Sin señal</strong><small>Todo sigue guardándose</small></div>
+          </div>
+        </div>
+      </section>
+
+      <div className={styles.rail} aria-label="Lo que reúne PULSO">
+        {capabilities.map((item) => <span key={item}>{item}</span>)}
+      </div>
+
+      {/* ── Demo ─────────────────────────────────────────────────────────── */}
+      <section className={styles.demoSection} id="demo" aria-labelledby="demo-heading">
+        <div className={styles.sectionIntro}>
+          <h2 id="demo-heading">Todo tu día. <em>Un solo pulso.</em></h2>
+          <p>Series, récords, comidas, agua, sueño y los mensajes de tu entrenador, en el mismo lugar. Treinta segundos, sin sonido.</p>
+        </div>
+        <DemoVideo />
+      </section>
+
+      {/* ── How it works ─────────────────────────────────────────────────── */}
+      <section className={styles.systemSection} id="sistema" aria-label="Cómo funciona PULSO">
+        <div className={styles.comparison}>
+          <svg className={styles.comparisonPulse} viewBox="0 0 1400 160" preserveAspectRatio="none" fill="none" aria-hidden="true">
+            <path className={styles.brokenPulse} d="M0 84h94m34 0h118m42 0h76m52 0h126m46 0h112" />
+            <path className={styles.strongPulse} d="M700 84h78l20-20 22 43 31-91 34 68h54l18-28 24 54 30-94 33 68h64l17-18 19 36 25-66 27 48h204" />
+            <circle className={styles.pulseSwitch} cx="700" cy="84" r="6" />
+          </svg>
+
+          <article className={styles.comparisonSide}>
+            <p className={styles.sideLabel}><span /> Sin un sistema</p>
             <h2>Todo queda suelto.</h2>
-            <p className={styles.comparisonBody}>
-              La rutina en una app. Las comidas en otra. El seguimiento perdido
-              entre mensajes, notas y memoria.
-            </p>
+            <p>La rutina en una app, las comidas en otra y el seguimiento perdido entre chats, notas y memoria.</p>
           </article>
 
           <article className={`${styles.comparisonSide} ${styles.solutionSide}`}>
-            <p className={styles.comparisonLabel}>
-              <span /> Con PULSO
-            </p>
+            <p className={styles.sideLabel}><span /> Con PULSO</p>
             <h2>Todo tiene su lugar.</h2>
-            <p className={styles.comparisonBody}>
-              Entrenamiento, nutrición, check-ins y guía profesional conectados
-              en un solo sistema.
-            </p>
+            <p>Entreno, comidas, agua, sueño, check-ins y tu entrenador, conectados en un solo sistema.</p>
           </article>
         </div>
 
         <div className={styles.dayLayout}>
           <div className={styles.dayStatement}>
-            <span className={styles.giantDay}>24H</span>
-            <p>
-              Un día completo, conectado. Cada registro alimenta una imagen más
-              honesta de tu progreso.
-            </p>
+            <span className={styles.giantDay} aria-hidden="true">24H</span>
+            <p>Un día completo, conectado. Cada registro suma a una imagen honesta de tu progreso.</p>
           </div>
 
           <ol className={styles.dayTimeline}>
             {daySteps.map((step) => (
-              <li key={step.time} className={styles[step.color]}>
+              <li key={step.time}>
                 <time>{step.time}</time>
-                <div className={styles.timelineMarker}><span /></div>
-                <div className={styles.timelineCopy}>
+                <span className={styles.timelineMarker} aria-hidden="true" />
+                <div>
                   <h3>{step.title}</h3>
                   <p>{step.copy}</p>
                 </div>
@@ -285,110 +287,80 @@ export default function Home() {
         </div>
       </section>
 
-      <section className={styles.privacySection} id="privacidad">
-        <div className={styles.privacyIntro}>
-          <div className={styles.lockBadge}><LockIcon /></div>
-          <h2>Tu esfuerzo es personal. Tus datos también.</h2>
+      {/* ── Privacy ──────────────────────────────────────────────────────── */}
+      <section className={styles.privacySection} id="privacidad" aria-labelledby="privacy-heading">
+        <div className={styles.sectionIntro}>
+          <span className={styles.lockBadge}><LockIcon /></span>
+          <h2 id="privacy-heading">Tu esfuerzo es personal. <em>Tus datos también.</em></h2>
           <p>
-            PULSO fue diseñado local-first: el detalle de tus entrenamientos,
-            comidas y medidas vive en tu teléfono. La supervisión suma contexto,
-            no se adueña de tu información.
+            PULSO es local-first: el detalle de tus entrenamientos, comidas y medidas vive en tu teléfono.
+            Vos decidís qué ve tu equipo, y lo podés revocar cuando quieras.
           </p>
         </div>
 
-        <div className={styles.dataFlow} aria-label="Flujo privado de datos entre atleta y profesional">
-          <div className={styles.dataNodePrimary}>
-            <span className={styles.nodeIcon}>▣</span>
+        <div className={styles.dataFlow} aria-label="Qué queda en tu teléfono y qué ve tu equipo">
+          <div className={styles.dataNode}>
             <small>EN TU TELÉFONO</small>
             <strong>El registro completo</strong>
             <ul>
               <li><CheckIcon /> Series y cargas</li>
-              <li><CheckIcon /> Comidas y notas</li>
-              <li><CheckIcon /> Peso y medidas</li>
+              <li><CheckIcon /> Comidas y agua</li>
+              <li><CheckIcon /> Peso, medidas y sueño</li>
             </ul>
           </div>
 
-          <div className={styles.transferLine}>
-            <span>Solo resúmenes</span>
-            <div><i /><i /><i /></div>
-            <small>Sincroniza cuando vuelve la señal</small>
+          <div className={styles.transfer}>
+            <strong>Solo lo que autorizás</strong>
+            <div className={styles.transferDots} aria-hidden="true"><i /><i /><i /></div>
+            <small>Por categoría. Revocable en cualquier momento.</small>
           </div>
 
-          <div className={styles.dataNodeSecondary}>
-            <span className={styles.nodeIcon}>◎</span>
-            <small>EN EL PORTAL</small>
-            <strong>La señal que importa</strong>
+          <div className={`${styles.dataNode} ${styles.dataNodeTeam}`}>
+            <small>CON TU EQUIPO</small>
+            <strong>Lo que elegís compartir</strong>
             <ul>
-              <li><CheckIcon /> Adherencia</li>
-              <li><CheckIcon /> Tonelaje y PRs</li>
-              <li><CheckIcon /> Peso y racha</li>
+              <li><CheckIcon /> Entrenamiento</li>
+              <li><CheckIcon /> Nutrición</li>
+              <li><CheckIcon /> Medidas y check-ins</li>
             </ul>
           </div>
         </div>
-      </section>
-
-      <section className={styles.offlineSection}>
-        <div className={styles.ecgBackdrop} aria-hidden="true">
-          <svg viewBox="0 0 1600 420" preserveAspectRatio="none" fill="none">
-            <defs>
-              <linearGradient id="offline-ecg-fade" x1="0" y1="0" x2="1600" y2="0" gradientUnits="userSpaceOnUse">
-                <stop offset="0" stopColor="currentColor" stopOpacity="0.54" />
-                <stop offset="0.55" stopColor="currentColor" stopOpacity="0.3" />
-                <stop offset="1" stopColor="currentColor" stopOpacity="0.12" />
-              </linearGradient>
-            </defs>
-
-            <path
-              className={styles.ecgGlow}
-              d="M0 235H90l30-15 22 35 23-60 25 40h35l25-85 25 165L330 52l55 183h90l25-25 22 50 28-110 35 85h90l25-17 24 32 26-70 30 55h85l23-11 22 21 22-40 23 30h85l15-6 15 12 18-23 17 17h95l10-3 10 6 12-12 13 9h95l6-1 8 2 6-5 10 4h230"
-            />
-            <path
-              className={styles.ecgTrace}
-              stroke="url(#offline-ecg-fade)"
-              d="M0 235H90l30-15 22 35 23-60 25 40h35l25-85 25 165L330 52l55 183h90l25-25 22 50 28-110 35 85h90l25-17 24 32 26-70 30 55h85l23-11 22 21 22-40 23 30h85l15-6 15 12 18-23 17 17h95l10-3 10 6 12-12 13 9h95l6-1 8 2 6-5 10 4h230"
-            />
-            <path
-              className={styles.ecgSweep}
-              d="M0 235H90l30-15 22 35 23-60 25 40h35l25-85 25 165L330 52l55 183h90l25-25 22 50 28-110 35 85h90l25-17 24 32 26-70 30 55h85l23-11 22 21 22-40 23 30h85l15-6 15 12 18-23 17 17h95l10-3 10 6 12-12 13 9h95l6-1 8 2 6-5 10 4h230"
-            />
-
-            <g className={styles.ecgData}>
-              <line x1="330" y1="52" x2="330" y2="22" />
-              <circle cx="330" cy="52" r="5" />
-              <text x="330" y="13" textAnchor="middle">82%</text>
-
-              <line x1="550" y1="150" x2="550" y2="117" />
-              <circle cx="550" cy="150" r="4" />
-              <text x="550" y="107" textAnchor="middle">4 × 6</text>
-
-              <line x1="750" y1="180" x2="750" y2="148" />
-              <circle cx="750" cy="180" r="3.5" />
-              <text x="750" y="138" textAnchor="middle">RPE 8</text>
-            </g>
-          </svg>
-        </div>
-
-        <div className={styles.offlineCopy}>
-          <span className={styles.offlineCondition}>SIN WI-FI. SIN DATOS.</span>
-          <span className={styles.offlinePromise}>PULSO SIGUE FUNCIONANDO.</span>
-        </div>
-        <p>
-          Aunque no tengas conexión, puedes abrir tu rutina, registrar cada serie
-          y consultar tu plan de comidas. Todo queda guardado en tu teléfono.
+        <p className={styles.privacyFoot}>
+          El respaldo en la nube y la sincronización entre dispositivos son opcionales y tienen su propio permiso.{" "}
+          <Link href="/privacidad">Leé la política de privacidad</Link>.
         </p>
       </section>
 
-      <section className={styles.professionalSection} id="profesionales">
+      {/* ── Offline ──────────────────────────────────────────────────────── */}
+      <section className={styles.offlineSection} aria-labelledby="offline-heading">
+        <svg className={styles.ecgBackdrop} viewBox="0 0 1600 420" preserveAspectRatio="none" fill="none" aria-hidden="true">
+          <path
+            className={styles.ecgTrace}
+            d="M0 235H90l30-15 22 35 23-60 25 40h35l25-85 25 165L330 52l55 183h90l25-25 22 50 28-110 35 85h90l25-17 24 32 26-70 30 55h85l23-11 22 21 22-40 23 30h85l15-6 15 12 18-23 17 17h95l10-3 10 6 12-12 13 9h95l6-1 8 2 6-5 10 4h230"
+          />
+        </svg>
+
+        <h2 id="offline-heading">
+          <span>Sin wi-fi. Sin datos.</span>
+          <em>PULSO sigue funcionando.</em>
+        </h2>
+        <p>
+          Aunque no tengas conexión, abrís tu rutina, registrás cada serie y consultás tu plan de comidas.
+          Todo se guarda en tu teléfono y se sincroniza cuando vuelve la señal.
+        </p>
+      </section>
+
+      {/* ── Professionals ────────────────────────────────────────────────── */}
+      <section className={styles.professionalSection} id="profesionales" aria-labelledby="pro-heading">
         <div className={styles.professionalIntro}>
-          <p>Para coaches y nutricionistas</p>
-          <h2>Menos hilos perdidos. Más contexto para decidir.</h2>
+          <h2 id="pro-heading">Menos hilos perdidos. <em>Más contexto para decidir.</em></h2>
           <div>
-            <p className={styles.professionalBody}>
-              Reúne planes, seguimiento y conversaciones en un portal creado para
+            <p>
+              Para entrenadores y nutricionistas: planes, check-ins y mensajes en un portal pensado para
               acompañar personas reales, no para administrar números anónimos.
             </p>
             <Link className={styles.primaryCta} href="/portal">
-              Abrir portal profesional
+              Crear cuenta profesional
               <ArrowIcon />
             </Link>
           </div>
@@ -396,26 +368,24 @@ export default function Home() {
 
         <div className={styles.portalWindow} aria-label="Vista previa del portal profesional">
           <div className={styles.windowBar}>
-            <div><i /><i /><i /></div>
-            <span>portal.pulso / atleta</span>
-            <b>↗</b>
+            <div aria-hidden="true"><i /><i /><i /></div>
+            <span>pulsofitness.tech/portal</span>
           </div>
           <div className={styles.portalBody}>
             <aside>
-              <div className={styles.portalLogo}><PulseMark compact /> PULSO</div>
-              <span className={styles.portalActive}>Resumen</span>
-              <span>Atletas</span>
-              <span>Plantillas</span>
-              <span>Mensajes <b>2</b></span>
+              <div className={styles.portalLogo}><LogoMark /> PULSO</div>
+              {portalNav.map((item, index) => (
+                <span key={item} className={index === 0 ? styles.portalActive : undefined}>{item}</span>
+              ))}
             </aside>
             <div className={styles.portalContent}>
               <div className={styles.portalHeader}>
                 <div><small>ATLETA</small><strong>Alex R.</strong></div>
-                <span>Últimos 7 días⌄</span>
+                <span>Últimos 7 días</span>
               </div>
-              <div className={styles.adherenceStrip}>
+              <div className={styles.adherence}>
                 <div><small>ADHERENCIA</small><strong>86%</strong></div>
-                <div className={styles.weekBars}>
+                <div className={styles.weekBars} aria-hidden="true">
                   {[72, 90, 84, 100, 62, 88, 94].map((height, index) => (
                     <span key={index} style={{ height: `${height}%` }} />
                   ))}
@@ -429,44 +399,48 @@ export default function Home() {
                   </svg>
                 </div>
                 <div className={styles.alertPanel}>
-                  <span>LISTO PARA REVISAR</span>
+                  <small>LISTO PARA REVISAR</small>
                   <strong>Check-in semanal</strong>
-                  <small>Enviado hace 18 min</small>
+                  <span>Enviado hace 18 min</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div className={styles.toolList}>
+        <dl className={styles.toolList}>
           {professionalTools.map(([title, copy]) => (
             <div key={title}>
-              <span>+</span>
-              <h3>{title}</h3>
-              <p>{copy}</p>
+              <dt>{title}</dt>
+              <dd>{copy}</dd>
             </div>
           ))}
-        </div>
+        </dl>
       </section>
 
-      <section className={styles.finalCta}>
-        <div className={styles.finalPulse} aria-hidden="true"><PulseMark /></div>
+      {/* ── Close ────────────────────────────────────────────────────────── */}
+      <section className={styles.finalCta} aria-labelledby="final-heading">
+        <LogoMark large />
         <p>El cambio no necesita otro lunes.</p>
-        <h2>Necesita tu siguiente repetición.</h2>
-        <Link className={styles.finalButton} href="/portal">
-          Entrar a PULSO
-          <ArrowIcon />
-        </Link>
+        <h2 id="final-heading">Necesita tu <em>siguiente repetición.</em></h2>
+        <StoreBadges />
+        <p className={styles.finalNote}>Si sos entrenador o nutricionista, ya podés crear tu espacio.</p>
+        <div className={styles.actions}>
+          <Link className={styles.primaryCta} href="/portal">
+            Crear cuenta profesional
+            <ArrowIcon />
+          </Link>
+          <a className={styles.textCta} href="mailto:pulso@pulsofitness.tech">Escribinos</a>
+        </div>
       </section>
 
       <footer className={styles.footer}>
         <Link className={styles.wordmark} href="/" aria-label="PULSO, inicio">
-          <PulseMark compact />
+          <LogoMark />
           <span>PULSO</span>
         </Link>
-        <p>Entrenamiento. Nutrición. Seguimiento. Una sola señal.</p>
+        <p>Entreno, nutrición y descanso. Un solo pulso.</p>
         <div>
-          <span>pulsofitness</span>
           <Link href="/portal">Portal profesional</Link>
           <Link href="/privacidad">Privacidad</Link>
           <Link href="/terminos">Términos</Link>
