@@ -6,3 +6,10 @@ pulso/modules/*/android/build/
 
 # Capturas de la tienda: borradores con datos de cuentas reales
 /store/play/screenshots/
+
+# HyperFrames: renders and snapshots are build outputs (web copies live in server/public/media)
+/videos/*/renders/
+/videos/*/snapshots/
+/videos/*/.hyperframes/
+/videos/*/.thumbnails/
+/videos/*/.media/

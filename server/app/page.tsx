@@ -1,6 +1,13 @@
 import Link from "next/link";
 
+import { DemoVideo } from "./demo-video";
 import styles from "./page.module.css";
+
+/** The real logo (runner + heartbeat): draws in on load, then beats now and then. */
+function LogoMark() {
+  // eslint-disable-next-line @next/next/no-img-element -- static SVG, no optimization to gain
+  return <img className={styles.logoMark} src="/brand/pulso-mark.svg" alt="" width={36} height={24} />;
+}
 
 function PulseMark({ compact = false }: { compact?: boolean }) {
   return (
@@ -77,11 +84,12 @@ export default function Home() {
 
       <header className={styles.header}>
         <Link className={styles.wordmark} href="/" aria-label="PULSO, inicio">
-          <PulseMark compact />
+          <LogoMark />
           <span>PULSO</span>
         </Link>
 
         <nav className={styles.nav} aria-label="Navegación principal">
+          <a href="#demo">Demo</a>
           <a href="#sistema">El sistema</a>
           <a href="#privacidad">Tus datos</a>
           <a href="#profesionales">Profesionales</a>
@@ -108,7 +116,7 @@ export default function Home() {
               quedan contigo.
             </p>
             <div className={styles.heroActions}>
-              <a className={styles.primaryCta} href="#sistema">
+              <a className={styles.primaryCta} href="#demo">
                 Ver cómo funciona
                 <ArrowIcon />
               </a>
@@ -212,6 +220,17 @@ export default function Home() {
           <i />
           <span>Guía profesional</span>
         </div>
+      </section>
+
+      <section className={styles.demoSection} id="demo" aria-labelledby="demo-heading">
+        <div className={styles.demoHeading}>
+          <p className={styles.demoEyebrow}>PULSO EN 30 SEGUNDOS</p>
+          <h2 id="demo-heading">Todo tu día. Un solo pulso.</h2>
+          <p className={styles.demoBody}>
+            Series, récords, comidas, agua, sueño y los mensajes de tu entrenador, en el mismo lugar.
+          </p>
+        </div>
+        <DemoVideo />
       </section>
 
       <section className={styles.systemSection} id="sistema">
@@ -461,7 +480,7 @@ export default function Home() {
 
       <footer className={styles.footer}>
         <Link className={styles.wordmark} href="/" aria-label="PULSO, inicio">
-          <PulseMark compact />
+          <LogoMark />
           <span>PULSO</span>
         </Link>
         <p>Entrenamiento. Nutrición. Seguimiento. Una sola señal.</p>

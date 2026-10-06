@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, height=1080">
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face { font-family: "Grotesk"; src: url("assets/fonts/SpaceGrotesk_700Bold.ttf"); font-weight: 700; }
+      @font-face { font-family: "Mono"; src: url("assets/fonts/JetBrainsMono_400Regular.ttf"); font-weight: 400; }
+      @font-face { font-family: "Mono"; src: url("assets/fonts/JetBrainsMono_700Bold.ttf"); font-weight: 700; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/Inter_400Regular.ttf"); font-weight: 400; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/Inter_600SemiBold.ttf"); font-weight: 600; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #0A0A0B; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #0A0A0B; color: #FAFAFA; font-family: "Inter", sans-serif; }
+
+      /* background: the monitor's paper grid scrolls with the trace, plus one warm glow */
+      #bg { position: absolute; inset: 0; overflow: hidden; }
+      #grid { position: absolute; top: 0; left: 0; width: 2000px; height: 100%;
+        background-image: linear-gradient(to right, rgba(244,155,53,.09) 2px, transparent 2px),
+                          linear-gradient(to bottom, rgba(244,155,53,.07) 2px, transparent 2px);
+        background-size: 80px 80px; }
+      #warm { position: absolute; left: 260px; top: 520px; width: 1400px; height: 620px; border-radius: 50%;
+        background: radial-gradient(closest-side, rgba(244,155,53,.16), rgba(244,155,53,0)); }
+
+      /* the spine */
+      .layer { position: absolute; inset: 0; }
+      #line-layer-inner { position: absolute; inset: 0; }
+      #trace { position: absolute; left: 0; top: 0; overflow: visible; filter: drop-shadow(0 0 10px rgba(244,155,53,.55)); }
+      #trace-path { fill: none; stroke: #F49B35; stroke-width: 5; stroke-linejoin: round; stroke-linecap: round; }
+      .dot { position: absolute; width: 26px; height: 26px; border-radius: 50%; background: #F49B35; box-shadow: 0 0 28px 6px rgba(244,155,53,.55); }
+      .flat-line { position: absolute; left: 0; width: 100%; height: 5px; background: #F49B35; box-shadow: 0 0 18px rgba(244,155,53,.6); }
+      #clock { position: absolute; left: 96px; top: 96px; font-family: "Mono"; font-size: 26px; letter-spacing: .16em; color: #8A8A93; }
+
+      /* type */
+      .hl { position: absolute; font-family: "Grotesk"; font-weight: 700; color: #FAFAFA; letter-spacing: -.02em; line-height: 1.1; }
+      .w { display: inline-block; }
+      .k { font-family: "Mono"; font-size: 22px; letter-spacing: .14em; color: #8A8A93; }
+      .num { font-family: "Mono"; font-weight: 700; color: #FAFAFA; font-variant-numeric: tabular-nums; }
+      .card { position: absolute; background: #141416; border: 3px solid #26262A; padding: 36px; }
+
+      /* 03 */
+      #s03 .hl { left: 96px; top: 173px; font-size: 104px; }
+      #s03 .card { left: 1018px; top: 96px; width: 760px; }
+      .boxes { display: flex; gap: 22px; margin-top: 26px; }
+      .box { flex: 1; border: 3px solid #26262A; padding: 22px; text-align: center; }
+      .box .num { font-size: 92px; line-height: 1.1; display: block; }
+      .chips { display: flex; gap: 12px; margin-top: 14px; }
+      .chip { width: 64px; text-align: center; border: 3px solid #26262A; padding: 8px 0; font-family: "Mono"; font-size: 26px; color: #8A8A93; }
+      #s03-btn { margin-top: 28px; background: #E8FF59; color: #0A0A0B; font-family: "Mono"; font-weight: 700; font-size: 26px; letter-spacing: .08em; text-align: center; padding: 22px; }
+
+      /* 04 */
+      #s04-glow { position: absolute; left: 40px; top: 60px; width: 860px; height: 580px; border-radius: 50%;
+        background: radial-gradient(closest-side, rgba(232,255,89,.9), rgba(232,255,89,0)); }
+      #s04-label { position: absolute; left: 96px; top: 134px; font-family: "Mono"; font-size: 26px; letter-spacing: .14em; color: #8A8A93; }
+      #s04-numrow { position: absolute; left: 96px; top: 176px; display: flex; align-items: baseline; gap: 18px; }
+      #s04-num { display: inline-block; width: 560px; font-size: 250px; letter-spacing: -.03em; transform-origin: left bottom; }
+      #s04-unit { display: inline-block; font-family: "Mono"; font-weight: 700; font-size: 96px; color: #8A8A93; }
+      #s04-pill { position: absolute; left: 100px; top: 500px; background: #E8FF59; color: #0A0A0B; font-family: "Mono"; font-weight: 700; font-size: 26px; letter-spacing: .12em; padding: 10px 20px; }
+      #s04 .hl { left: 1114px; top: 211px; font-size: 88px; }
+
+      /* 05 */
+      #s05 .hl { left: 96px; top: 96px; font-size: 92px; }
+      #s05 .card { left: 96px; top: 270px; width: 806px; }
+      #s05-kcal { font-size: 96px; }
+      .kcal-unit { font-family: "Mono"; font-size: 38px; color: #8A8A93; }
+      .macro { margin-top: 18px; }
+      .bar { height: 18px; background: #222226; margin-top: 10px; position: relative; overflow: hidden; }
+      .fill { position: absolute; left: 0; top: 0; height: 100%; background: #E8FF59; transform-origin: left center; }
+      #s05-ring { position: absolute; left: 1114px; top: 262px; width: 420px; height: 420px; }
+      #s05-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+      #s05-ring-arc { transform-origin: 50px 50px; transform: rotate(-90deg); }
+      .ring-text { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+      .ring-text .k { color: #3DDCFF; }
+      #s05-water-row { font-size: 84px; }
+
+      /* 06 */
+      #s06 .hl { left: 96px; top: 211px; font-size: 104px; }
+      #s06 .card { left: 1075px; top: 211px; width: 660px; }
+      #s06 .num { font-size: 116px; margin-top: 10px; display: block; }
+      #s06 .num small { font-size: 46px; color: #8A8A93; }
+
+      /* 07 */
+      #s07 .hl { left: 96px; top: 211px; font-size: 104px; }
+      #s07 .card { left: 1056px; top: 96px; width: 730px; padding: 0; }
+      .chat-head { padding: 26px 32px; border-bottom: 3px solid #26262A; }
+      .chat-name { font-family: "Grotesk"; font-size: 38px; margin-top: 6px; }
+      .chat-body { padding: 32px; display: flex; flex-direction: column; gap: 20px; min-height: 280px; }
+      .bubble { max-width: 86%; padding: 20px 26px; font-size: 30px; line-height: 1.3; }
+      #s07-mine { align-self: flex-end; background: #1F1F23; color: #FAFAFA; }
+      .reply { position: relative; }
+      #s07-typing { position: absolute; left: 0; top: 0; display: flex; gap: 10px; background: #1F1F23; padding: 24px 26px; }
+      #s07-typing i { display: block; width: 14px; height: 14px; border-radius: 50%; background: #8A8A93; }
+      #s07-coach { align-self: flex-start; background: #E8FF59; color: #0A0A0B; font-weight: 600; }
+
+      /* 08 */
+      #s08 .hl { left: 96px; top: 173px; font-size: 134px; }
+      .hl-line { display: block; }
+      .orange { color: #F49B35; }
+
+      /* 09 */
+      #s09-glow { position: absolute; left: 595px; top: 165px; width: 730px; height: 576px; border-radius: 50%;
+        background: radial-gradient(closest-side, rgba(244,155,53,.95), rgba(244,155,53,0)); }
+      #s09-logo { position: absolute; left: 634px; top: 235px; width: 652px; height: 437px; }
+      #s09-word { position: absolute; left: 0; right: 0; top: 737px; text-align: center; font-family: "Grotesk"; font-weight: 700; font-size: 108px; line-height: 1; letter-spacing: .08em; padding-left: .08em; }
+      .letter { display: inline-block; }
+      #s09-gather { transform-origin: center center; }
+
+      /* 10 */
+      #s10-logo { position: absolute; left: 96px; top: 134px; width: 307px; height: 206px; }
+      #s10 .hl { left: 96px; top: 403px; font-size: 88px; }
+      #s10-url { position: absolute; left: 96px; top: 730px; font-family: "Mono"; font-weight: 700; font-size: 46px; letter-spacing: .04em; color: #E8FF59; }
+    </style>
+  </head>
+  <body>
+    <div data-hf-id="hf-tpuo" id="root" data-composition-id="main" data-start="0" data-duration="30.5" data-width="1920" data-height="1080">
+
+      <div data-hf-id="hf-bkdf" id="bg" class="clip" data-start="0" data-duration="30.5" data-track-index="0">
+        <div data-hf-id="hf-slvr" id="bg-inner" class="layer">
+          <div data-hf-id="hf-gs5t" id="grid"></div>
+          <div data-hf-id="hf-3vla" id="warm"></div>
+        </div>
+      </div>
+
+      <div data-hf-id="hf-3100" id="line-layer" class="clip layer" data-start="0" data-duration="24" data-track-index="1">
+        <div data-hf-id="hf-5k4w" id="line-layer-inner">
+          <svg data-hf-id="hf-k3tz" id="trace" xmlns="http://www.w3.org/2000/svg"><polyline data-hf-id="hf-6niv" id="trace-path" points="" /></svg>
+        </div>
+        <div data-hf-id="hf-yyrk" id="dot" class="dot"></div>
+      </div>
+
+      <div data-hf-id="hf-ytyn" id="clock-clip" class="clip layer" data-start="0" data-duration="4.5" data-track-index="2">
+        <div data-hf-id="hf-9wtx" id="clock">PULSO · 06:00</div>
+      </div>
+
+      <div data-hf-id="hf-femc" id="s02" class="clip layer" data-start="2" data-duration="2.5" data-track-index="3">
+        <div data-hf-id="hf-532i" class="hl" style="left:96px;top:250px;font-size:119px"><span data-hf-id="hf-0pcz" class="w">Tu</span> <span data-hf-id="hf-dfam" class="w">día</span><br data-hf-id="hf-x5px"><span data-hf-id="hf-qnsn" class="w">tiene</span> <span data-hf-id="hf-g45r" class="w">pulso.</span></div>
+      </div>
+
+      <div data-hf-id="hf-sd1j" id="s03" class="clip layer" data-start="4.5" data-duration="3.5" data-track-index="3">
+        <div data-hf-id="hf-gmsg" class="hl">Cada serie,<br data-hf-id="hf-rsrt">en segundos.</div>
+        <div data-hf-id="hf-vn2y" class="card">
+          <div data-hf-id="hf-pmak" class="k">SENTADILLA · SERIE 3 DE 3</div>
+          <div data-hf-id="hf-b033" class="boxes">
+            <div data-hf-id="hf-d74r" class="box"><div data-hf-id="hf-lf50" class="k">PESO KG</div><span data-hf-id="hf-aro3" class="num" id="s03-kg">62.5</span></div>
+            <div data-hf-id="hf-jvrv" class="box"><div data-hf-id="hf-aq5j" class="k">REPS</div><span data-hf-id="hf-zwh8" class="num" id="s03-reps">8</span></div>
+          </div>
+          <div data-hf-id="hf-qkqx" class="k" style="margin-top:24px">RPE · ESFUERZO PERCIBIDO</div>
+          <div data-hf-id="hf-exrd" class="chips"><span data-hf-id="hf-ijcj" class="chip">6</span><span data-hf-id="hf-ixnk" class="chip">7</span><span data-hf-id="hf-68cx" class="chip" id="s03-rpe">8</span><span data-hf-id="hf-ddd6" class="chip">9</span><span data-hf-id="hf-elom" class="chip">10</span></div>
+          <div data-hf-id="hf-2txc" id="s03-btn"><span data-hf-id="hf-92if" id="s03-btn-label">✓ GUARDAR SET</span></div>
+        </div>
+      </div>
+
+      <div data-hf-id="hf-sihu" id="s04" class="clip layer" data-start="8" data-duration="3" data-track-index="3">
+        <div data-hf-id="hf-m5nq" id="s04-glow"></div>
+        <div data-hf-id="hf-z76v" id="s04-label">1RM ESTIMADO · SENTADILLA</div>
+        <div data-hf-id="hf-hl8p" id="s04-numrow"><span data-hf-id="hf-3mpv" class="num" id="s04-num">79.2</span><span data-hf-id="hf-w41e" id="s04-unit">kg</span></div>
+        <div data-hf-id="hf-oil8" id="s04-pill">NUEVO RÉCORD</div>
+        <div data-hf-id="hf-lcg7" class="hl">Tus récords<br data-hf-id="hf-szow">se calculan<br data-hf-id="hf-sldv">solos.</div>
+      </div>
+
+      <div data-hf-id="hf-nft6" id="s05" class="clip layer" data-start="11" data-duration="4" data-track-index="3">
+        <div data-hf-id="hf-8r79" class="hl">Lo que comés, sin vueltas.</div>
+        <div data-hf-id="hf-i08u" class="card">
+          <div data-hf-id="hf-8ujj" class="k">CONSUMIDO · HOY</div>
+          <div data-hf-id="hf-sg1r" style="margin-top:8px"><span data-hf-id="hf-2qsy" class="num" id="s05-kcal">1 840</span> <span data-hf-id="hf-c0dk" class="kcal-unit">kcal</span></div>
+          <div data-hf-id="hf-mofg" class="macro"><div data-hf-id="hf-jry3" class="k">PROTEÍNA · 132 g</div><div data-hf-id="hf-ufsv" class="bar"><div data-hf-id="hf-5rwe" class="fill" style="width:82%"></div></div></div>
+          <div data-hf-id="hf-m5l0" class="macro"><div data-hf-id="hf-9jzv" class="k">CARBOS · 190 g</div><div data-hf-id="hf-c51b" class="bar"><div data-hf-id="hf-j5k2" class="fill" style="width:68%"></div></div></div>
+          <div data-hf-id="hf-kynx" class="macro"><div data-hf-id="hf-zceh" class="k">GRASAS · 58 g</div><div data-hf-id="hf-bqqa" class="bar"><div data-hf-id="hf-ctzx" class="fill" style="width:54%"></div></div></div>
+        </div>
+        <div data-hf-id="hf-sogw" id="s05-ring">
+          <svg data-hf-id="hf-fohl" viewBox="0 0 100 100"><circle data-hf-id="hf-c10v" cx="50" cy="50" r="42" fill="none" stroke="#222226" stroke-width="7" /><circle data-hf-id="hf-cojl" id="s05-ring-arc" cx="50" cy="50" r="42" fill="none" stroke="#3DDCFF" stroke-width="7" stroke-linecap="round" /></svg>
+          <div data-hf-id="hf-0bp6" class="ring-text"><div data-hf-id="hf-mynl" class="k">LÍQUIDOS</div><div data-hf-id="hf-o8xb" class="num" id="s05-water-row"><span data-hf-id="hf-sust" id="s05-water">2.1</span> L</div></div>
+        </div>
+      </div>
+
+      <div data-hf-id="hf-qh32" id="s06" class="clip layer" data-start="15" data-duration="3" data-track-index="3">
+        <div data-hf-id="hf-0ssi" class="hl">Y lo que<br data-hf-id="hf-qluq">descansás.</div>
+        <div data-hf-id="hf-iejv" class="card">
+          <div data-hf-id="hf-ulj3" class="k">SUEÑO · ANOCHE</div>
+          <span data-hf-id="hf-0nxv" class="num">7 h 12 <small data-hf-id="hf-g8vs">min</small></span>
+          <div data-hf-id="hf-kamx" class="k" style="margin-top:12px;color:#5A5A62">23:40 → 06:52</div>
+        </div>
+      </div>
+
+      <div data-hf-id="hf-dxjt" id="s07" class="clip layer" data-start="18" data-duration="3.5" data-track-index="3">
+        <div data-hf-id="hf-qqpw" class="hl">Tu entrenador,<br data-hf-id="hf-q7jp">a un mensaje.</div>
+        <div data-hf-id="hf-isuw" class="card">
+          <div data-hf-id="hf-f2l9" class="chat-head"><div data-hf-id="hf-jn4d" class="k">ENTRENADOR</div><div data-hf-id="hf-0krl" class="chat-name">Diego · Coach</div></div>
+          <div data-hf-id="hf-h3wb" class="chat-body">
+            <div data-hf-id="hf-spa2" class="bubble" id="s07-mine">Sentadilla 62.5 × 8 ✓</div>
+            <div data-hf-id="hf-zjbg" class="reply">
+              <div data-hf-id="hf-ne4l" id="s07-typing"><i data-hf-id="hf-wt6k"></i><i data-hf-id="hf-zeb8"></i><i data-hf-id="hf-y7e5"></i></div>
+              <div data-hf-id="hf-oym1" class="bubble" id="s07-coach">¡Nuevo récord! La semana que viene probamos 65 kg.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div data-hf-id="hf-xre0" id="s08" class="clip layer" data-start="21.5" data-duration="2.5" data-track-index="3">
+        <div data-hf-id="hf-92b8" class="hl"><span data-hf-id="hf-0fmx" class="hl-line">Todo tu día.</span><span data-hf-id="hf-397j" class="hl-line orange">Un solo pulso.</span></div>
+      </div>
+
+      <div data-hf-id="hf-c0ba" id="s09" class="clip layer" data-start="24" data-duration="4" data-track-index="3">
+        <div data-hf-id="hf-ff4p" id="s09-glow"></div>
+        <div data-hf-id="hf-kvww" id="s09-gather" class="flat-line"></div>
+        <img data-hf-id="hf-7prf" id="s09-logo" src="assets/brand/pulso-mark-tight.svg" alt="PULSO">
+        <div data-hf-id="hf-ivtq" id="s09-word"><span data-hf-id="hf-lomz" class="letter">P</span><span data-hf-id="hf-khpw" class="letter">U</span><span data-hf-id="hf-tmrj" class="letter">L</span><span data-hf-id="hf-laby" class="letter">S</span><span data-hf-id="hf-t8gi" class="letter">O</span></div>
+      </div>
+
+      <div data-hf-id="hf-byjh" id="s10" class="clip layer" data-start="28" data-duration="2.5" data-track-index="3">
+        <img data-hf-id="hf-f0dt" id="s10-logo" src="assets/brand/pulso-mark-tight.svg" alt="PULSO">
+        <div data-hf-id="hf-zyvu" class="hl">Entreno y nutrición,<br data-hf-id="hf-regs">con pulso.</div>
+        <div data-hf-id="hf-a1qg" id="s10-url">pulsofitness.tech</div>
+        <div data-hf-id="hf-w7rt" id="s10-line" class="flat-line"></div>
+        <div data-hf-id="hf-ub77" id="s10-dot" class="dot"></div>
+      </div>
+    </div>
+    <script src="assets/pulso.js"></script>
+    <script>
+      window.__timelines["main"] = window.buildPulsoTimeline();
+    </script>
+  </body>
+</html>
