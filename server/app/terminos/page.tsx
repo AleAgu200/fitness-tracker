@@ -4,7 +4,8 @@ import Link from "next/link";
 import { LegalShell, Section } from "../legal/legal-shell";
 
 export const metadata: Metadata = {
-  title: "Términos de uso · PULSO",
+  title: "Términos de uso",
+  alternates: { canonical: "/terminos" },
   description: "Condiciones para usar la app y el portal de PULSO.",
 };
 

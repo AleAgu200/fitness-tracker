@@ -4,7 +4,8 @@ import Link from "next/link";
 import { LegalShell, Section } from "../legal/legal-shell";
 
 export const metadata: Metadata = {
-  title: "Política de privacidad · PULSO",
+  title: "Política de privacidad",
+  alternates: { canonical: "/privacidad" },
   description: "Qué datos usa PULSO, dónde se guardan, con quién se comparten y cómo controlarlos.",
 };
 

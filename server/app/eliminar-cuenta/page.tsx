@@ -3,7 +3,8 @@ import type { Metadata } from "next";
 import { LegalShell, Section } from "../legal/legal-shell";
 
 export const metadata: Metadata = {
-  title: "Borrar tu cuenta · PULSO",
+  title: "Borrar tu cuenta",
+  alternates: { canonical: "/eliminar-cuenta" },
   description: "Cómo pedir el borrado de tu cuenta de PULSO y de tus datos.",
 };
 
