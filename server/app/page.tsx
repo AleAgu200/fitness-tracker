@@ -34,6 +34,45 @@ function CheckIcon() {
   );
 }
 
+/** Store listings. Fill in each URL when the app is published; until then the badge is not a link. */
+const STORE_LINKS: { googlePlay: string | null; appStore: string | null } = { googlePlay: null, appStore: null };
+
+function GooglePlayIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M22.018 13.298l-3.919 2.218-3.515-3.493 3.543-3.521 3.891 2.202a1.49 1.49 0 0 1 0 2.594zM1.337.924a1.486 1.486 0 0 0-.112.568v21.017c0 .217.045.419.124.6l11.155-11.087L1.337.924zm12.207 10.065l3.258-3.238L3.45.195a1.466 1.466 0 0 0-.946-.179l11.04 10.973zm0 2.067l-11 10.933c.298.036.612-.016.906-.183l13.324-7.54-3.23-3.21z" />
+    </svg>
+  );
+}
+
+function AppleIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701" />
+    </svg>
+  );
+}
+
+function StoreBadges() {
+  const badges = [
+    { key: "googlePlay", href: STORE_LINKS.googlePlay, store: "Google Play", icon: <GooglePlayIcon /> },
+    { key: "appStore", href: STORE_LINKS.appStore, store: "App Store", icon: <AppleIcon /> },
+  ];
+  return (
+    <div className={styles.storeBadges}>
+      {badges.map(({ key, href, store, icon }) => href ? (
+        <a key={key} className={styles.storeBadge} href={href} target="_blank" rel="noopener noreferrer">
+          {icon}<span>{store}</span>
+        </a>
+      ) : (
+        <span key={key} className={styles.storeBadge} aria-label={`${store}, próximamente`}>
+          {icon}<span aria-hidden="true">{store}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 const capabilities = ["Entrenamiento", "Nutrición", "Agua y sueño", "Récords", "Tu equipo"];
 
 const daySteps = [
@@ -108,79 +147,86 @@ export default function Home() {
               Soy profesional
             </Link>
           </div>
-          <p className={styles.note}>
-            Llega pronto a Google Play. Registrar es gratis; PULSO Plus es opcional.
-          </p>
+          <StoreBadges />
         </div>
 
-        <div className={styles.heroVisual} aria-label="Vista previa de la pantalla Hoy de la app PULSO">
-          <svg className={styles.heroPulse} viewBox="0 0 720 280" preserveAspectRatio="none" fill="none" aria-hidden="true">
-            <path d="M0 156h170l14 0 12-30 16 64 14-150 18 120 12-20 14 16h110l10-14 12 22 10-8h298" />
-          </svg>
+        <div className={styles.deviceStage} aria-label="Vista previa de la app PULSO">
+          <div className={styles.stagePulse} aria-hidden="true">
+            <svg viewBox="0 0 720 280" preserveAspectRatio="none" fill="none">
+              <path className={styles.pulseGlow} d="M0 156h108l20-46 34 92 42-136 34 90h86l16-31 30 59 34-28h316" />
+              <path className={styles.pulseCore} d="M0 156h108l20-46 34 92 42-136 34 90h86l16-31 30 59 34-28h316" />
+            </svg>
+          </div>
 
           <div className={styles.phone}>
             <div className={styles.phoneTop}>
-              <span>06:12</span>
-              <span className={styles.island} />
+              <span>06:08</span>
+              <span className={styles.dynamicIsland} />
               <span>84%</span>
             </div>
             <div className={styles.phoneHeader}>
               <div>
-                <small>LUN 6 OCT</small>
-                <strong>Hola, Alex</strong>
+                <span>HOY · SÁB 15</span>
+                <strong>Buenos días, Alex.</strong>
               </div>
               <span className={styles.avatar}>AL</span>
             </div>
 
-            <div className={styles.sessionCard}>
-              <small>SESIÓN DE HOY · PIERNA A</small>
-              <strong>Sentadilla</strong>
-              <div className={styles.setLine}>
-                <span>Serie 3 de 3</span>
-                <b>62.5 kg × 8</b>
+            <div className={styles.readinessRow}>
+              <div className={styles.readinessScore}>
+                <span className={styles.scoreRing}>82</span>
+                <div>
+                  <small>DISPOSICIÓN</small>
+                  <strong>Listo para entrenar</strong>
+                </div>
               </div>
-              <div className={styles.track}><span /></div>
-              <div className={styles.sessionFoot}>
-                <span>3 de 7 ejercicios</span>
-                <span className={styles.continue}>CONTINUAR</span>
+              <span className={styles.liveDot}>EN LÍNEA</span>
+            </div>
+
+            <div className={styles.workoutPanel}>
+              <div className={styles.panelMeta}>
+                <span>FUERZA · PIERNA A</span>
+                <span>55 MIN</span>
+              </div>
+              <strong>El trabajo de hoy</strong>
+              <div className={styles.exerciseLine}>
+                <span>Sentadilla trasera</span>
+                <b>4 × 6</b>
+              </div>
+              <div className={styles.progressTrack}><span /></div>
+              <div className={styles.panelFooter}>
+                <span>2 de 7 ejercicios</span>
+                <span>Continuar →</span>
               </div>
             </div>
 
-            <div className={styles.metricRow}>
-              <div><small>CARGA 7D</small><strong>Media</strong></div>
-              <div><small>NUTRICIÓN</small><strong>1 840</strong></div>
-              <div><small>RACHA</small><strong>11 días</strong></div>
+            <div className={styles.dailyStats}>
+              <div><span>COMIDAS</span><strong>2 / 4</strong></div>
+              <div><span>AGUA</span><strong>1.8 L</strong></div>
+              <div><span>RACHA</span><strong>11 días</strong></div>
             </div>
 
-            <div className={styles.miniCard}>
-              <div><small>LÍQUIDOS</small><strong>2.1 L</strong></div>
-              <div className={styles.miniTrack}><span /></div>
+            <div className={styles.phoneNav}>
+              <span className={styles.activeNav}><i />Hoy</span>
+              <span><i />Dieta</span>
+              <span><i />Entreno</span>
+              <span><i />Perfil</span>
             </div>
-            <div className={styles.miniCard}>
-              <div><small>SUEÑO · ANOCHE</small><strong>7 h 12 min</strong></div>
-            </div>
-
-            <nav className={styles.tabBar} aria-hidden="true">
-              <span className={styles.tabActive}>HOY</span>
-              <span>DIETA</span>
-              <span>ENTRENO</span>
-              <span>PERFIL</span>
-            </nav>
           </div>
 
-          <div className={styles.heroNotes}>
           <div className={styles.coachNote}>
-            <div className={styles.coachHead}>
-              <span className={styles.coachAvatar}>D</span>
-              <div><strong>Diego · Coach</strong><small>Hoy, 07:14</small></div>
+            <div className={styles.noteTop}>
+              <span className={styles.noteAvatar}>C</span>
+              <div><strong>Tu coach</strong><small>Hoy, 07:14</small></div>
+              <span className={styles.noteStatus} />
             </div>
-            <p>¡Nuevo récord! La semana que viene probamos 65 kg.</p>
+            <p>Controlá la bajada. No regales la última repetición.</p>
+            <span className={styles.sampleLabel}>EJEMPLO DE MENSAJE</span>
           </div>
 
           <div className={styles.offlineTag}>
-            <span aria-hidden="true">↯</span>
-            <div><strong>Sin señal</strong><small>Todo se guarda en tu teléfono</small></div>
-          </div>
+            <span className={styles.offlineIcon}>↯</span>
+            <div><strong>Sin señal</strong><small>Todo sigue guardándose</small></div>
           </div>
         </div>
       </section>
@@ -377,9 +423,8 @@ export default function Home() {
         <LogoMark large />
         <p>El cambio no necesita otro lunes.</p>
         <h2 id="final-heading">Necesita tu <em>siguiente repetición.</em></h2>
-        <p className={styles.finalNote}>
-          PULSO llega pronto a Google Play. Si sos entrenador o nutricionista, ya podés crear tu espacio.
-        </p>
+        <StoreBadges />
+        <p className={styles.finalNote}>Si sos entrenador o nutricionista, ya podés crear tu espacio.</p>
         <div className={styles.actions}>
           <Link className={styles.primaryCta} href="/portal">
             Crear cuenta profesional
